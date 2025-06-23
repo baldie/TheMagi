@@ -1,0 +1,26 @@
+{
+  "name": "the-magi-orchestrator",
+  "version": "0.1.0",
+  "description": "The Magi Orchestrator - Central deliberation system managing three AI personas",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node src/index.ts",
+    "dev": "ts-node-dev --respawn src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,py,sh}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,py,sh}\""
+  },
+  "dependencies": {
+    "@types/node": "^20.11.24",
+    "axios": "^1.6.7",
+    "play-sound": "^1.1.6"
+  },
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "prettier-plugin-sh": "^0.14.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}

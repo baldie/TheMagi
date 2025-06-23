@@ -1,0 +1,8 @@
+dist/
+node_modules/
+.git/
+*.log
+*.lock
+venv/
+__pycache__/
+*.pyc 
