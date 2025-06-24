@@ -17,10 +17,12 @@
     "play-sound": "^1.1.6"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/play-sound": "^1.1.0",
     "prettier": "^3.2.5",
     "prettier-plugin-sh": "^0.14.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.0.0"
   }
 }

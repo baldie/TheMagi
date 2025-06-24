@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { OLLAMA_API_BASE_URL, PERSONAS, MagiName, SYSTEM_PREAMBLE } from './config';
 import { logger } from './logger';
+import { getPrompt } from './persona_manager';
 
 /**
  * Interface for Ollama API response
@@ -30,9 +31,10 @@ export async function contactMagi(
   userPrompt: string,
 ): Promise<string> {
   const persona = PERSONAS[personaName];
+  const personaPrompt = getPrompt(personaName);
 
   // Construct the complete system prompt including the universal preamble
-  const systemPrompt = `${SYSTEM_PREAMBLE}\n\n${persona.prompt}`;
+  const systemPrompt = `${SYSTEM_PREAMBLE}\n\n${personaPrompt}`;
 
   logger.debug(`Calling Ollama API for ${personaName}`, {
     model: persona.model,

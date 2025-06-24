@@ -42,6 +42,15 @@ class Logger {
   }
 
   /**
+   * Log warning level messages
+   * @param message - The warning message
+   * @param data - Optional data to include
+   */
+  warn(message: string, data?: unknown): void {
+    this.log(LOG_LEVELS.WARN, message, data);
+  }
+
+  /**
    * Log error level messages
    * @param message - The error message
    * @param error - Optional error object or data to include
