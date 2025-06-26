@@ -1,5 +1,5 @@
-import axios from 'axios';
-import { OLLAMA_API_BASE_URL, PERSONAS, MagiName, SYSTEM_PREAMBLE } from './config';
+import axios, { AxiosError } from 'axios';
+import { MAGI_CONDUIT_API_BASE_URL, PERSONAS, MagiName, SYSTEM_PREAMBLE } from './config';
 import { logger } from './logger';
 import { getPrompt } from './persona_manager';
 
@@ -21,7 +21,7 @@ interface OllamaResponse {
 }
 
 /**
- * Contacts a specific Magi persona through the Ollama API
+ * Contacts a specific Magi persona through the Magi Conduit API
  * @param personaName - Name of the Magi persona (Balthazar, Melchior, or Caspar)
  * @param userPrompt - The user's question, request, or the content of a debate turn.
  * @returns The AI's response text
@@ -36,30 +36,47 @@ export async function contactMagi(
   // Construct the complete system prompt including the universal preamble
   const systemPrompt = `${SYSTEM_PREAMBLE}\n\n${personaPrompt}`;
 
-  logger.debug(`Calling Ollama API for ${personaName}`, {
+  const requestData = {
     model: persona.model,
-    system_prompt: systemPrompt,
-    user_prompt: userPrompt,
+    system: systemPrompt,
+    prompt: userPrompt,
+    stream: false,
     options: persona.options,
-  });
+  };
 
   try {
-    const response = await axios.post<OllamaResponse>(`${OLLAMA_API_BASE_URL}/api/generate`, {
+    logger.debug(`Sending request to Magi Conduit API for ${personaName}:`, {
+      url: `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
       model: persona.model,
-      system: systemPrompt, // Use the dedicated 'system' parameter
-      prompt: userPrompt, // The 'prompt' parameter now holds only the user's query/task
-      stream: false,
-      options: persona.options, // Pass persona-specific options
+      promptLength: userPrompt.length,
+      systemPromptLength: systemPrompt.length,
     });
 
-    // Note: The 'context' is returned by Ollama for conversational history,
-    // but we are managing state in our orchestrator, so we don't need to pass it back.
-    logger.debug(`Received response from Ollama API for ${personaName}`);
+    const response = await axios.post<OllamaResponse>(
+      `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
+      requestData
+    );
+
+    logger.debug(`Received response from Magi Conduit API for ${personaName}`);
     return response.data.response;
   } catch (error) {
-    logger.error(`Error calling Ollama API for ${personaName}`, error);
-    throw new Error(
-      `Failed to get response from ${personaName}: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
+    if (axios.isAxiosError(error)) {
+      const axiosError = error as AxiosError;
+      logger.error(`Error calling Magi Conduit API for ${personaName}:`, {
+        status: axiosError.response?.status,
+        statusText: axiosError.response?.statusText,
+        data: axiosError.response?.data,
+        requestUrl: axiosError.config?.url,
+        requestData: requestData,
+      });
+      throw new Error(
+        `Failed to get response from ${personaName}: ${axiosError.response?.status} ${axiosError.response?.statusText}. Data: ${JSON.stringify(axiosError.response?.data)}`
+      );
+    } else {
+      logger.error(`Unexpected error calling Magi Conduit API for ${personaName}:`, error);
+      throw new Error(
+        `Failed to get response from ${personaName}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 }

@@ -3,12 +3,12 @@ import axios from 'axios';
 import os from 'os';
 import path from 'path';
 import { logger } from './logger';
-import { OLLAMA_API_BASE_URL, TTS_API_BASE_URL, PERSONAS, REQUIRED_MODELS } from './config';
+import { MAGI_CONDUIT_API_BASE_URL, TTS_API_BASE_URL, PERSONAS, REQUIRED_MODELS } from './config';
 import fs from 'fs';
 
 /**
  * Checks if a service is ready, attempts to start it if not, and polls for it to become available.
- * @param serviceName - The name of the service (e.g., "Ollama").
+ * @param serviceName - The name of the service (e.g., "Magi Conduit").
  * @param healthUrl - The health check URL for the service.
  * @param startCommand - The command to execute to start the service.
  * @param maxRetries - The number of retry attempts.
@@ -22,6 +22,8 @@ async function ensureServiceReady(
   initialDelay: number = 2000,
 ): Promise<void> {
   logger.info(`Ensuring ${serviceName} service is ready...`);
+  logger.debug(`[${serviceName}] Health check URL: ${healthUrl}`);
+  logger.debug(`[${serviceName}] Start command: ${JSON.stringify(startCommand)}`);
 
   // First, check if the service is already running.
   try {
@@ -40,6 +42,16 @@ async function ensureServiceReady(
       });
       proc.unref(); // Allows the parent process to exit independently of the child.
       logger.info(`... Start command for ${serviceName} issued.`);
+      
+      // VITAL: Add a one-time delay specifically for the Magi Conduit to prevent a race condition.
+      // The `wsl ollama serve` command can be slow to initialize. Without this delay,
+      // the polling loop might start before the service has had a chance to bind to the port,
+      // leading to a false negative on the health check and a second, conflicting startup attempt.
+      if (serviceName === 'Magi Conduit') {
+        const conduitStartupDelay = 5000; // 5 seconds
+        logger.info(`... Allowing ${conduitStartupDelay / 1000}s for Magi Conduit to initialize before polling.`);
+        await new Promise(res => setTimeout(res, conduitStartupDelay));
+      }
     } catch (startError) {
       logger.error(`... Failed to issue start command for ${serviceName}. This may be okay if another process is already starting it.`, startError);
     }
@@ -55,8 +67,9 @@ async function ensureServiceReady(
       await axios.get(healthUrl);
       logger.info(`... ${serviceName} service is now ready!`);
       return;
-    } catch (e) {
-      logger.warn(`... ${serviceName} is still not responding.`);
+    } catch (e: any) {
+      const errorMessage = e.code || e.message;
+      logger.warn(`... ${serviceName} is still not responding. (${errorMessage})`);
     }
   }
 
@@ -64,29 +77,39 @@ async function ensureServiceReady(
 }
 
 /**
- * Ensures the Ollama service is running and the required models are available.
+ * Ensures the Magi Conduit service is running and the required models are available.
  */
-async function ensureOllamaReady(): Promise<void> {
+async function ensureMagiConduitReady(): Promise<void> {
+  const scriptDir = path.resolve(__dirname, '../../scripts');
   await ensureServiceReady(
-    'Ollama',
-    OLLAMA_API_BASE_URL,
-    { cmd: 'wsl', args: ['ollama', 'serve'], options: { shell: true } },
+    'Magi Conduit',
+    MAGI_CONDUIT_API_BASE_URL,
+    {
+      cmd: 'cmd.exe',
+      args: ['/c', 'start', '"Magi Conduit"', 'start_magi_conduit.bat'],
+      options: { cwd: scriptDir, shell: true },
+    },
   );
 
-  logger.info('Verifying access to LLM models...');
+  logger.info('Verifying access to LLM models via Magi Conduit...');
   try {
-    const response = await axios.get(`${OLLAMA_API_BASE_URL}/api/tags`);
+    const response = await axios.get(`${MAGI_CONDUIT_API_BASE_URL}/api/tags`);
     const availableModels = response.data.models.map((m: { name: string }) => m.name.split(':')[0]);
     
+    // Detailed logging to see what models are being reported by the API
+    logger.debug('Models reported by Magi Conduit API:', response.data.models.map((m: {name: string}) => m.name));
+    logger.debug('Models after parsing (tags removed):', availableModels);
+
     for (const model of REQUIRED_MODELS) {
       if (!availableModels.includes(model)) {
-        throw new Error(`Required model "${model}" is not available in Ollama.`);
+        logger.error(`Required model "${model}" not found in available models.`);
+        throw new Error(`Required model "${model}" is not available in the Magi Conduit.`);
       }
       logger.info(`... Model found: ${model}`);
     }
     logger.info('... All required models are available.');
   } catch (error) {
-    throw new Error(`Failed to verify access to Ollama models: ${error}`);
+    throw new Error(`Failed to verify access to models via Magi Conduit: ${error}`);
   }
 }
 
@@ -99,9 +122,11 @@ async function ensureTTSReady(): Promise<void> {
     'TTS',
     `${TTS_API_BASE_URL}/health`,
     {
-      cmd: 'wsl',
-      args: ['--cd', ttsServiceDir, 'bash', '-c', 'source venv/bin/activate && python main.py'],
-      options: { shell: true },
+      // Use the 'start' command to launch the batch script in a new, independent window.
+      // This prevents the process from exiting prematurely.
+      cmd: 'cmd.exe',
+      args: ['/c', 'start', '"Magi TTS Service"', 'start_service.bat'],
+      options: { cwd: ttsServiceDir, shell: true },
     },
   );
 }
@@ -148,7 +173,7 @@ export async function runDiagnostics(): Promise<void> {
     await verifyInternetAccess();
     await verifySufficientRam();
     await verifyPersonaFiles();
-    await ensureOllamaReady();
+    await ensureMagiConduitReady();
     await ensureTTSReady();
     logger.info('--- System Diagnostics Passed ---');
   } catch (error) {

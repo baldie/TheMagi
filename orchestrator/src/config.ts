@@ -85,8 +85,8 @@ export const PERSONAS = {
   },
 };
 
-/** Base URL for the Ollama API */
-export const OLLAMA_API_BASE_URL = 'http://localhost:11434';
+/** Base URL for the Magi Conduit API (powered by Ollama) */
+export const MAGI_CONDUIT_API_BASE_URL = 'http://localhost:11434';
 
 /** Base URL for the TTS API */
 export const TTS_API_BASE_URL = 'http://localhost:8000';

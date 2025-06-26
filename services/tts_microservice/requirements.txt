@@ -1,4 +1,25 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-TTS==0.22.0
-pydantic==2.5.0 
+# FastAPI
+fastapi
+uvicorn[standard]
+pydantic
+
+# OpenVoice Core Dependencies
+torch
+soundfile
+unidecode
+whisper-timestamped
+
+# OpenVoice TTS Model - Installed directly from GitHub
+-e git+https://github.com/myshell-ai/MeloTTS.git#egg=melotts
+
+# For SE Extractor
+librosa
+faster-whisper
+pydub
+wavmark
+numpy
+eng_to_ipa
+inflect
+
+# Other
+python-magic-bin # For Windows compatibility 

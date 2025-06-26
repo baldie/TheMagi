@@ -1,7 +1,6 @@
 import { MagiName } from './config';
 import { logger } from './logger';
 import { contactMagi } from './services';
-import { speakWithMagiVoice } from './tts';
 
 /**
  * Retry a function with exponential backoff.
@@ -126,13 +125,6 @@ export async function runDeliberation(inquiry: string): Promise<string> {
     
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });
-
-    try {
-      await speakWithMagiVoice(finalResponse, MagiName.Caspar);
-    } catch (error) {
-      logger.error('Failed to speak response', error);
-      // Don't re-throw; failing to speak shouldn't crash the whole app
-    }
 
     return finalResponse;
   } catch (error) {

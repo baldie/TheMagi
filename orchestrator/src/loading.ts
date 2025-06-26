@@ -5,24 +5,39 @@ import { contactMagi } from './services';
 import { setPrompt } from './persona_manager';
 
 async function checkPersonaReadiness(name: MagiName): Promise<void> {
-  logger.info(`Pinging ${name} to confirm readiness...`);
-  try {
-    const response = await contactMagi(name, "Confirm you are ready by responding with only the word 'Ready'.");
-    if (!response.trim().toLowerCase().includes('ready')) {
-      throw new Error(`Received unexpected response from ${name}: ${response}`);
+  const maxRetries = 3;
+  const retryDelay = 5000; // 5 seconds
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    logger.info(`Pinging ${name} to confirm readiness... (Attempt ${attempt}/${maxRetries})`);
+    try {
+      const response = await contactMagi(name, "Confirm you are ready by responding with only the word 'Ready'.");
+      if (!response.trim().toLowerCase().includes('ready')) {
+        throw new Error(`Received unexpected response from ${name}: ${response}`);
+      }
+      logger.info(`... ${name} is loaded and ready.`);
+      return; // Success, exit the function
+    } catch (error) {
+      logger.warn(`Readiness check failed for ${name} on attempt ${attempt}.`, error);
+      if (attempt < maxRetries) {
+        logger.info(`Retrying in ${retryDelay / 1000} seconds...`);
+        await new Promise(res => setTimeout(res, retryDelay));
+      } else {
+        logger.error(`Readiness check failed for ${name} after ${maxRetries} attempts.`, error);
+        throw error; // Rethrow the error after the final attempt
+      }
     }
-    logger.info(`... ${name} is loaded and ready.`);
-  } catch (error) {
-    logger.error(`Readiness check failed for ${name}.`, error);
-    throw error;
   }
 }
 
 export async function loadMagi(): Promise<void> {
   logger.info('--- Loading Magi Personas (Sequentially) ---');
   
+  // As per the PRD, the loading order should be Caspar, Melchior, and then Balthazar.
+  const loadingOrder = [MagiName.Caspar, MagiName.Melchior, MagiName.Balthazar];
+
   // Use a sequential for...of loop to load Magi one by one.
-  for (const name of Object.values(MagiName)) {
+  for (const name of loadingOrder) {
     logger.info(`Loading ${name}...`);
     const personaConfig = PERSONAS[name];
 

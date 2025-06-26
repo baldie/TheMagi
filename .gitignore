@@ -33,6 +33,7 @@ yarn-error.log*
 venv/
 __pycache__/
 *.py[cod]
+*.pyc
 
 # Testing
 coverage/
@@ -41,4 +42,33 @@ coverage/
 # Temporary files
 *.tmp
 temp/
-.temp/ 
+.temp/
+
+# Generated audio files
+*.wav
+services/tts_microservice/outputs/
+services/tts_microservice/processed/
+
+# Model files and checkpoints
+services/tts_microservice/checkpoints*/
+services/tts_microservice/models/
+*.pth
+*.ckpt
+*.pt
+*.bin
+
+# Ollama model files and cache
+.ollama/
+models/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Test files
+test.json
+
+# WSL and Docker related
+.bash_history
+.docker/
+.wslconfig
+.wslignore 

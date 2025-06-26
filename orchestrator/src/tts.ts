@@ -9,7 +9,7 @@ import { serviceManager } from './service_manager';
 const audioPlayer = player({});
 
 // Constants for TTS service
-const MAX_TEXT_LENGTH = 1000; // Maximum text length as defined in TTS service
+const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# The Magi - Ollama Setup Script
-# This script automates the complete setup and verification of Ollama inference server
-# with support for multiple models: mistral, gemma, and llama2
+# The Magi - Magi Conduit Setup Script
+# This script automates the complete setup and verification of the inference server (Ollama)
+# for The Magi system. It handles installation, model downloads, and GPU detection.
 
 # Error handling
 set -e
@@ -40,16 +40,16 @@ print_error() {
 # Array of required models
 models=("mistral" "gemma" "llama2")
 
-print_status "$BLUE" "Starting The Magi Ollama Setup..."
+print_status "$BLUE" "Starting The Magi Conduit Setup..."
 echo ""
 
 # Check if Ollama is already installed
 if command -v ollama &> /dev/null; then
-    print_success "Ollama is already installed"
+    print_success "Ollama (the underlying engine for the Magi Conduit) is already installed"
     ollama_version=$(ollama --version)
     print_status "$BLUE" "Ollama version: $ollama_version"
 else
-    print_status "$BLUE" "Ollama not found. Installing Ollama..."
+    print_status "$BLUE" "Ollama not found. Installing the engine for the Magi Conduit..."
     
     # Check if curl is available
     if ! command -v curl &> /dev/null; then
@@ -75,18 +75,18 @@ fi
 echo ""
 
 # Start Ollama service if not running
-print_status "$BLUE" "Ensuring Ollama service is running..."
+print_status "$BLUE" "Ensuring Magi Conduit service is running..."
 if ! pgrep -f "ollama serve" > /dev/null; then
-    print_status "$BLUE" "Starting Ollama service..."
+    print_status "$BLUE" "Starting Magi Conduit service..."
     ollama serve &
     sleep 5  # Give the service time to start
 fi
 
 # Check if service is running
 if pgrep -f "ollama serve" > /dev/null; then
-    print_success "Ollama service is running"
+    print_success "Magi Conduit service is running"
 else
-    print_error "Failed to start Ollama service"
+    print_error "Failed to start Magi Conduit service"
     exit 1
 fi
 
@@ -156,7 +156,7 @@ fi
 echo ""
 
 # Final summary
-print_success "=== The Magi Ollama Setup Complete ==="
+print_success "=== The Magi Conduit Setup Complete ==="
 echo ""
 print_status "$BLUE" "Installed/Verified Models:"
 for model in "${models[@]}"; do
@@ -164,12 +164,13 @@ for model in "${models[@]}"; do
 done
 echo ""
 print_status "$BLUE" "Next steps:"
-echo "  • You can now interact with any of the installed models:"
+echo "  • The service is running. You can now start The Magi orchestrator."
+echo "  • To test a model manually, you can run commands like:"
 echo "    ollama run mistral"
 echo "    ollama run gemma"
 echo "    ollama run llama2"
 echo ""
-echo "  • To stop the Ollama service: pkill -f 'ollama serve'"
+echo "  • To stop the Magi Conduit service: pkill -f 'ollama serve'"
 echo "  • To restart the service: ollama serve &"
 echo ""
 print_success "The Magi AI system is ready for multi-agent operations!" 
