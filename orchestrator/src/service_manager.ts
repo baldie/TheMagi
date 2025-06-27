@@ -18,7 +18,7 @@ class ServiceManager {
     });
   }
 
-  private async waitForTTSService(maxAttempts: number = 30, delayMs: number = 1000): Promise<boolean> {
+  private async waitForTTSService(maxAttempts: number = 60, delayMs: number = 1000): Promise<boolean> {
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await axios.get(`${TTS_API_BASE_URL}/health`);

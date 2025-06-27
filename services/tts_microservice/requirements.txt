@@ -20,6 +20,7 @@ wavmark
 numpy
 eng_to_ipa
 inflect
+nltk
 
 # Other
 python-magic-bin # For Windows compatibility 

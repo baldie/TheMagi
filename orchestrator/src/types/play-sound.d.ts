@@ -2,6 +2,7 @@ declare module 'play-sound' {
   interface PlayerOptions {
     players?: string[];
     player?: string;
+    opts?: string[]; // Player-specific command-line options
   }
 
   interface Player {

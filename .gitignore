@@ -72,3 +72,15 @@ test.json
 .docker/
 .wslconfig
 .wslignore 
+
+# FFmpeg related files
+tools/ffmpeg/
+tools/ffmpeg*/
+*.zip
+ffmpeg.exe
+ffplay.exe
+ffprobe.exe
+
+# PowerShell and Windows specific
+*.ps1_history
+*.bat.log 

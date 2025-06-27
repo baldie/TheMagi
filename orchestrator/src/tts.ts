@@ -5,8 +5,15 @@ import { logger } from './logger';
 import player from 'play-sound'; // A simpler, more robust audio player library
 import { serviceManager } from './service_manager';
 
-// Initialize the audio player
-const audioPlayer = player({});
+// Initialize the audio player.
+// We explicitly use ffplay, which is part of the project's ffmpeg dependency.
+// This is more reliable than system-specific players that may not be installed.
+// -autoexit: quits the player when playback is finished.
+// -nodisp: disables the graphical display window, so it runs in the background.
+const audioPlayer = player({
+  player: 'ffplay',
+  opts: ['-autoexit', '-nodisp'],
+});
 
 // Constants for TTS service
 const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
@@ -71,7 +78,7 @@ async function makeTTSRequest(text: string, persona: MagiName): Promise<Buffer> 
         },
         {
           responseType: 'arraybuffer',
-          timeout: 30000, // 30 second timeout
+          timeout: 120000, // 120 second timeout
         }
       );
       
