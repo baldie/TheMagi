@@ -1,26 +1,26 @@
-# FastAPI
+# It is recommended to use a virtual environment.
+
+# Core FastAPI for the web server
 fastapi
-uvicorn[standard]
+
+# Uvicorn for serving the FastAPI application
+uvicorn
+
+# Pydantic for data validation (used by FastAPI)
 pydantic
 
-# OpenVoice Core Dependencies
-torch
+# For audio processing
 soundfile
-unidecode
-whisper-timestamped
-
-# OpenVoice TTS Model - Installed directly from GitHub
--e git+https://github.com/myshell-ai/MeloTTS.git#egg=melotts
-
-# For SE Extractor
 librosa
-faster-whisper
-pydub
-wavmark
-numpy
-eng_to_ipa
-inflect
-nltk
 
-# Other
-python-magic-bin # For Windows compatibility 
+# For streaming responses
+aiofiles
+
+# TTS engine
+chatterbox-tts
+
+# Parameter-Efficient Fine-Tuning
+peft
+
+# For environment variables (optional but good practice)
+python-dotenv 

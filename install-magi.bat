@@ -6,6 +6,21 @@ REM The Magi - Master Installation Script
 REM This script orchestrates the entire setup process for The Magi system.
 REM =================================================================================
 
+if not exist .env (
+    echo Creating a new .env file with default settings...
+    (
+        echo # TTS Service Configuration
+        echo TTS_API_BASE_URL=http://localhost:8020
+        echo.
+        echo # Logging Configuration
+        echo LOG_LEVEL=info
+    ) > .env
+    echo.
+    echo A new .env file has been created. Please review it if you need to change the default configuration.
+) else (
+    echo .env file already exists. Skipping creation.
+)
+
 ECHO.
 ECHO    Welcome to The Magi Setup
 ECHO.

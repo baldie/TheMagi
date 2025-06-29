@@ -1,29 +1,27 @@
 import fs from 'fs/promises';
 import { logger } from './logger';
-import { PERSONAS, MagiName } from './config';
-import { contactMagi } from './services';
-import { setPrompt } from './persona_manager';
+import { allMagi, balthazar, caspar, melchior, Magi, MagiName, PERSONAS_CONFIG } from './magi';
 
-async function checkPersonaReadiness(name: MagiName): Promise<void> {
+async function checkPersonaReadiness(magi: Magi): Promise<void> {
   const maxRetries = 3;
   const retryDelay = 5000; // 5 seconds
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    logger.info(`Pinging ${name} to confirm readiness... (Attempt ${attempt}/${maxRetries})`);
+    logger.info(`Pinging ${magi.name} to confirm readiness... (Attempt ${attempt}/${maxRetries})`);
     try {
-      const response = await contactMagi(name, "Confirm you are ready by responding with only the word 'Ready'.");
+      const response = await magi.contact("Confirm you are ready by responding with only the word 'Ready'.");
       if (!response.trim().toLowerCase().includes('ready')) {
-        throw new Error(`Received unexpected response from ${name}: ${response}`);
+        throw new Error(`Received unexpected response from ${magi.name}: ${response}`);
       }
-      logger.info(`... ${name} is loaded and ready.`);
+      logger.info(`... ${magi.name} is loaded and ready.`);
       return; // Success, exit the function
     } catch (error) {
-      logger.warn(`Readiness check failed for ${name} on attempt ${attempt}.`, error);
+      logger.warn(`Readiness check failed for ${magi.name} on attempt ${attempt}.`, error);
       if (attempt < maxRetries) {
         logger.info(`Retrying in ${retryDelay / 1000} seconds...`);
         await new Promise(res => setTimeout(res, retryDelay));
       } else {
-        logger.error(`Readiness check failed for ${name} after ${maxRetries} attempts.`, error);
+        logger.error(`Readiness check failed for ${magi.name} after ${maxRetries} attempts.`, error);
         throw error; // Rethrow the error after the final attempt
       }
     }
@@ -33,20 +31,27 @@ async function checkPersonaReadiness(name: MagiName): Promise<void> {
 export async function loadMagi(): Promise<void> {
   logger.info('--- Loading Magi Personas (Sequentially) ---');
   
+  const magiInstances = {
+    [MagiName.Balthazar]: balthazar,
+    [MagiName.Melchior]: melchior,
+    [MagiName.Caspar]: caspar
+  };
+  
   // As per the PRD, the loading order should be Caspar, Melchior, and then Balthazar.
   const loadingOrder = [MagiName.Caspar, MagiName.Melchior, MagiName.Balthazar];
 
   // Use a sequential for...of loop to load Magi one by one.
   for (const name of loadingOrder) {
-    logger.info(`Loading ${name}...`);
-    const personaConfig = PERSONAS[name];
-
-    // 1. Load prompt from file
+    const magi = magiInstances[name];
+    logger.info(`Loading ${magi.name}...`);
+    
+    // 1. Load prompt from file using the absolute path from PERSONAS_CONFIG
+    const personaConfig = PERSONAS_CONFIG[name];
     const prompt = await fs.readFile(personaConfig.personalitySource, 'utf-8');
     
     // 2. Store it in the manager
-    setPrompt(name, prompt);
-    logger.info(`... ${name}'s personality has been loaded from file.`);
+    magi.setPersonality(prompt);
+    logger.info(`... ${magi.name}'s personality has been loaded from file.`);
 
     // V0 placeholders for data access checks from PRD
     switch (name) {
@@ -63,7 +68,7 @@ export async function loadMagi(): Promise<void> {
     }
 
     // 3. Check readiness
-    await checkPersonaReadiness(name);
+    await checkPersonaReadiness(magi);
   }
 
   logger.info('--- All Magi Personas Loaded Successfully ---');

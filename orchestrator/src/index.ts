@@ -3,7 +3,7 @@ import { runDiagnostics } from './diagnostics';
 import { loadMagi } from './loading';
 import { runDeliberation } from './ready';
 import { speakWithMagiVoice } from './tts';
-import { MagiName } from './config';
+import { MagiName } from './magi';
 
 /**
  * Main entry point for The Magi application.

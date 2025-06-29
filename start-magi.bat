@@ -1,24 +1,26 @@
 @echo off
-SETLOCAL
+setlocal
 
-ECHO [Magi System] Starting up...
+echo [Magi System] Starting up...
 
-:: --- Check for .env file and FFMPEG_PATH ---
-IF NOT EXIST .env (
-    ECHO [Magi System] ERROR: The .env file is missing.
-    ECHO This file is required to locate the ffmpeg installation for audio playback.
-    ECHO Please run the main installation script first:
-    ECHO.
-    ECHO     install-magi.bat
-    ECHO.
-    pause
-    EXIT /B 1
+:: --- Port Cleanup ---
+echo [Magi System] Cleaning up port 11434 to ensure a clean start...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr ":11434"') do (
+    if not "%%a"=="0" (
+        echo [Magi System] Terminating stale process with PID: %%a
+        taskkill /F /PID %%a >nul 2>&1
+    )
 )
-:: ---------------------------------------------
+echo [Magi System] Port cleanup complete.
 
-ECHO [Magi System] Launching Orchestrator...
-ECHO This will start all necessary background services.
-cd orchestrator
-call npm run start
+:: Define path to the orchestrator directory
+set "ORCHESTRATOR_DIR=%~dp0orchestrator"
 
-ENDLOCAL
+echo [Magi System] Launching Orchestrator...
+echo This will start all necessary background services.
+
+pushd "%ORCHESTRATOR_DIR%"
+npm start
+popd
+
+endlocal

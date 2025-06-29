@@ -1,6 +1,5 @@
-import { MagiName } from './config';
+import { balthazar, caspar, melchior, MagiName } from './magi';
 import { logger } from './logger';
-import { contactMagi } from './services';
 
 /**
  * Retry a function with exponential backoff.
@@ -23,27 +22,27 @@ async function retry<T>(
 
 async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
-  
-  const [balthazarThesis, melchiorThesis, casparThesis] = await Promise.all([
-    retry(() => contactMagi(MagiName.Balthazar, `Regarding the query "${inquiry}", what is your initial, independent thesis?`)),
-    retry(() => contactMagi(MagiName.Melchior, `Regarding the query "${inquiry}", what is your initial, independent thesis?`)),
-    retry(() => contactMagi(MagiName.Caspar, `Regarding the query "${inquiry}", what is your initial, independent thesis?`)),
+
+  const [balthazarResponse, melchiorResponse, casparResponse] = await Promise.all([
+    retry(() => balthazar.contact(`Regarding"${inquiry}", what are your thoughts?`)),
+    retry(() => melchior.contact(`Regarding "${inquiry}", what are your thoughts?`)),
+    retry(() => caspar.contact(`Regarding "${inquiry}", what are your thoughts?`)),
   ]);
 
   const sealedEnvelope = `
----
-Balthazar's Initial Thesis:
-${balthazarThesis}
----
-Melchior's Initial Thesis:
-${melchiorThesis}
----
-Caspar's Initial Thesis:
-${casparThesis}
----
-`;
-  logger.info('Phase 1: "Sealed envelope" created with 3 theses.');
-  logger.debug('Sealed Envelope Contents:', { sealedEnvelope });
+    ---
+    Balthazar's Initial response:
+    ${balthazarResponse}
+    ---
+    Melchior's Initial response:
+    ${melchiorResponse}
+    ---
+    Caspar's Initial response:
+    ${casparResponse}
+    ---
+    `;
+  logger.info('Phase 1: "Sealed envelope" created with 3 responses.');
+  logger.debug('A peek into the sealed envelope:', { sealedEnvelope });
   return sealedEnvelope;
 }
 
@@ -51,59 +50,71 @@ async function runDeliberationPhase(sealedEnvelope: string): Promise<string> {
   let debateTranscript = sealedEnvelope;
   const MAX_ROUNDS = 3;
 
+  const magiInstances = {
+    [MagiName.Balthazar]: balthazar,
+    [MagiName.Melchior]: melchior,
+    [MagiName.Caspar]: caspar
+  };
+
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     logger.info(`Phase 2: Starting Deliberation Round ${round}.`);
 
+    // Shuffle the Magi order so that over time it balances out
     const deliberationOrder = [MagiName.Balthazar, MagiName.Melchior, MagiName.Caspar].sort(() => Math.random() - 0.5);
     let roundResponses = '';
 
-    for (const currentMagi of deliberationOrder) {
-      const debatePrompt = `
-      Review the complete debate transcript below. Your task is to persuade the others or
-      concede if their argument is stronger. Append your response.
+    for (const currentMagiName of deliberationOrder) {
+      const currentMagi = magiInstances[currentMagiName];
+      const debatePrompt = `${currentMagi.name},
+      Review the complete debate transcript below. Your task is to persuade the others if you believe
+      your argument is stronger or concede if their argument is stronger. Append your response.
 
       Full Transcript Thus Far:
       ${debateTranscript}
       ${roundResponses}
-      Your Response:
+
+      What is your response? Be concise.
       `;
-      const response = await retry(() => contactMagi(currentMagi, debatePrompt));
-      roundResponses += `\n${currentMagi}'s Round ${round} Argument:\n${response}\n---`;
-      logger.info(`${currentMagi} has contributed to Round ${round}.`);
+      const response = await retry(() => currentMagi.contact(debatePrompt));
+      roundResponses += `\n${currentMagi.name}'s Round ${round} Argument:\n${response}\n---`;
+      logger.info(`${currentMagi.name} has contributed to Round ${round}.`);
     }
 
     debateTranscript += `\n**Round ${round} Arguments:**${roundResponses}`;
 
     logger.info(`Checking for consensus after Round ${round}.`);
     const consensusCheckPrompt = `
-      You are the impartial System Adjudicator. After reviewing the full debate transcript below, determine if a unanimous consensus has been reached. 
-      If yes, respond ONLY with the final, agreed-upon recommendation. 
+      You will now act as an impartial moderator. After reviewing the deliberations transcript below,
+      determine if a unanimous consensus has been reached.
+
+      If yes, respond ONLY with the final, agreed-upon recommendation. Be concise.
       If no, respond ONLY with the word "IMPASSE".
 
       Transcript:
       ${debateTranscript}
       `;
-    const consensusResult = await retry(() => contactMagi(MagiName.Caspar, consensusCheckPrompt));
+    const consensusResult = await retry(() => caspar.contact(consensusCheckPrompt));
 
     if (consensusResult.trim().toUpperCase() !== 'IMPASSE') {
       logger.info(`Consensus reached in Round ${round}.`);
       return consensusResult; // Return the consensus
     } else {
       logger.info(`IMPASSE after Round ${round}.`);
-      // V0 does not require summarization between rounds to save tokens
     }
   }
 
   logger.error(`No consensus reached after ${MAX_ROUNDS} rounds. Generating summary of positions.`);
   const impasseSummaryPrompt = `
-  A unanimous decision could not be reached after ${MAX_ROUNDS} rounds of debate. Your
+  A unanimous decision could not be reached after ${MAX_ROUNDS} rounds of deliberations. Your
   final task is to impartially summarize all the final positions and present them clearly
   to the user.
 
   Final Debate Transcript:
   ${debateTranscript}
+  
+  Please capture each Magi's final position and present them clearly to the user. Be concise.
   `;
-  return await retry(() => contactMagi(MagiName.Caspar, impasseSummaryPrompt));
+  return await retry(() => caspar.contact(impasseSummaryPrompt));
 }
 
 /**
@@ -122,7 +133,7 @@ export async function runDeliberation(inquiry: string): Promise<string> {
   try {
     const sealedEnvelope = await runSealedEnvelopePhase(inquiry);
     const finalResponse = await runDeliberationPhase(sealedEnvelope);
-    
+
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });
 
