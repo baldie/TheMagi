@@ -1,5 +1,5 @@
-import { Component } from '@angular/core';
-import { BaseMagiComponent } from './base-magi.component';
+import { Component, Input } from '@angular/core';
+import { BaseMagiComponent, MagiStatus } from './base-magi.component';
 
 @Component({
   selector: '[app-melchior]',
@@ -8,6 +8,8 @@ import { BaseMagiComponent } from './base-magi.component';
   standalone: false,
 })
 export class MelchiorComponent extends BaseMagiComponent {
+  @Input() override status: MagiStatus = 'off';
+
   constructor() {
     super();
     this.pathData = "M850,300 L1100,300 L1100,500 L750,500 L750,400 Z";

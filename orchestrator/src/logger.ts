@@ -1,4 +1,5 @@
 import { LOG_LEVELS, LogLevel } from './config';
+import { logStream } from './log-stream';
 
 /**
  * Custom logger for The Magi Orchestrator
@@ -14,6 +15,9 @@ class Logger {
   private log(level: LogLevel, message: string, data?: unknown): void {
     const timestamp = new Date().toISOString();
     const logMessage = `[${timestamp}] [${level}] ${message}`;
+
+    // Emit to the stream for websockets
+    logStream.emit(logMessage);
 
     if (data !== undefined) {
       console.log(logMessage);

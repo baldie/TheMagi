@@ -26,4 +26,12 @@
   50% { fill: #ffff00; }
   75% { fill: #ff0000; }
   100% { fill: #ff00ff; }
+}
+
+.magi-start-button {
+  cursor: pointer;
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
 } 

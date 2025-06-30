@@ -4,6 +4,8 @@ import { loadMagi } from './loading';
 import { runDeliberation } from './ready';
 import { speakWithMagiVoice } from './tts';
 import { MagiName } from './magi';
+import http from 'http';
+import { createWebSocketServer } from './websocket';
 
 /**
  * Main entry point for The Magi application.
@@ -13,6 +15,14 @@ import { MagiName } from './magi';
  * 3. Ready (Deliberation)
  */
 async function main() {
+  const server = http.createServer();
+  createWebSocketServer(server);
+
+  const PORT = process.env.PORT || 8080;
+  server.listen(PORT, () => {
+    logger.info(`Orchestrator HTTP/WebSocket server listening on port ${PORT}`);
+  });
+  
   try {
     logger.info('--- MAGI SYSTEM INITIALIZING ---');
     
@@ -51,4 +61,7 @@ async function main() {
   }
 }
 
-main();
+main().catch(error => {
+  logger.error('Unhandled promise rejection in main.', error);
+  process.exit(1);
+});

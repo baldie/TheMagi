@@ -20,7 +20,11 @@ echo [Magi System] Launching Orchestrator...
 echo This will start all necessary background services.
 
 pushd "%ORCHESTRATOR_DIR%"
-npm start
+echo [Magi System] Building Orchestrator from source...
+call npm run build
+
+echo [Magi System] Starting Orchestrator from built files...
+call node dist/index.js
 popd
 
 endlocal

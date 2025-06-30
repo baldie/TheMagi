@@ -1,5 +1,5 @@
-import { Component } from '@angular/core';
-import { BaseMagiComponent } from './base-magi.component';
+import { Component, Input } from '@angular/core';
+import { BaseMagiComponent, MagiStatus } from './base-magi.component';
 
 @Component({
   selector: '[app-casper]',
@@ -8,6 +8,8 @@ import { BaseMagiComponent } from './base-magi.component';
   standalone: false,
 })
 export class CasperComponent extends BaseMagiComponent {
+  @Input() override status: MagiStatus = 'off';
+
   constructor() {
     super();
     this.pathData = "M100,300 L350,300 L450,400 L450,500 L100,500 Z";

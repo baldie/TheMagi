@@ -47,9 +47,15 @@
     </foreignObject>
 
     <foreignObject x="950" y="220" width="100" height="50">
+      <a (click)="startMagi()" 
+         class="magi-start-button"
+         [class.disabled]="isMagiStarting"
+         title="start magi"
+         aria-label="start magi">
         <div class="info-box-small">
             打ち上げ
         </div>
+      </a>
     </foreignObject>
 
     <!-- Bottom Inputs -->
@@ -76,11 +82,6 @@
 
   <div class="advanced-panel" *ngIf="displayLogs">
     <h3>Server Logs</h3>
-    <pre>
-      [CASPAR]: Initializing...
-      [MELCHIOR]: Standby.
-      [BALTHASAR]: Ready.
-      ...
-    </pre>
+    <pre>{{ serverLogs.join('\n') }}</pre>
   </div>
 </div>

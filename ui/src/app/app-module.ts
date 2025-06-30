@@ -1,7 +1,8 @@
 import { NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
+import { HttpClientModule } from '@angular/common/http';
 import { AppRoutingModule } from './app-routing-module';
-import { App } from './app';
+import { AppComponent } from './app';
 import { BalthasarComponent } from './components/balthasar.component';
 import { CasperComponent } from './components/casper.component';
 import { MelchiorComponent } from './components/melchior.component';
@@ -9,7 +10,7 @@ import { BaseMagiComponent } from './components/base-magi.component';
 
 @NgModule({
   declarations: [
-    App,
+    AppComponent,
     BaseMagiComponent,
     BalthasarComponent,
     CasperComponent,
@@ -17,9 +18,10 @@ import { BaseMagiComponent } from './components/base-magi.component';
   ],
   imports: [
     BrowserModule,
-    AppRoutingModule
+    AppRoutingModule,
+    HttpClientModule
   ],
   providers: [],
-  bootstrap: [App]
+  bootstrap: [AppComponent]
 })
 export class AppModule { }
