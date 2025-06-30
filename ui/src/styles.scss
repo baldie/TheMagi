@@ -1,0 +1,141 @@
+/* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+body, html {
+  background-color: #000;
+  color: #fff;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.magi-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+svg {
+  width: 90%;
+  max-width: 1200px;
+}
+
+.connector {
+  stroke: #ffa500;
+  stroke-width: 5;
+}
+
+.header-text {
+  font-size: 3rem;
+  font-weight: bold;
+  fill: #ffa500;
+  text-anchor: middle;
+}
+
+.magi-text {
+  font-size: 3.4rem;
+  font-weight: bold;
+  fill: #ffa500;
+  text-anchor: middle;
+}
+
+.magi-name {
+  font-family: 'Calibri', sans-serif;
+  font-size: 2.8rem;
+  fill: #000000;
+  text-anchor: middle;
+  font-weight: bold;
+}
+
+.info-box {
+  color: #ffa500;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9rem;
+  div {
+    margin-bottom: 2px;
+  }
+}
+
+.info-box-small {
+    color: #00aaff;
+    border: 2px solid #00aaff;
+    padding: 5px;
+    text-align: center;
+}
+
+.green-box {
+  fill: none;
+  stroke: #019c01;
+  stroke-width: 2;
+}
+
+.frame {
+  fill: none;
+  stroke: #ffa500;
+  stroke-width: 2;
+}
+
+.input-area {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.2rem;
+  color: #ffa500;
+  .input-row {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    label {
+      width: 150px;
+    }
+    input {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid #ffa500;
+      color: #ffa500;
+      font-size: 1.2rem;
+      width: 70%;
+      font-family: 'Courier New', Courier, monospace;
+    }
+  }
+}
+
+.toggle-advanced {
+  margin-top: 20px;
+  button {
+    background: #ffa500;
+    color: black;
+    border: none;
+    padding: 10px 20px;
+    font-family: 'Orbitron', sans-serif;
+    cursor: pointer;
+    font-size: 1rem;
+    &:hover {
+      background: #ffc966;
+    }
+  }
+}
+
+.advanced-panel {
+  margin-top: 20px;
+  width: 80%;
+  max-width: 1100px;
+  height: 200px;
+  background: rgba(255, 165, 0, 0.1);
+  border: 1px solid #ffa500;
+  padding: 20px;
+  overflow-y: auto;
+  h3 {
+    margin-top: 0;
+    color: #ffa500;
+  }
+  pre {
+    color: #ddd;
+    font-family: 'Courier New', Courier, monospace;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+}

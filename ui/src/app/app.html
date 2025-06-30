@@ -1,0 +1,86 @@
+<div class="magi-container">
+  <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet">
+    <!-- Defs for patterns and gradients -->
+    <defs>
+      <pattern id="psychedelic-pattern" patternUnits="userSpaceOnUse" width="100" height="100">
+        <image href="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNTJmM2U4ZGNmY2U5MDIyZTMyMjE3ZGM4ZTM2MGRlY2M5YjYwYjY5YyZlcD12MV9pbnRlcm5hbF9naWZzX2dpZklkJmN0PWc/3o6vXWbrS24T3s11cs/giphy.gif" x="0" y="0" width="100" height="100" />
+      </pattern>
+    </defs>
+
+    <!-- Frame -->
+    <rect x="10" y="10" width="1180" height="780" class="frame" />
+    <rect x="20" y="20" width="1160" height="760" class="frame" />
+
+    <!-- header box -->
+    <rect x="25" y="25" width="1150" height="100" class="green-box" />
+    <rect x="30" y="30" width="1140" height="90" class="green-box" />
+
+    <!-- Magi Components -->
+    <g app-balthasar [status]="balthasarStatus"></g>
+    <g app-casper [status]="casperStatus"></g>
+    <g app-melchior [status]="melchiorStatus"></g>
+
+    <!-- Connecting Lines -->
+    <path d="M475,325 L400,350" class="connector" />
+    <path d="M725,325 L800,350" class="connector" />
+    <path d="M450,450 L750,450" class="connector" />
+
+    <!-- Text Labels -->
+    <text x="225" y="90" class="header-text">質問</text>
+    <text x="975" y="90" class="header-text">解決</text>
+    <text x="600" y="400" class="magi-text">MAGI</text>
+
+    <!-- Magi Names -->
+    <text x="280" y="420" class="magi-name">CASPAR • 3</text>
+    <text x="600" y="250" class="magi-name">BALTHASAR • 2</text>
+    <text x="940" y="420" class="magi-name">MELCHIOR • 1</text>
+
+    <!-- Info Boxes -->
+    <foreignObject x="100" y="150" width="200" height="100">
+      <div class="info-box">
+        <div>CODE: 473</div>
+        <div>FILE: MAGI_SYS</div>
+        <div>EXTENTION: 3023</div>
+        <div>EX_MODE: OFF</div>
+        <div>PRIORITY: AAA</div>
+      </div>
+    </foreignObject>
+
+    <foreignObject x="950" y="220" width="100" height="50">
+        <div class="info-box-small">
+            打ち上げ
+        </div>
+    </foreignObject>
+
+    <!-- Bottom Inputs -->
+    <foreignObject x="100" y="600" width="1000" height="100">
+        <div class="input-area">
+            <div class="input-row">
+                <label for="access-code">access code:</label>
+                <input id="access-code" type="text" value="********************" disabled>
+            </div>
+            <div class="input-row">
+                <label for="question">question:</label>
+                <input id="question" type="text" value="Should one follow emotions instead of">
+            </div>
+        </div>
+    </foreignObject>
+
+  </svg>
+
+  <div class="toggle-advanced">
+    <button (click)="toggleDisplayLogs()">
+      {{ displayLogs ? 'Hide Logs' : 'Display Logs' }}
+    </button>
+  </div>
+
+  <div class="advanced-panel" *ngIf="displayLogs">
+    <h3>Server Logs</h3>
+    <pre>
+      [CASPAR]: Initializing...
+      [MELCHIOR]: Standby.
+      [BALTHASAR]: Ready.
+      ...
+    </pre>
+  </div>
+</div>

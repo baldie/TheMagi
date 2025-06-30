@@ -1,0 +1,29 @@
+.magi-shape {
+  stroke: #ffa500;
+  stroke-width: 2;
+  transition: fill 0.5s ease;
+
+  &.off {
+    fill: #000000;
+  }
+  &.loading {
+    fill: #ffa500;
+  }
+  &.ready {
+    fill: #00aaff;
+  }
+  &.error {
+    fill: #ff0000;
+  }
+  &.thinking {
+    animation: psychedelic-animation 2s infinite linear;
+  }
+}
+
+@keyframes psychedelic-animation {
+  0% { fill: #ff00ff; }
+  25% { fill: #00ffff; }
+  50% { fill: #ffff00; }
+  75% { fill: #ff0000; }
+  100% { fill: #ff00ff; }
+} 
