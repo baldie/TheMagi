@@ -14,29 +14,47 @@ app.post('/start', (req: Request, res: Response) => {
   console.log('Received /start request. Attempting to execute start-magi.bat');
   
   try {
-    const scriptPath = path.resolve(process.cwd(), 'start-magi.bat');
+    // Go up one directory from the launcher directory to find start-magi.bat
+    const scriptPath = path.resolve(__dirname, '../../start-magi.bat');
     console.log(`Executing: ${scriptPath}`);
 
     // --- Log file setup ---
-    const logDir = path.resolve(process.cwd(), 'logs');
+    const logDir = path.resolve(__dirname, '../../logs');
     if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir);
+      fs.mkdirSync(logDir, { recursive: true });
     }
     const logFile = path.join(logDir, 'magi-startup.log');
-    // 'a' mode appends to the file. This creates a running history.
+    
+    // Open the log file for appending
     const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
-    logStream.write(`\n\n--- New Magi Startup initiated at ${new Date().toISOString()} ---\n`);
+    // Write startup header to log
+    const startupHeader = `\n\n--- New Magi Startup initiated at ${new Date().toISOString()} ---\n`;
+    fs.appendFileSync(logFile, startupHeader);
 
     const child = spawn(scriptPath, [], {
       detached: true,
-      stdio: [ 'ignore', logStream, logStream ], // Redirect stdout and stderr to the log stream
-      shell: true
+      stdio: ['ignore', 'pipe', 'pipe'], // Use pipe instead of direct stream
+      shell: true,
+      cwd: path.dirname(scriptPath) // Set working directory to script location
+    });
+
+    // Pipe the output to both console and log file
+    child.stdout.pipe(logStream);
+    child.stderr.pipe(logStream);
+
+    child.stdout.on('data', (data) => {
+      console.log(`[Magi] ${data}`);
+    });
+
+    child.stderr.on('data', (data) => {
+      console.error(`[Magi Error] ${data}`);
     });
 
     child.on('error', (error) => {
+      const errorMsg = `\n--- SPAWN ERROR: ${error.message} ---\n`;
       console.error('Spawn error:', error);
-      logStream.write(`\n--- SPAWN ERROR: ${error.message} ---\n`);
+      fs.appendFileSync(logFile, errorMsg);
     });
 
     child.unref();
