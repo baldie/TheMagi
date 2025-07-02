@@ -1,5 +1,6 @@
 import { LOG_LEVELS, LogLevel } from './config';
 import { logStream } from './log-stream';
+import chalk from 'chalk';
 
 /**
  * Custom logger for The Magi Orchestrator
@@ -14,10 +15,26 @@ class Logger {
    */
   private log(level: LogLevel, message: string, data?: unknown): void {
     const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] [${level}] ${message}`;
+    const logHeader = `[${timestamp}] [${level}]`;
+    let logMessage = `${logHeader} ${message}`;
 
-    // Emit to the stream for websockets
+    // Emit to the stream for websockets (without color)
     logStream.emit(logMessage);
+
+    // Apply colors for console output
+    switch (level) {
+      case LOG_LEVELS.ERROR:
+        logMessage = chalk.red(`${logHeader} ${message}`);
+        break;
+      case LOG_LEVELS.INFO:
+        if (message === '--- MAGI SYSTEM READY ---') {
+          logMessage = chalk.green(`${logHeader} ${message}`);
+        } else {
+          logMessage = chalk.white(`${logHeader} ${message}`);
+        }
+        break;
+      // For WARN and DEBUG, we'll just use the default console color.
+    }
 
     if (data !== undefined) {
       console.log(logMessage);
@@ -62,9 +79,9 @@ class Logger {
   error(message: string, error?: unknown): void {
     this.log(LOG_LEVELS.ERROR, message);
     if (error instanceof Error) {
-      console.error(error.stack);
+      console.error(chalk.red(error.stack));
     } else if (error !== undefined) {
-      console.error('Additional error details:', error);
+      console.error(chalk.red('Additional error details:'), error);
     }
   }
 }

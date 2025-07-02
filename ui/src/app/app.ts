@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { WebsocketService } from './websocket.service';
-import { Subscription } from 'rxjs';
+import { Subscription, timer } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import { MagiStatus } from './components/base-magi.component';
 
 @Component({
@@ -18,9 +19,11 @@ export class AppComponent implements OnInit, OnDestroy {
   displayLogs: boolean = false;
   isMagiStarting: boolean = false;
   serverLogs: string[] = [];
+  userInquiry: string = '';
+  isOrchestratorAvailable: boolean = false;
 
   private subscriptions = new Subscription();
-  private readonly LAUNCHER_URL = 'http://localhost:3000/start';
+  private readonly ORCHESTRATOR_HEALTH_URL = 'http://localhost:8080/health';
 
   constructor(
     private websocketService: WebsocketService,
@@ -28,9 +31,6 @@ export class AppComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    // Mock status changes for demonstration
-    // ... existing code ...
-
     this.subscriptions.add(
       this.websocketService.isProcessRunning$.subscribe(isRunning => {
         this.isMagiStarting = isRunning;
@@ -40,6 +40,21 @@ export class AppComponent implements OnInit, OnDestroy {
     this.subscriptions.add(
       this.websocketService.logs$.subscribe(log => {
         this.serverLogs.push(log);
+      })
+    );
+
+    this.subscriptions.add(
+      timer(0, 5000).pipe(
+        switchMap(() => this.http.get(this.ORCHESTRATOR_HEALTH_URL, { observe: 'response' }))
+      ).subscribe({
+        next: (response) => {
+          this.isOrchestratorAvailable = response.status === 200;
+          console.log('Orchestrator availability:', this.isOrchestratorAvailable);
+        },
+        error: (error) => {
+          this.isOrchestratorAvailable = false;
+          console.error(error);
+        }
       })
     );
   }
@@ -55,19 +70,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     this.isMagiStarting = true;
     this.serverLogs = ['[CLIENT] Initiating Magi startup...'];
-
-    this.http.post(this.LAUNCHER_URL, {}).subscribe({
-      next: () => {
-        this.serverLogs.push('[CLIENT] Launcher acknowledged start signal.');
-        this.serverLogs.push('[CLIENT] Now attempting to connect to Orchestrator WebSocket...');
-        this.websocketService.startConnecting();
-      },
-      error: (err) => {
-        this.serverLogs.push(`[CLIENT] ERROR: Failed to contact launcher service at ${this.LAUNCHER_URL}.`);
-        this.serverLogs.push(`[CLIENT] Is the launcher service running? Details: ${err.message}`);
-        this.isMagiStarting = false;
-      }
-    });
+    this.serverLogs.push('[CLIENT] Now attempting to connect to Orchestrator WebSocket...');
+    this.websocketService.startConnecting(true, this.userInquiry);
   }
 
   toggleDisplayLogs() {

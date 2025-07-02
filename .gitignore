@@ -83,4 +83,10 @@ ffprobe.exe
 
 # PowerShell and Windows specific
 *.ps1_history
-*.bat.log 
+*.bat.log
+
+# Launcher
+launcher/logs/
+
+# Large files
+/.models/ 

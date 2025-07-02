@@ -12,8 +12,8 @@
     <rect x="20" y="20" width="1160" height="760" class="frame" />
 
     <!-- header box -->
-    <rect x="25" y="25" width="1150" height="100" class="green-box" />
-    <rect x="30" y="30" width="1140" height="90" class="green-box" />
+    <rect x="25" y="25" width="1150" height="100" [class.green-box]="isOrchestratorAvailable" [class.red-box]="!isOrchestratorAvailable" />
+    <rect x="30" y="30" width="1140" height="90" [class.green-box]="isOrchestratorAvailable" [class.red-box]="!isOrchestratorAvailable" />
 
     <!-- Magi Components -->
     <g app-balthasar [status]="balthasarStatus"></g>
@@ -49,11 +49,14 @@
     <foreignObject x="950" y="220" width="100" height="50">
       <a (click)="startMagi()" 
          class="magi-start-button"
-         [class.disabled]="isMagiStarting"
+         [class.disabled]="isMagiStarting || !isOrchestratorAvailable"
          title="start magi"
          aria-label="start magi">
         <div class="info-box-small">
-            打ち上げ
+          <span *ngIf="isOrchestratorAvailable; else offline">
+            {{ isMagiStarting ? 'Running...' : '打ち上げ' }}
+          </span>
+          <ng-template #offline>不在</ng-template>
         </div>
       </a>
     </foreignObject>
@@ -67,7 +70,7 @@
             </div>
             <div class="input-row">
                 <label for="question">question:</label>
-                <input id="question" type="text" value="Should one follow emotions instead of">
+                <input id="question" type="text" [(ngModel)]="userInquiry" placeholder="Ask The Magi a question...">
             </div>
         </div>
     </foreignObject>

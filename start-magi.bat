@@ -1,30 +1,129 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
-echo [Magi System] Starting up...
+echo [Magi System] Starting The Magi Environment...
 
-:: --- Port Cleanup ---
-echo [Magi System] Cleaning up port 11434 to ensure a clean start...
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr "LISTENING" ^| findstr ":11434"') do (
+:: Check if Node.js is installed
+echo [Magi System] Checking for Node.js...
+where node >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [Magi System] ERROR: Node.js is not installed or not in PATH
+    echo [Magi System] Please install Node.js from https://nodejs.org/
+    pause
+    exit /b 1
+)
+
+:: Check if npm is installed
+echo [Magi System] Checking for npm...
+where npm >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [Magi System] ERROR: npm is not installed or not in PATH
+    pause
+    exit /b 1
+)
+
+goto :main
+
+:: Function to check if a port is in use
+:checkPort
+set "port=%~1"
+echo [Magi System] Checking for usage of port %port%...
+netstat -ano | findstr ":%port%" | findstr "LISTENING" >nul
+exit /b %ERRORLEVEL%
+
+:: Kill process on a specific port if it exists
+:killPort
+set "port=%~1"
+echo [Magi System] Checking for processes on port %port%...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":%port%" ^| findstr "LISTENING"') do (
     if not "%%a"=="0" (
-        echo [Magi System] Terminating stale process with PID: %%a
+        echo [Magi System] Terminating existing process on port %port% with PID: %%a
         taskkill /F /PID %%a >nul 2>&1
     )
 )
-echo [Magi System] Port cleanup complete.
+exit /b 0
 
-:: Define path to the orchestrator directory
-set "ORCHESTRATOR_DIR=%~dp0orchestrator"
+:main
+:: --- Install dependencies if needed ---
+echo [Magi System] Checking and installing dependencies...
 
-echo [Magi System] Launching Orchestrator...
-echo This will start all necessary background services.
+:: UI dependencies
+if not exist "ui\node_modules" (
+    echo [Magi System] Installing UI dependencies...
+    pushd ui
+    call npm install
+    if !ERRORLEVEL! NEQ 0 (
+        echo [Magi System] ERROR: Failed to install UI dependencies
+        popd
+        pause
+        exit /b 1
+    )
+    popd
+)
 
-pushd "%ORCHESTRATOR_DIR%"
-echo [Magi System] Building Orchestrator from source...
-call npm run build
+:: Orchestrator dependencies
+if not exist "orchestrator\node_modules" (
+    echo [Magi System] Installing Orchestrator dependencies...
+    pushd orchestrator
+    call npm install
+    if !ERRORLEVEL! NEQ 0 (
+        echo [Magi System] ERROR: Failed to install Orchestrator dependencies
+        popd
+        pause
+        exit /b 1
+    )
+    popd
+)
 
-echo [Magi System] Starting Orchestrator from built files...
-call node dist/index.js
+:: --- Start Orchestrator Service ---
+echo [Magi System] Checking for existing Orchestrator service on port 8080...
+call :killPort 8080
+
+echo [Magi System] Starting Orchestrator service...
+pushd orchestrator
+start "Magi Orchestrator" cmd /k "npm start"
+if !ERRORLEVEL! NEQ 0 (
+    echo [Magi System] ERROR: Failed to start Orchestrator service
+    popd
+    pause
+    exit /b 1
+)
 popd
+
+
+:: --- Start UI Application ---
+echo [Magi System] Checking for existing UI service on port 4200...
+call :killPort 4200
+
+echo [Magi System] Starting UI application...
+pushd ui
+start "Magi UI" cmd /k "color 0B && echo Starting Magi UI... && npm start"
+if !ERRORLEVEL! NEQ 0 (
+    echo [Magi System] ERROR: Failed to start UI application
+    popd
+    pause
+    exit /b 1
+)
+popd
+
+:: Wait for UI to be available
+echo [Magi System] Waiting for UI to initialize...
+:waitForUI
+timeout /t 2 >nul
+call :checkPort 4200
+if !ERRORLEVEL! NEQ 0 (
+    echo [Magi System] Waiting for UI to start...
+    goto waitForUI
+)
+echo [Magi System] UI is running.
+
+:: --- Launch UI in Browser ---
+echo [Magi System] Opening UI in default browser...
+timeout /t 2 >nul
+start http://localhost:4200
+
+echo [Magi System] All services started successfully!
+echo [Magi System] UI: http://localhost:4200
+echo [Magi System] Orchestrator: http://localhost:8080
 
 endlocal

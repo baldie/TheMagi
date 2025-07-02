@@ -31,7 +31,7 @@ export class WebsocketService implements OnDestroy {
     this.disconnect();
   }
 
-  public startConnecting(): void {
+  public startConnecting(shouldStartMagi: boolean = false, inquiry?: string): void {
     this.logSubject.next(`[CLIENT] startConnecting() called. Attempting to connect to ${this.WS_ENDPOINT}...`);
     if (!this.socket$ || this.socket$.closed) {
       this.socket$ = webSocket({
@@ -39,6 +39,9 @@ export class WebsocketService implements OnDestroy {
         openObserver: {
           next: () => {
             this.logSubject.next('[CLIENT] WebSocket connection established.');
+            if (shouldStartMagi) {
+              this.startMagi(inquiry);
+            }
           }
         },
         closeObserver: {
@@ -73,19 +76,39 @@ export class WebsocketService implements OnDestroy {
   }
 
   private formatError(error: any): string {
+    if (error instanceof CloseEvent) {
+      let reasonMessage: string;
+      switch (error.code) {
+        case 1000:
+          reasonMessage = "Normal closure, meaning that the purpose for which the connection was established has been fulfilled.";
+          break;
+        case 1001:
+          reasonMessage = "An endpoint is 'going away', such as a server going down or a browser having navigated away from a page.";
+          break;
+        case 1002:
+          reasonMessage = "The endpoint is terminating the connection due to a protocol error.";
+          break;
+        case 1006:
+          reasonMessage = "The connection was closed abnormally (e.g., without sending or receiving a Close control frame). Check the server logs, it might have crashed.";
+          break;
+        case 1011:
+          reasonMessage = "The server is terminating the connection because it encountered an unexpected condition that prevented it from fulfilling the request.";
+          break;
+        default:
+          reasonMessage = "The connection was closed for an unknown reason.";
+      }
+      return `Connection closed with code ${error.code}. Reason: ${reasonMessage} ${error.reason ? `(${error.reason})` : ''}`;
+    }
     if (error instanceof Event) {
-      return 'A connection error occurred. Is the orchestrator server running?';
+      return 'A network error occurred, preventing the connection from being established. Is the orchestrator server running and accessible?';
     }
     if (error instanceof ErrorEvent) {
-      return error.message;
-    }
-    if (error instanceof CloseEvent) {
-      return `Connection closed with code ${error.code}: ${error.reason}`;
+      return `An error occurred: ${error.message}`;
     }
     if (error instanceof Error) {
       return error.message;
     }
-    return String(error);
+    return `An unknown error occurred: ${String(error)}`;
   }
 
   private handleMessage(msg: WebSocketMessage): void {
@@ -107,7 +130,7 @@ export class WebsocketService implements OnDestroy {
     }
   }
 
-  public startMagi(): void {
+  public startMagi(inquiry?: string): void {
     this.logSubject.next('[CLIENT] startMagi() called.');
     try {
       if (!this.socket$ || this.socket$.closed) {
@@ -115,7 +138,7 @@ export class WebsocketService implements OnDestroy {
         return;
       }
       
-      const message: WebSocketMessage = { type: 'start-magi', data: null };
+      const message: WebSocketMessage = { type: 'start-magi', data: { inquiry } };
       this.logSubject.next(`[CLIENT] Sending message: ${JSON.stringify(message)}`);
       this.processStatusSubject.next(true);
       this.socket$.next(message);
