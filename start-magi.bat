@@ -30,12 +30,57 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Check for Ollama in WSL
+:: Check for Ollama installation
+echo [Magi System] Checking for Ollama installation...
+set "OLLAMA_FOUND=0"
+
+:: Check for Ollama in WSL first
+echo [Magi System] Checking for Ollama in WSL...
 wsl -e which ollama >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Ollama is not installed in WSL. Please install Ollama and try again.
+if %ERRORLEVEL% EQU 0 (
+    echo [Magi System] Ollama found in WSL
+    set "OLLAMA_FOUND=1"
+    set "OLLAMA_LOCATION=WSL"
+) else (
+    :: Check for Ollama in Windows PATH
+    echo [Magi System] Checking for Ollama in Windows PATH...
+    where ollama >nul 2>&1
+    if !ERRORLEVEL! EQU 0 (
+        echo [Magi System] Ollama found in Windows PATH
+        set "OLLAMA_FOUND=1"
+        set "OLLAMA_LOCATION=Windows"
+    ) else (
+        :: Check common Windows installation paths
+        echo [Magi System] Checking common Ollama installation paths...
+        if exist "%USERPROFILE%\AppData\Local\Programs\Ollama\ollama.exe" (
+            echo [Magi System] Ollama found at %USERPROFILE%\AppData\Local\Programs\Ollama\ollama.exe
+            set "OLLAMA_FOUND=1"
+            set "OLLAMA_LOCATION=Local"
+        ) else if exist "%PROGRAMFILES%\Ollama\ollama.exe" (
+            echo [Magi System] Ollama found at %PROGRAMFILES%\Ollama\ollama.exe
+            set "OLLAMA_FOUND=1"
+            set "OLLAMA_LOCATION=ProgramFiles"
+        ) else (
+            :: Check if Ollama service is running (indicates installation)
+            echo [Magi System] Checking if Ollama service is running...
+            curl -s http://localhost:11434 >nul 2>&1
+            if !ERRORLEVEL! EQU 0 (
+                echo [Magi System] Ollama service is running on localhost:11434
+                set "OLLAMA_FOUND=1"
+                set "OLLAMA_LOCATION=Service"
+            )
+        )
+    )
+)
+
+if "%OLLAMA_FOUND%"=="0" (
+    echo [Magi System] ERROR: Ollama is not installed or not running
+    echo [Magi System] Please install Ollama from https://ollama.com/download
+    echo [Magi System] Or ensure the Ollama service is running
     pause
     exit /b 1
+) else (
+    echo [Magi System] Ollama detected at: %OLLAMA_LOCATION%
 )
 
 :: Check for models directory

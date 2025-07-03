@@ -8,6 +8,12 @@ export interface WebSocketMessage {
   data: any;
 }
 
+export interface AudioMessage {
+  audio: string; // base64 encoded audio data
+  persona: string;
+  isComplete: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -15,12 +21,14 @@ export class WebsocketService implements OnDestroy {
   private socket$: WebSocketSubject<WebSocketMessage> | null = null;
   private logSubject = new Subject<string>();
   private processStatusSubject = new Subject<boolean>();
+  private audioSubject = new Subject<AudioMessage>();
   private readonly WS_ENDPOINT = 'ws://localhost:8080';
   private readonly RECONNECT_INTERVAL = 2000;
   private readonly MAX_RETRIES = 3;
 
   public logs$: Observable<string> = this.logSubject.asObservable();
   public isProcessRunning$: Observable<boolean> = this.processStatusSubject.asObservable();
+  public audio$: Observable<AudioMessage> = this.audioSubject.asObservable();
 
   constructor() {
     this.logSubject.next('[CLIENT] WebSocketService constructed.');
@@ -121,6 +129,9 @@ export class WebsocketService implements OnDestroy {
         case 'PROCESS_EXITED':
           this.logSubject.next(msg.data);
           this.processStatusSubject.next(false);
+          break;
+        case 'audio':
+          this.audioSubject.next(msg.data as AudioMessage);
           break;
         default:
           this.logSubject.next(`[CLIENT] Unknown message type: ${msg.type}`);

@@ -6,6 +6,10 @@ REM The Magi - Master Installation Script
 REM This script orchestrates the entire setup process for The Magi system.
 REM =================================================================================
 
+:: Set the script directory as the working directory
+cd /d "%~dp0"
+echo Working directory set to: %CD%
+
 :: Check if running with administrator privileges
 NET SESSION >nul 2>&1
 if %errorLevel% == 0 (
@@ -70,21 +74,54 @@ pause
 
 :: Install FFmpeg
 ECHO [1/4] Setting up FFmpeg...
-if not exist "tools\ffmpeg\bin\ffmpeg.exe" (
-    powershell -ExecutionPolicy Bypass -File "scripts\install_ffmpeg.ps1"
-    if !errorLevel! NEQ 0 (
-        echo ERROR: Failed to install FFmpeg
-        pause
-        exit /b 1
-    )
+:: Check if FFmpeg is available in PATH or in common install locations
+where ffmpeg >nul 2>&1
+if !errorLevel! EQU 0 (
+    echo FFmpeg is already available in PATH.
 ) else (
-    echo FFmpeg is already installed.
+    if exist "C:\ffmpeg\bin\ffmpeg.exe" (
+        echo FFmpeg is already installed in C:\ffmpeg.
+    ) else (
+        echo Installing FFmpeg...
+        powershell -ExecutionPolicy Bypass -File "scripts\install_ffmpeg.ps1"
+        if !errorLevel! NEQ 0 (
+            echo ERROR: Failed to install FFmpeg
+            pause
+            exit /b 1
+        )
+    )
 )
 
 :: Install TTS Service dependencies
 ECHO [2/4] Setting up TTS Service...
+echo Current directory: %CD%
+echo Checking if services\tts exists...
+if exist "services\tts" (
+    echo Directory services\tts exists
+) else (
+    echo ERROR: Directory services\tts does not exist
+    pause
+    exit /b 1
+)
+echo Changing to services\tts directory...
 pushd services\tts
-call setup_tts.bat
+if !errorLevel! NEQ 0 (
+    echo ERROR: Failed to change to services\tts directory
+    pause
+    exit /b 1
+)
+echo Now in directory: %CD%
+echo Checking if setup_tts.bat exists...
+if exist "setup_tts.bat" (
+    echo setup_tts.bat exists, running it...
+    call setup_tts.bat
+) else (
+    echo ERROR: setup_tts.bat not found in current directory
+    dir
+    popd
+    pause
+    exit /b 1
+)
 if !errorLevel! NEQ 0 (
     echo ERROR: Failed to set up TTS service
     popd

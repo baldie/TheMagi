@@ -10,7 +10,7 @@ import path from 'path';
 import axios from 'axios';
 import express from 'express';
 import cors from 'cors';
-import { ensureMagiConduitIsRunning } from 'magi-conduit';
+import { ensureMagiConduitIsRunning } from '../../conduit/src/index';
 
 // Track initialization state
 let isInitialized = false;

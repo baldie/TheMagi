@@ -59,23 +59,33 @@ class ServiceManager {
       this.isStarting = true;
 
       // Get the absolute path to the TTS service directory
-      const ttsServiceDir = path.resolve(__dirname, '../../services/tts_microservice');
+      const ttsServiceDir = path.resolve(__dirname, '../../services/tts');
       
       try {
-        // Determine the correct Python command based on the OS and virtual environment
+        // Determine the correct approach based on the OS
         const isWindows = os.platform() === 'win32';
-        const pythonCmd = isWindows ? 'python' : './venv/bin/python';
         
-        // Start the TTS service using the Python script
-        this.ttsProcess = spawn(pythonCmd, ['main.py'], {
-          cwd: ttsServiceDir,
-          stdio: 'pipe',
-          shell: isWindows, // Required for Windows to find Python in PATH
-          env: {
-            ...process.env,
-            PYTHONUNBUFFERED: '1', // Ensure Python output isn't buffered
-          },
-        });
+        if (isWindows) {
+          // On Windows, use cmd to run the batch file
+          this.ttsProcess = spawn('cmd', ['/c', 'start_service.bat'], {
+            cwd: ttsServiceDir,
+            stdio: 'pipe',
+            env: {
+              ...process.env,
+              PYTHONUNBUFFERED: '1',
+            },
+          });
+        } else {
+          // On Linux/WSL, use python directly
+          this.ttsProcess = spawn('./venv/bin/python', ['-m', 'uvicorn', 'openvoice.openvoice_server:app', '--host', '0.0.0.0', '--port', '8000'], {
+            cwd: ttsServiceDir,
+            stdio: 'pipe',
+            env: {
+              ...process.env,
+              PYTHONUNBUFFERED: '1',
+            },
+          });
+        }
 
         // Handle process events
         this.ttsProcess.stdout?.on('data', (data) => {

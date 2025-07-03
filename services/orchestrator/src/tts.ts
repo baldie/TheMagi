@@ -4,7 +4,8 @@ import { MagiName } from './magi';
 import { logger } from './logger';
 import { serviceManager } from './service_manager';
 import { spawn } from 'child_process';
-import { Stream } from 'stream';
+import { Stream, PassThrough } from 'stream';
+import { broadcastAudioToClients } from './websocket';
 
 // Constants for TTS service
 const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
@@ -12,15 +13,39 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
 /**
- * Plays a single audio stream to the default output device using ffplay.
+ * Plays a single audio stream to the default output device using ffplay
+ * and broadcasts it to WebSocket clients.
  * @param audioStream - A stream containing the audio data.
+ * @param persona - The Magi persona speaking.
  */
-async function playSingleAudioStream(audioStream: Stream): Promise<void> {
+async function playSingleAudioStream(audioStream: Stream, persona: MagiName): Promise<void> {
   const ffplay = spawn('ffplay', ['-i', '-', '-nodisp', '-autoexit']);
+  
+  // Create a pass-through stream to tee the audio data
+  const teeStream = new PassThrough();
+  
+  // Buffer to collect audio data for WebSocket clients
+  const audioChunks: Buffer[] = [];
   
   try {
     await new Promise<void>((resolve, reject) => {
-      audioStream.pipe(ffplay.stdin);
+      // Pipe audio to both ffplay and our tee stream
+      audioStream.pipe(teeStream);
+      teeStream.pipe(ffplay.stdin);
+
+      // Collect audio chunks for WebSocket broadcasting
+      teeStream.on('data', (chunk: Buffer) => {
+        audioChunks.push(chunk);
+        // Send chunks in real-time to WebSocket clients
+        broadcastAudioToClients(chunk, persona, false);
+      });
+
+      teeStream.on('end', () => {
+        // Send final notification to WebSocket clients
+        const completeAudio = Buffer.concat(audioChunks);
+        broadcastAudioToClients(Buffer.alloc(0), persona, true);
+        logger.debug(`Audio streaming completed for ${persona}, sent ${audioChunks.length} chunks to clients`);
+      });
 
       let stderr = '';
       ffplay.stderr.on('data', (data) => {
@@ -41,6 +66,11 @@ async function playSingleAudioStream(audioStream: Stream): Promise<void> {
           logger.error('ffplay stderr:', stderr);
           reject(new Error(`ffplay exited with code ${code}`));
         }
+      });
+
+      teeStream.on('error', (err) => {
+        logger.error('Error in tee stream', err);
+        reject(err);
       });
     });
   } finally {
@@ -141,7 +171,7 @@ export async function speakWithMagiVoice(text: string, persona: MagiName): Promi
             if (ttsRequestPromise) {
               const audioStream = await ttsRequestPromise;
               
-              await playSingleAudioStream(audioStream);
+              await playSingleAudioStream(audioStream, persona);
 
               logger.debug(`${persona}: "${currentSentence}"`);
             }

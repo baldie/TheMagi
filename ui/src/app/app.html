@@ -12,8 +12,8 @@
     <rect x="20" y="20" width="1160" height="760" class="frame" />
 
     <!-- header box -->
-    <rect x="25" y="25" width="1150" height="100" [class.green-box]="isOrchestratorAvailable" [class.red-box]="!isOrchestratorAvailable" />
-    <rect x="30" y="30" width="1140" height="90" [class.green-box]="isOrchestratorAvailable" [class.red-box]="!isOrchestratorAvailable" />
+    <rect x="25" y="25" width="1150" height="100" [class.green-box]="orchestratorStatus === 'ok'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
+    <rect x="30" y="30" width="1140" height="90" [class.green-box]="orchestratorStatus === 'ok'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
 
     <!-- Magi Components -->
     <g app-balthasar [status]="balthasarStatus"></g>
