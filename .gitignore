@@ -2,8 +2,17 @@
 node_modules/
 .pnp/
 .pnp.js
+services/orchestrator/node_modules/
+services/tts/node_modules/
+services/conduit/node_modules/
+ui/.angular/
 
 # Build outputs
+services/orchestrator/dist/
+services/tts/dist/
+services/conduit/checkpoints_V2/
+services/conduit/__pychache__/
+services/conduit/dist/
 dist/
 build/
 *.tsbuildinfo
@@ -12,6 +21,7 @@ build/
 .env
 .env.local
 .env.*.local
+services/tts/venv/
 
 # IDE and editor files
 .vscode/
