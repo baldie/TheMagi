@@ -11,12 +11,16 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,py,sh}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,py,sh}\""
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
     "@types/node": "^20.14.2",
     "axios": "^1.7.2",
     "chalk": "^4.1.2",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "magi-conduit": "file:../services/conduit",
     "play-sound": "^1.1.6",
     "typescript": "^5.4.5",
     "winston": "^3.13.0",

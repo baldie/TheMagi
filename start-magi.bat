@@ -22,6 +22,33 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+:: Check for WSL
+wsl --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo WSL is not installed. Please install WSL and try again.
+    pause
+    exit /b 1
+)
+
+:: Check for Ollama in WSL
+wsl -e which ollama >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Ollama is not installed in WSL. Please install Ollama and try again.
+    pause
+    exit /b 1
+)
+
+:: Check for models directory
+if not exist ".models" (
+    echo [Magi System] Models directory not found. Running model installation...
+    call scripts\install_models.bat
+    if %ERRORLEVEL% NEQ 0 (
+        echo [Magi System] ERROR: Failed to install models
+        pause
+        exit /b 1
+    )
+)
+
 goto :main
 
 :: Function to check if a port is in use
@@ -62,9 +89,9 @@ if not exist "ui\node_modules" (
 )
 
 :: Orchestrator dependencies
-if not exist "orchestrator\node_modules" (
+if not exist "services\orchestrator\node_modules" (
     echo [Magi System] Installing Orchestrator dependencies...
-    pushd orchestrator
+    pushd services\orchestrator
     call npm install
     if !ERRORLEVEL! NEQ 0 (
         echo [Magi System] ERROR: Failed to install Orchestrator dependencies
@@ -75,12 +102,18 @@ if not exist "orchestrator\node_modules" (
     popd
 )
 
+:: --- Start TTS Service ---
+echo [Magi System] Starting TTS service...
+pushd services\tts
+start "Magi TTS" cmd /k "start_service.bat"
+popd
+
 :: --- Start Orchestrator Service ---
 echo [Magi System] Checking for existing Orchestrator service on port 8080...
 call :killPort 8080
 
 echo [Magi System] Starting Orchestrator service...
-pushd orchestrator
+pushd services\orchestrator
 start "Magi Orchestrator" cmd /k "npm start"
 if !ERRORLEVEL! NEQ 0 (
     echo [Magi System] ERROR: Failed to start Orchestrator service
