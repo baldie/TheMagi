@@ -1,5 +1,5 @@
-<div class="magi-container">
-  <svg viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid meet">
+<div class="magi-container" [class.expanded]="displayLogs">
+  <svg [attr.viewBox]="'0 0 1200 ' + (displayLogs ? '900' : '800')" preserveAspectRatio="xMidYMid meet">
     <!-- Defs for patterns and gradients -->
     <defs>
       <pattern id="psychedelic-pattern" patternUnits="userSpaceOnUse" width="100" height="100">
@@ -8,8 +8,8 @@
     </defs>
 
     <!-- Frame -->
-    <rect x="10" y="10" width="1180" height="780" class="frame" />
-    <rect x="20" y="20" width="1160" height="760" class="frame" />
+    <rect x="10" y="10" [attr.width]="1180" [attr.height]="displayLogs ? 880 : 780" class="frame" />
+    <rect x="20" y="20" [attr.width]="1160" [attr.height]="displayLogs ? 860 : 760" class="frame" />
 
     <!-- header box -->
     <rect x="25" y="25" width="1150" height="100" [class.green-box]="orchestratorStatus === 'ok'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
@@ -70,21 +70,29 @@
             </div>
             <div class="input-row">
                 <label for="question">question:</label>
-                <input id="question" type="text" [(ngModel)]="userInquiry" placeholder="Ask The Magi a question...">
+                <input id="question" type="text" [(ngModel)]="userInquiry" (keyup.enter)="submitQuestion()" placeholder="Ask The Magi a question...">
+                <button *ngIf="userInquiry" class="submit-question-btn" (click)="submitQuestion()" [disabled]="orchestratorStatus !== 'ok' || isMagiStarting">
+                  Submit
+                </button>
+            </div>
+            <div class="toggle-advanced">
+              <button (click)="toggleDisplayLogs()">
+                {{ displayLogs ? 'Hide Logs' : 'Display Logs' }}
+              </button>
             </div>
         </div>
     </foreignObject>
 
+    <!-- Logs Panel -->
+    <foreignObject x="100" y="710" width="1000" height="150">
+      <div class="advanced-panel" [class.visible]="displayLogs">
+        <div class="panel-header">
+          <h3>Server Logs</h3>
+          <button class="clear-logs-btn" (click)="clearLogs()">Clear Logs</button>
+        </div>
+        <pre>{{ serverLogs.join('\n') }}</pre>
+      </div>
+    </foreignObject>
+
   </svg>
-
-  <div class="toggle-advanced">
-    <button (click)="toggleDisplayLogs()">
-      {{ displayLogs ? 'Hide Logs' : 'Display Logs' }}
-    </button>
-  </div>
-
-  <div class="advanced-panel" *ngIf="displayLogs">
-    <h3>Server Logs</h3>
-    <pre>{{ serverLogs.join('\n') }}</pre>
-  </div>
 </div>

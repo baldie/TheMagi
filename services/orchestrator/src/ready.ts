@@ -46,7 +46,7 @@ async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
   return sealedEnvelope;
 }
 
-async function runDeliberationPhase(sealedEnvelope: string): Promise<string> {
+async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> {
   let debateTranscript = sealedEnvelope;
   const MAX_ROUNDS = 3;
 
@@ -122,17 +122,17 @@ async function runDeliberationPhase(sealedEnvelope: string): Promise<string> {
  * @param inquiry - The user's question or request
  * @returns The final synthesized response or a summary of the impasse.
  */
-export async function runDeliberation(inquiry: string): Promise<string> {
-  logger.info('--- Running Deliberation Process ---');
-  logger.info('Starting deliberation proceedings', { inquiry });
-
-  // V0 placeholders from PRD
-  logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
-  logger.info('... [V0] Caspar providing smart device health info to Melchior (placeholder).');
-
+export async function beginDeliberation(inquiry?: string): Promise<string> {
   try {
-    const sealedEnvelope = await runSealedEnvelopePhase(inquiry);
-    const finalResponse = await runDeliberationPhase(sealedEnvelope);
+    logger.info('--- MAGI DELIBERATION INITIATED ---');
+    logger.info('Starting deliberation proceedings', { inquiry });
+
+    // V0 placeholders from PRD
+    logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
+    logger.info('... [V0] Caspar providing smart device health info to Melchior (placeholder).');
+
+    const sealedEnvelope = await runSealedEnvelopePhase(inquiry || '');
+    const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
 
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });

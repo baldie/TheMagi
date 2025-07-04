@@ -1,6 +1,24 @@
 import { LOG_LEVELS, LogLevel } from './config';
 import { logStream } from './log-stream';
 import chalk from 'chalk';
+import fs from 'fs';
+import path from 'path';
+
+const logDirectory = path.join(__dirname, '..', 'logs');
+if (!fs.existsSync(logDirectory)) {
+  fs.mkdirSync(logDirectory, { recursive: true });
+}
+
+const getLogFileName = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}.log`;
+};
+
+const logFilePath = path.join(logDirectory, getLogFileName());
+const fileStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
 /**
  * Custom logger for The Magi Orchestrator
@@ -16,12 +34,19 @@ class Logger {
   private log(level: LogLevel, message: string, data?: unknown): void {
     const timestamp = new Date().toISOString();
     const logHeader = `[${timestamp}] [${level}]`;
-    let logMessage = `${logHeader} ${message}`;
+    const plainMessage = `${logHeader} ${message}`;
+
+    // Write to file stream (un-colored)
+    fileStream.write(plainMessage + '\n');
+    if (data) {
+        fileStream.write(JSON.stringify(data, null, 2) + '\n');
+    }
 
     // Emit to the stream for websockets (without color)
-    logStream.emit(logMessage);
+    logStream.emit(plainMessage);
 
     // Apply colors for console output
+    let logMessage = '';
     switch (level) {
       case LOG_LEVELS.ERROR:
         logMessage = chalk.red(`${logHeader} ${message}`);
@@ -77,14 +102,24 @@ class Logger {
    * @param error - Optional error object or data to include
    */
   error(message: string, error?: unknown): void {
+    const timestamp = new Date().toISOString();
+    const logHeader = `[${timestamp}] [ERROR]`;
+    const plainMessage = `${logHeader} ${message}`;
+
     this.log(LOG_LEVELS.ERROR, message);
     if (error instanceof Error) {
       console.error(chalk.red(error.stack));
+      fileStream.write(`${plainMessage}\n${error.stack}\n`);
     } else if (error !== undefined) {
       console.error(chalk.red('Additional error details:'), error);
+      fileStream.write(`${plainMessage}\n${JSON.stringify(error, null, 2)}\n`);
     }
   }
 }
 
 // Export a singleton instance
 export const logger = new Logger();
+
+export function closeLogStream() {
+  fileStream.end();
+}

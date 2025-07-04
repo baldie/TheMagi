@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { spawn } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 
 const MAGI_CONDUIT_URL = 'http://127.0.0.1:11434';
 
@@ -20,14 +21,19 @@ export async function ensureMagiConduitIsRunning() {
   } catch (error) {
     console.info('Magi Conduit service not detected. Attempting to start it programmatically...');
 
+    const logDir = path.resolve(__dirname, '..', 'logs');
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+    const logFile = path.join(logDir, 'conduit.log');
+    const wslLogFile = logFile.replace(/\\/g, '/').replace(/^([a-zA-Z]):/, (match, p1) => `/mnt/${p1.toLowerCase()}`);
+
     const projectRoot = path.resolve(__dirname, '..', '..', '..');
     const modelsPath = path.join(projectRoot, '.models');
-    // Prepare for shell command by escaping backslashes for the path
     const wslModelsPath = modelsPath.replace(/\\/g, '\\\\');
 
-    // Command to kill any old processes and then start the server
     const killCommand = 'pkill -9 ollama 2>/dev/null || true';
-    const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); /snap/bin/ollama serve`;
+    const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); /snap/bin/ollama serve > '${wslLogFile}' 2>&1`;
     const fullCommand = `${killCommand} && ${startCommand}`;
 
     const magiConduitProcess = spawn('wsl.exe', ['-e', 'bash', '-c', fullCommand], {

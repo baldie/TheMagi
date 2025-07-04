@@ -102,21 +102,62 @@ function validateInput(text: string): void {
  * @param persona - The Magi persona whose voice to use
  * @returns The audio stream
  */
+/**
+ * Get persona-specific TTS settings
+ * @param persona - The Magi persona
+ * @returns TTS generation parameters
+ */
+function getPersonaSettings(persona: MagiName) {
+  const settings = {
+    [MagiName.Caspar]: {
+      exaggeration: 0.5,
+      cfg_weight: 0.5
+    },
+    [MagiName.Melchior]: {
+      exaggeration: 0.7,
+      cfg_weight: 0.3
+    },
+    [MagiName.Balthazar]: {
+      exaggeration: 0.3,
+      cfg_weight: 0.6
+    }
+  };
+  
+  return settings[persona] || settings[MagiName.Caspar];
+}
+
 async function makeTTSRequest(text: string, persona: MagiName): Promise<Stream> {
-  // No retry logic here, as we are handling it in the calling function.
-  const response = await axios.post(
-    `${TTS_API_BASE_URL}/api/generate-speech`,
+  // Get persona-specific settings
+  const personaSettings = getPersonaSettings(persona);
+  
+  // Step 1: Request synthesis with Chatterbox API
+  const synthesisResponse = await axios.post(
+    `${TTS_API_BASE_URL}/synthesize`,
     {
       text,
-      persona,
-      stream: true,
+      voice: persona.toLowerCase(),
+      speed: 1.0,
+      pitch: 1.0,
+      exaggeration: personaSettings.exaggeration,
+      cfg_weight: personaSettings.cfg_weight
     },
     {
-      responseType: 'stream',
       timeout: 60000, // 60-second timeout for a single sentence
     }
   );
-  return response.data;
+
+  const { audio_id } = synthesisResponse.data;
+  
+  // Step 2: Get the audio file stream
+  const audioResponse = await axios.get(
+    `${TTS_API_BASE_URL}/audio/${audio_id}`,
+    {
+      responseType: 'stream',
+      timeout: 30000, // 30-second timeout for audio download
+    }
+  );
+  
+  return audioResponse.data;
 }
 
 /**

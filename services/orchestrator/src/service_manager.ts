@@ -1,153 +1,192 @@
 import { spawn, ChildProcess } from 'child_process';
-import { logger } from './logger';
+import { logger, closeLogStream } from './logger';
 import path from 'path';
 import axios from 'axios';
 import { TTS_API_BASE_URL } from './config';
 import os from 'os';
+import express from 'express';
+import cors from 'cors';
+import http from 'http';
+import { ensureMagiConduitIsRunning } from '../../conduit';
+
+const isWindows = os.platform() === 'win32';
 
 class ServiceManager {
   private ttsProcess: ChildProcess | null = null;
-  private isStarting: boolean = false;
+  private uiProcess: ChildProcess | null = null;
 
   constructor() {
     // Ensure cleanup on process exit
-    process.on('exit', () => this.stopTTSService());
+    process.on('exit', () => {
+      this.stopAllServices();
+    });
     process.on('SIGINT', () => {
-      this.stopTTSService();
+      this.stopAllServices();
       process.exit();
     });
   }
-
-  private async waitForTTSService(maxAttempts: number = 60, delayMs: number = 1000): Promise<boolean> {
+  
+  private async waitForService(serviceName: string, healthUrl: string, maxAttempts: number = 60, delayMs: number = 2000): Promise<boolean> {
+    logger.info(`Waiting for ${serviceName} to become healthy at ${healthUrl}...`);
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await axios.get(`${TTS_API_BASE_URL}/health`);
-        if (response.data.status === 'healthy') {
-          logger.info('TTS service is ready');
-          return true;
+        const response = await axios.get(healthUrl, { timeout: delayMs - 500 });
+
+        if (serviceName === 'UI') {
+            // For the UI service, we only need to confirm it's reachable.
+            if (response.status === 200) {
+                logger.info('UI service is ready.');
+                return true;
+            }
+        } else {
+            // For other services, we check the JSON response body.
+            if (response.status === 200 && (response.data.status === 'healthy' || response.data.status === 'ok')) {
+                logger.info(`${serviceName} is ready.`);
+                return true;
+            }
+            logger.debug(`${serviceName} status is '${response.data.status}', waiting...`);
         }
-      } catch (error) {
-        if (attempt === maxAttempts) {
-          logger.error('TTS service failed to become ready', error);
-          return false;
+      } catch (error: any) {
+        if (attempt === 1) {
+            logger.info(`Waiting for ${serviceName} to launch (attempt ${attempt}/${maxAttempts})`);
+        }
+        if (attempt % 5 === 0) { // Log every 10 seconds
+            logger.info(`Still waiting for ${serviceName} to launch (attempt ${attempt}/${maxAttempts})`);
         }
       }
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
+    logger.error(`${serviceName} failed to become ready after ${maxAttempts} attempts.`);
     return false;
   }
 
-  async ensureTTSServiceRunning(): Promise<boolean> {
+  private async startTTSServiceInternal(): Promise<void> {
+    const healthUrl = `${TTS_API_BASE_URL}/health`;
     try {
-      // Check if service is already running
-      try {
-        const response = await axios.get(`${TTS_API_BASE_URL}/health`);
-        if (response.data.status === 'healthy') {
-          logger.info('TTS service is already running');
-          return true;
-        }
-      } catch (error) {
-        // Service is not running, continue to start it
-      }
-
-      // Prevent multiple simultaneous start attempts
-      if (this.isStarting) {
-        logger.info('TTS service is already starting');
-        return await this.waitForTTSService();
-      }
-
-      this.isStarting = true;
-
-      // Get the absolute path to the TTS service directory
-      const ttsServiceDir = path.resolve(__dirname, '../../services/tts');
-      
-      try {
-        // Determine the correct approach based on the OS
-        const isWindows = os.platform() === 'win32';
-        
-        if (isWindows) {
-          // On Windows, use cmd to run the batch file
-          this.ttsProcess = spawn('cmd', ['/c', 'start_service.bat'], {
-            cwd: ttsServiceDir,
-            stdio: 'pipe',
-            env: {
-              ...process.env,
-              PYTHONUNBUFFERED: '1',
-            },
-          });
-        } else {
-          // On Linux/WSL, use python directly
-          this.ttsProcess = spawn('./venv/bin/python', ['-m', 'uvicorn', 'openvoice.openvoice_server:app', '--host', '0.0.0.0', '--port', '8000'], {
-            cwd: ttsServiceDir,
-            stdio: 'pipe',
-            env: {
-              ...process.env,
-              PYTHONUNBUFFERED: '1',
-            },
-          });
-        }
-
-        // Handle process events
-        this.ttsProcess.stdout?.on('data', (data) => {
-          logger.debug(`TTS Service stdout: ${data}`);
-        });
-
-        this.ttsProcess.stderr?.on('data', (data) => {
-          logger.debug(`TTS Service stderr: ${data}`);
-        });
-
-        this.ttsProcess.on('error', (error) => {
-          logger.error('Failed to start TTS service', error);
-          this.isStarting = false;
-        });
-
-        this.ttsProcess.on('exit', (code) => {
-          logger.info(`TTS service exited with code ${code}`);
-          this.ttsProcess = null;
-          this.isStarting = false;
-        });
-
-        // Wait for the service to become ready
-        const isReady = await this.waitForTTSService();
-        this.isStarting = false;
-        return isReady;
-
-      } catch (spawnError) {
-        logger.error('Failed to spawn TTS service process', spawnError);
-        this.isStarting = false;
-        return false;
-      }
-
+        await axios.get(healthUrl, { timeout: 1000 });
+        logger.info('TTS service is already running.');
+        return;
     } catch (error) {
-      logger.error('Error ensuring TTS service is running', error);
-      this.isStarting = false;
-      return false;
+        logger.info('TTS service not running. Starting it now...');
+    }
+
+    if (this.ttsProcess) {
+        logger.info('TTS service is already starting.');
+        return;
+    }
+    
+    const ttsServiceDir = path.resolve(__dirname, '..', '..', '..', 'services', 'tts');
+    const venvPath = isWindows ? 'venv/Scripts/python.exe' : 'venv/bin/python';
+    const pythonPath = path.join(ttsServiceDir, venvPath);
+    
+    this.ttsProcess = spawn(
+        pythonPath,
+        ['-m', 'uvicorn', 'tts_server:app', '--host', '0.0.0.0', '--port', '8000'],
+        {
+            cwd: ttsServiceDir,
+            stdio: ['ignore', 'pipe', 'pipe'], // stdin, stdout, stderr
+            env: { ...process.env, PYTHONUNBUFFERED: "1" }
+        }
+    );
+
+    this.ttsProcess.stdout?.on('data', (data) => {
+        data.toString().split('\n').forEach((line: string) => {
+            if (line.trim().length > 0) logger.info(`[TTS] ${line.trim()}`);
+        });
+    });
+
+    this.ttsProcess.stderr?.on('data', (data) => {
+        data.toString().split('\n').forEach((line: string) => {
+            if (line.trim().length > 0) logger.error(`[TTS STDERR] ${line.trim()}`);
+        });
+    });
+
+    this.ttsProcess.on('error', (err) => {
+        logger.error(`Failed to start TTS service.`, err);
+    });
+
+    this.ttsProcess.on('exit', (code) => {
+        logger.warn(`TTS service exited with code ${code}.`);
+        this.ttsProcess = null;
+    });
+    
+    await this.waitForService('TTS', healthUrl);
+  }
+
+  public async startTTSService() {
+    await this.startTTSServiceInternal();
+  }
+
+  public async startConduitService() {
+    logger.info('Ensuring Magi Conduit service is running...');
+    try {
+      await ensureMagiConduitIsRunning();
+      logger.info('Magi Conduit service is ready.');
+    } catch (error) {
+      logger.error('Failed to start Magi Conduit service.', error);
+      throw error; // Propagate the error to stop the startup process
     }
   }
 
-  stopTTSService() {
-    if (this.ttsProcess) {
-      logger.info('Stopping TTS service');
-      try {
-        // Send SIGTERM first for graceful shutdown
-        this.ttsProcess.kill('SIGTERM');
-        
-        // Set a timeout to force kill if graceful shutdown fails
-        setTimeout(() => {
-          if (this.ttsProcess) {
-            this.ttsProcess.kill('SIGKILL');
-            this.ttsProcess = null;
-          }
-        }, 5000); // 5 second timeout for graceful shutdown
-      } catch (error) {
-        logger.error('Error stopping TTS service', error);
-        // Force kill as last resort
-        if (this.ttsProcess) {
-          this.ttsProcess.kill('SIGKILL');
-          this.ttsProcess = null;
-        }
-      }
+  public async startUIService(): Promise<void> {
+    const healthUrl = `http://localhost:4200`; // Angular dev server root
+    try {
+        await axios.get(healthUrl, { timeout: 1000 });
+        logger.info('UI service is already running.');
+        return;
+    } catch (error) {
+        logger.info('UI service not running. Starting it now...');
     }
+
+    if (this.uiProcess) {
+        logger.info('UI service is already starting.');
+        return;
+    }
+
+    const uiDir = path.resolve(__dirname, '..', '..', '..', 'ui');
+    const command = isWindows ? 'npm.cmd' : 'npm';
+
+    this.uiProcess = spawn(command, ['start'], {
+        cwd: uiDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: isWindows,
+    });
+
+    this.uiProcess.stdout?.on('data', (data) => {
+        data.toString().split('\n').forEach((line: string) => {
+            if (line.trim().length > 0) logger.info(`[UI] ${line.trim()}`);
+        });
+    });
+
+    this.uiProcess.stderr?.on('data', (data) => {
+        data.toString().split('\n').forEach((line: string) => {
+            if (line.trim().length > 0) logger.error(`[UI STDERR] ${line.trim()}`);
+        });
+    });
+
+    this.uiProcess.on('error', (err) => {
+        logger.error(`Failed to start UI service.`, err);
+    });
+
+    this.uiProcess.on('exit', (code) => {
+        logger.warn(`UI service exited with code ${code}.`);
+        this.uiProcess = null;
+    });
+
+    await this.waitForService('UI', healthUrl, 120); // Longer timeout for Angular builds
+  }
+
+  stopAllServices() {
+    logger.info('Stopping all managed services...');
+    if (this.ttsProcess) {
+      this.ttsProcess.kill('SIGINT');
+      this.ttsProcess = null;
+    }
+    if (this.uiProcess) {
+        this.uiProcess.kill('SIGINT');
+        this.uiProcess = null;
+    }
+    closeLogStream();
   }
 }
 

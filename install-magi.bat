@@ -1,163 +1,152 @@
 @echo off
-SETLOCAL EnableDelayedExpansion
+setlocal EnableDelayedExpansion
 
-REM =================================================================================
-REM The Magi - Master Installation Script
-REM This script orchestrates the entire setup process for The Magi system.
-REM =================================================================================
+echo =================================================================================
+echo  The Magi - Master Installation Script
+echo =================================================================================
+echo This script will set up the complete development environment for The Magi.
 
-:: Set the script directory as the working directory
 cd /d "%~dp0"
-echo Working directory set to: %CD%
+echo.
+echo [Magi Installer] Working directory set to: %CD%
+echo.
 
-:: Check if running with administrator privileges
-NET SESSION >nul 2>&1
-if %errorLevel% == 0 (
-    echo Running with administrator privileges...
-) else (
-    echo This script requires administrator privileges.
-    echo Please run as administrator.
-    pause
-    exit /b 1
-)
+:: ---------------------------------------------------------------------------------
+:: Step 1: System Dependency Verification
+:: ---------------------------------------------------------------------------------
+echo [Magi Installer] Step 1: Verifying system dependencies...
 
 :: Check for Node.js
-node --version > nul 2>&1
-if %errorLevel% NEQ 0 (
-    echo Node.js is not installed. Please install Node.js and try again.
+where node >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Node.js is not installed or not in your PATH.
+    echo         Please install it from https://nodejs.org and ensure it's in your PATH.
     pause
     exit /b 1
 )
+for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i
+echo   [OK] Node.js found: !NODE_VERSION!
+
+:: Check for npm
+where npm >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] npm is not installed or not in your PATH.
+    pause
+    exit /b 1
+)
+for /f "tokens=*" %%i in ('npm -v') do set NPM_VERSION=%%i
+echo   [OK] npm found: !NPM_VERSION!
 
 :: Check for Python
-python --version > nul 2>&1
-if %errorLevel% NEQ 0 (
-    echo Python is not installed. Please install Python and try again.
+where python >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Python is not installed or not in your PATH.
+    echo         Please install Python 3.11 from https://www.python.org/
+    echo         Ensure you check "Add Python to PATH" during installation.
     pause
     exit /b 1
 )
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+echo   [OK] Python found: !PYTHON_VERSION! (Python 3.11 is recommended for TTS)
 
-:: Check for WSL
-wsl --version >nul 2>&1
-if %errorLevel% NEQ 0 (
-    echo WSL is not installed. Please install WSL and try again.
+:: Check for Git
+where git >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [ERROR] Git is not installed or not in your PATH.
+    echo         Git is required to install some Python dependencies.
+    echo         Please install it from https://git-scm.com/
     pause
     exit /b 1
 )
+echo   [OK] Git found.
 
-:: Create default .env if it doesn't exist
-if not exist .env (
-    echo Creating a new .env file with default settings...
-    (
-        echo # TTS Service Configuration
-        echo TTS_API_BASE_URL=http://localhost:8020
-        echo.
-        echo # Logging Configuration
-        echo LOG_LEVEL=info
-    ) > .env
-    echo.
-    echo A new .env file has been created. Please review it if you need to change the default configuration.
-) else (
-    echo .env file already exists. Skipping creation.
-)
+echo [Magi Installer] All system dependencies verified.
+echo.
 
-ECHO.
-ECHO    Welcome to The Magi Setup
-ECHO.
-ECHO This script will prepare your system by:
-ECHO   1. Installing FFmpeg for audio processing (if needed)
-ECHO   2. Setting up the TTS (Text-to-Speech) service
-ECHO   3. Installing all Node.js dependencies for the services
-ECHO   4. Setting up the UI application
-ECHO =================================================================================
-pause
+:: ---------------------------------------------------------------------------------
+:: Step 2: Node.js Dependency Installation
+:: ---------------------------------------------------------------------------------
+echo [Magi Installer] Step 2: Installing Node.js dependencies...
 
-:: Install FFmpeg
-ECHO [1/4] Setting up FFmpeg...
-:: Check if FFmpeg is available in PATH or in common install locations
-where ffmpeg >nul 2>&1
-if !errorLevel! EQU 0 (
-    echo FFmpeg is already available in PATH.
-) else (
-    if exist "C:\ffmpeg\bin\ffmpeg.exe" (
-        echo FFmpeg is already installed in C:\ffmpeg.
-    ) else (
-        echo Installing FFmpeg...
-        powershell -ExecutionPolicy Bypass -File "scripts\install_ffmpeg.ps1"
-        if !errorLevel! NEQ 0 (
-            echo ERROR: Failed to install FFmpeg
-            pause
-            exit /b 1
-        )
-    )
-)
-
-:: Install TTS Service dependencies
-ECHO [2/4] Setting up TTS Service...
-echo Current directory: %CD%
-echo Checking if services\tts exists...
-if exist "services\tts" (
-    echo Directory services\tts exists
-) else (
-    echo ERROR: Directory services\tts does not exist
-    pause
-    exit /b 1
-)
-echo Changing to services\tts directory...
-pushd services\tts
-if !errorLevel! NEQ 0 (
-    echo ERROR: Failed to change to services\tts directory
-    pause
-    exit /b 1
-)
-echo Now in directory: %CD%
-echo Checking if setup_tts.bat exists...
-if exist "setup_tts.bat" (
-    echo setup_tts.bat exists, running it...
-    call setup_tts.bat
-) else (
-    echo ERROR: setup_tts.bat not found in current directory
-    dir
-    popd
-    pause
-    exit /b 1
-)
-if !errorLevel! NEQ 0 (
-    echo ERROR: Failed to set up TTS service
-    popd
-    pause
-    exit /b 1
-)
-popd
-
-:: Install Orchestrator dependencies
-ECHO [3/4] Setting up Orchestrator...
+echo   - Installing Orchestrator dependencies...
 pushd services\orchestrator
 call npm install
-if !errorLevel! NEQ 0 (
-    echo ERROR: Failed to install Orchestrator dependencies
+if !errorLevel! neq 0 (
+    echo [ERROR] Failed to install Orchestrator dependencies. Check logs for details.
     popd
     pause
     exit /b 1
 )
 popd
+echo     [OK] Orchestrator dependencies installed.
 
-:: Install UI dependencies
-ECHO [4/4] Setting up UI...
+echo   - Installing UI dependencies...
 pushd ui
 call npm install
-if !errorLevel! NEQ 0 (
-    echo ERROR: Failed to install UI dependencies
+if !errorLevel! neq 0 (
+    echo [ERROR] Failed to install UI dependencies. Check logs for details.
     popd
     pause
     exit /b 1
 )
 popd
+echo     [OK] UI dependencies installed.
+echo [Magi Installer] All Node.js dependencies installed successfully.
+echo.
 
+:: ---------------------------------------------------------------------------------
+:: Step 3: Python TTS Service Setup
+:: ---------------------------------------------------------------------------------
+echo [Magi Installer] Step 3: Setting up Python environment for TTS service...
+
+set TTS_DIR=%CD%\services\tts
+if not exist "!TTS_DIR!" (
+    echo [ERROR] TTS service directory not found at: !TTS_DIR!
+    pause
+    exit /b 1
+)
+
+echo   - Checking for Python virtual environment...
+if exist "!TTS_DIR!\venv\Scripts\activate.bat" (
+    echo     Virtual environment already exists. Skipping creation.
+) else (
+    echo     Virtual environment not found. Creating it now...
+    python -m venv "!TTS_DIR!\venv"
+    if !errorLevel! neq 0 (
+        echo [ERROR] Failed to create Python virtual environment.
+        echo         Please ensure Python and the 'venv' module are working correctly.
+        pause
+        exit /b 1
+    )
+    echo     [OK] Virtual environment created successfully.
+)
+
+echo   - Installing Python dependencies from requirements.txt...
+call "!TTS_DIR!\venv\Scripts\activate.bat"
+pip install -r "!TTS_DIR!\requirements.txt"
+if !errorLevel! neq 0 (
+    echo [ERROR] Failed to install Python dependencies from requirements.txt.
+    echo         Please check your internet connection and the contents of the requirements file.
+    echo         Some packages may require Visual C++ Build Tools.
+    pause
+    exit /b 1
+)
+echo     [OK] Python dependencies installed successfully.
+echo [Magi Installer] TTS Service setup complete.
 echo.
-echo Installation complete!
-echo You can now run start-magi.bat to start the system.
+
+:: ---------------------------------------------------------------------------------
+:: Finalization
+:: ---------------------------------------------------------------------------------
+echo =================================================================================
+echo  The Magi Installation Is Complete!
+echo =================================================================================
 echo.
+echo  Your environment is now ready. To start the system, run:
+echo.
+echo      start-magi.bat
+echo.
+echo =================================================================================
+
 pause
-
-ENDLOCAL 
+endlocal 

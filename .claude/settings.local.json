@@ -6,7 +6,24 @@
       "Bash(rm:*)",
       "Bash(mv:*)",
       "Bash(cmd.exe:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(find:*)",
+      "Bash(./venv/Scripts/python.exe -c \"import unidic; unidic.download()\")",
+      "Bash(./venv/Scripts/python.exe -c \"from unidic.download import download_version; download_version()\")",
+      "Bash(cp:*)",
+      "Bash(true)",
+      "Bash(./venv/Scripts/python.exe -c \"import MeCab; print(''MeCab initialized successfully'')\")",
+      "Bash(./venv/Scripts/python.exe -c \"import MeCab; print(''MeCab initialized successfully'')\")",
+      "Bash(./venv/Scripts/python.exe -c \"import faster_whisper; print(''faster_whisper imported successfully'')\")",
+      "Bash(grep:*)",
+      "Bash(./venv/Scripts/pip.exe install faster-whisper==0.9.0)",
+      "Bash(./venv/Scripts/python.exe -c \"from openvoice.openvoice_server import app; print(''OpenVoice server imports working'')\")",
+      "Bash(./venv/Scripts/pip.exe install whisper-timestamped==1.14.2)",
+      "Bash(./venv/Scripts/python.exe -c \"from openvoice.openvoice_server import app; print(''OpenVoice server imports working'')\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(./services/tts/clear_lock.bat)",
+      "Bash(curl:*)"
     ],
     "deny": []
   }

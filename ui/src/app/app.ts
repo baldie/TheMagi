@@ -89,7 +89,15 @@ export class AppComponent implements OnInit, OnDestroy {
     this.websocketService.startConnecting(true, this.userInquiry);
   }
 
+  submitQuestion(): void {
+    // This will be implemented later
+  }
+
   toggleDisplayLogs() {
     this.displayLogs = !this.displayLogs;
+  }
+
+  clearLogs() {
+    this.serverLogs = [];
   }
 }

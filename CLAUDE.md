@@ -31,6 +31,35 @@ The system follows a microservices architecture:
 ./start-magi.bat
 ```
 
+### System Management
+```bash
+# Check system status in real-time
+./scripts/system-status.bat
+
+# Run startup diagnostics
+./scripts/diagnose-startup.bat
+
+# Fix TTS service issues
+./services/tts/fix_tts.bat
+
+# Clear TTS service instances
+./scripts/clear-tts-instances.bat
+
+# Check specific port status and service health
+./scripts/check-port.bat 8000 "TTS Service"
+./scripts/check-port.bat 8080 "Orchestrator"
+./scripts/check-port.bat 4200 "UI Service"
+
+# Test TTS service specifically
+./scripts/test-tts.bat
+
+# Debug TTS startup issues
+./scripts/debug-tts-startup.bat
+
+# Check Python virtual environment
+./scripts/check-python-venv.bat
+```
+
 ### Development Commands
 
 #### Orchestrator Service
@@ -78,8 +107,33 @@ Each persona has its own personality file in `services/orchestrator/src/personal
 ### Configuration
 - Orchestrator runs on port 8080 (HTTP/WebSocket)
 - UI development server runs on port 4200
-- TTS service managed by ServiceManager in Orchestrator
+- TTS service runs on port 8000 (Chatterbox TTS)
 - Conduit service URL configured in `services/orchestrator/src/config.ts`
+
+### Startup Process
+1. **start-magi.bat** verifies system requirements (Node.js, Python, WSL, Ollama)
+2. Installs dependencies if needed (UI and Orchestrator npm packages)
+3. Starts TTS service with comprehensive dependency checking
+4. Waits for TTS to become healthy with detailed status monitoring (up to 6 minutes)
+5. Starts Orchestrator service and waits for initialization (up to 30 seconds)
+6. Starts UI service and waits for it to be ready
+7. Opens UI in browser once all services are running
+
+**Enhanced Features**:
+- **Automatic dependency installation**: Missing Python packages are installed automatically
+- **Detailed status reporting**: Real-time feedback on initialization stages
+- **Intelligent error handling**: Distinguishes between temporary delays and permanent failures
+- **Robust port checking**: Verifies service health, not just port occupation
+- **Extended timeouts**: Accommodates large model downloads (10+ minutes on first run)
+
+**TTS Service States**:
+- `starting`: Service is initializing
+- `checking_dependencies`: Verifying Python packages
+- `configuring_device`: Setting up CPU/GPU for model
+- `downloading_model`: First-time model download (can take 10+ minutes)
+- `initializing`: Model loading in progress
+- `healthy`: Service ready for requests
+- `failed`: Permanent failure requiring manual intervention
 
 ## Development Notes
 
