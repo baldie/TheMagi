@@ -68,10 +68,10 @@ svg {
 }
 
 .info-box-small {
-    color: #00aaff;
-    border: 2px solid #00aaff;
-    padding: 5px;
-    text-align: center;
+  color: #00aaff;
+  border: 2px solid #00aaff;
+  padding: 5px;
+  text-align: center;
 }
 
 .green-box {
@@ -100,7 +100,7 @@ svg {
 }
 
 .input-area {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: 'Sans Serif', Courier, monospace;
   font-size: 1.2rem;
   color: #ffa500;
   .input-row {
@@ -117,7 +117,7 @@ svg {
       color: #ffa500;
       font-size: 1.2rem;
       width: 70%;
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'Sans Serif', Courier, monospace;
 
       &:focus {
         outline: none;
@@ -172,7 +172,7 @@ svg {
   }
   pre {
     color: #ddd;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: 'Sans Serif', Courier, monospace;
     white-space: pre-wrap;
     word-wrap: break-word;
     font-size: 0.8rem;
@@ -215,4 +215,27 @@ svg {
     color: #555;
     cursor: not-allowed;
   }
+}
+
+.offline {
+  fill:#000
+}
+
+.busy {
+  /* The animation property is a shorthand for several animation-related properties. */
+  animation: colorCycle 3s infinite linear;
+  fill: #00aaff;
+}
+
+/* @keyframes defines the animation's behavior. */
+@keyframes colorCycle {
+  0%   { fill: #fca311; } /* Bold Red */
+  25%  { fill: #005c0e; } /* Vibrant Orange */
+  50%  { fill: #ff00c3; } /* Rich Teal */
+  75%  { fill: #e4ec00; } /* Strong Blue */
+  100% { fill: #fca311; }/* Back to Red */
+}
+
+.available {
+  fill: #00aaff;
 }

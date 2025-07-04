@@ -4,7 +4,7 @@ import { WebsocketService } from './websocket.service';
 import { AudioService } from './audio.service';
 import { Subscription, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
-import { MagiStatus } from './components/base-magi.component';
+import { MagiStatus, MagiHealth } from './components/base-magi.component';
 
 @Component({
   selector: 'app-root',
@@ -12,17 +12,18 @@ import { MagiStatus } from './components/base-magi.component';
   standalone: false,
   styleUrls: ['./components/magi.scss']
 })
+
 export class AppComponent implements OnInit, OnDestroy {
   protected title = 'ui';
-  balthasarStatus: MagiStatus = 'off';
-  casperStatus: MagiStatus = 'off';
-  melchiorStatus: MagiStatus = 'off';
+  balthasarStatus: MagiStatus = 'offline';
+  casperStatus: MagiStatus = 'offline';
+  melchiorStatus: MagiStatus = 'offline';
   displayLogs: boolean = false;
   isMagiStarting: boolean = false;
   serverLogs: string[] = [];
   userInquiry: string = '';
   isOrchestratorAvailable: boolean = false;
-  orchestratorStatus: 'ok' | 'busy' | 'error' = 'error';
+  orchestratorStatus: 'available' | 'busy' | 'error' = 'error';
 
   private subscriptions = new Subscription();
   private readonly ORCHESTRATOR_HEALTH_URL = 'http://localhost:8080/health';
@@ -54,11 +55,19 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.subscriptions.add(
       timer(0, 5000).pipe(
-        switchMap(() => this.http.get<{status: string}>(this.ORCHESTRATOR_HEALTH_URL))
+        switchMap(() => this.http.get<MagiHealth>(this.ORCHESTRATOR_HEALTH_URL))
       ).subscribe({
         next: (response) => {
-          this.isOrchestratorAvailable = response.status === 'ok';
-          this.orchestratorStatus = response.status === 'ok' ? 'ok' : response.status === 'busy' ? 'busy' : 'error';
+
+          this.isOrchestratorAvailable = response.status === 'available';
+          
+          // Show the status of each individual Magi
+          const {balthazar, caspar, melchior} = response.magi;
+          this.balthasarStatus = balthazar.status;
+          this.casperStatus = caspar.status;
+          this.melchiorStatus = melchior.status;
+          
+          this.orchestratorStatus = response.status === 'available' ? 'available' : response.status === 'busy' ? 'busy' : 'error';
           console.log('Orchestrator status:', this.orchestratorStatus);
         },
         error: (error) => {

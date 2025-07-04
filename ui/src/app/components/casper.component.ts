@@ -8,7 +8,7 @@ import { BaseMagiComponent, MagiStatus } from './base-magi.component';
   standalone: false,
 })
 export class CasperComponent extends BaseMagiComponent {
-  @Input() override status: MagiStatus = 'off';
+  @Input() override status: MagiStatus = 'offline';
 
   constructor() {
     super();

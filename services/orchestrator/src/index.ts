@@ -4,6 +4,7 @@ import { loadMagi } from './loading';
 import { beginDeliberation } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics } from './diagnostics';
+import { balthazar, caspar, melchior, MagiName } from './magi';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -53,7 +54,21 @@ function startHttpOrchestratorService() {
   const server = http.createServer(app);
 
   app.get('/health', (req, res) => {
-    res.status(200).json({ status: isInitialized ? 'ok' : 'busy' });
+    res.status(200).json(
+      {
+        status: isInitialized ? 'available' : 'busy',
+        magi: {
+          caspar: {
+            status: caspar.getStatus()
+          },
+          melchior: {
+            status: melchior.getStatus()
+          },
+          balthazar: {
+            status: balthazar.getStatus()
+          },
+        }
+      });
   });
 
   createWebSocketServer(server, beginDeliberation);

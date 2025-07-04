@@ -12,8 +12,8 @@
     <rect x="20" y="20" [attr.width]="1160" [attr.height]="displayLogs ? 860 : 760" class="frame" />
 
     <!-- header box -->
-    <rect x="25" y="25" width="1150" height="100" [class.green-box]="orchestratorStatus === 'ok'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
-    <rect x="30" y="30" width="1140" height="90" [class.green-box]="orchestratorStatus === 'ok'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
+    <rect x="25" y="25" width="1150" height="100" [class.green-box]="orchestratorStatus === 'available'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
+    <rect x="30" y="30" width="1140" height="90" [class.green-box]="orchestratorStatus === 'available'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
 
     <!-- Magi Components -->
     <g app-balthasar [status]="balthasarStatus"></g>
@@ -71,7 +71,7 @@
             <div class="input-row">
                 <label for="question">question:</label>
                 <input id="question" type="text" [(ngModel)]="userInquiry" (keyup.enter)="submitQuestion()" placeholder="Ask The Magi a question...">
-                <button *ngIf="userInquiry" class="submit-question-btn" (click)="submitQuestion()" [disabled]="orchestratorStatus !== 'ok' || isMagiStarting">
+                <button *ngIf="userInquiry" class="submit-question-btn" (click)="submitQuestion()" [disabled]="orchestratorStatus !== 'available' || isMagiStarting">
                   Submit
                 </button>
             </div>

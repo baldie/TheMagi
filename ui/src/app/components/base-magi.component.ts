@@ -1,12 +1,21 @@
 import { Component, Input } from '@angular/core';
 
-export type MagiStatus = 'off' | 'loading' | 'ready' | 'error' | 'thinking';
+export type MagiStatus = 'offline' | 'busy' | 'evailable';
+
+export type MagiHealth = {
+  status: 'available' | 'busy' | 'error';
+  magi: {
+    balthazar: { status: MagiStatus; };
+    caspar: { status: MagiStatus; };
+    melchior: { status: MagiStatus; };
+  }
+}
 
 @Component({
   template: '',
   standalone: false,
 })
 export class BaseMagiComponent {
-  @Input() status: MagiStatus = 'off';
+  @Input() status: MagiStatus = 'offline';
   pathData = '';
 } 

@@ -46,7 +46,8 @@ interface ConduitResponse {
  */
 export class Magi {
   private personalityPrompt: string = '';
-
+  private status: 'available' | 'busy' | 'offline' = 'offline';
+  
   constructor(public name: MagiName, private config: MagiConfig) {}
 
   /**
@@ -71,12 +72,17 @@ export class Magi {
     return this.personalityPrompt;
   }
 
+  public getStatus(): 'available' | 'busy' | 'offline' {
+    return this.status;
+  }
+
   /**
    * Contacts the Magi persona through the Magi Conduit to get a response.
    * @param userPrompt - The user's question or the content of a debate turn.
    * @returns The AI's response text.
    */
   async contact(userPrompt: string): Promise<string> {
+    this.status = 'busy';
     const systemPrompt = `${MAGI_MANIFESTO}\n\n${this.getPersonality()}`;
 
     const requestData = {
@@ -101,6 +107,7 @@ export class Magi {
       );
 
       logger.debug(`${this.name} has responded.`);
+      this.status = 'available';
       return response.data.response;
     } catch (error) {
       if (axios.isAxiosError(error)) {

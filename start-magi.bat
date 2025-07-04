@@ -24,18 +24,13 @@ if not exist "services/orchestrator/node_modules" (
     popd
 )
 
-:: Start Orchestrator in a new window
-echo [Magi System] Starting Orchestrator...
-start "Magi Orchestrator" cmd /c "cd services/orchestrator && npm start"
+echo.
+echo [Magi System] Starting Orchestrator, press CTRL+C in this window to shut down the Magi.
+echo.
 
-:: Give servers time to start
-echo [Magi System] Waiting for services to initialize...
-timeout /t 15 /nobreak >nul
+:: Start the orchestrator in the current window. This will block the script.
+cd services/orchestrator
+call npm start
 
-:: Launch UI in the browser
-echo [Magi System] Launching The Magi Interface...
-start http://localhost:4200
-
-echo [Magi System] Ignition completed see orchestrator logs for startup details
-
+echo [Magi System] Orchestrator has shut down.
 endlocal

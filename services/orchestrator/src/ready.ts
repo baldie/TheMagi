@@ -75,6 +75,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
 
       What is your response? Be concise.
       `;
+      
       const response = await retry(() => currentMagi.contact(debatePrompt));
       roundResponses += `\n${currentMagi.name}'s Round ${round} Argument:\n${response}\n---`;
       logger.info(`${currentMagi.name} has contributed to Round ${round}.`);
@@ -85,7 +86,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
     logger.info(`Checking for consensus after Round ${round}.`);
     const consensusCheckPrompt = `
       You will now act as an impartial moderator. After reviewing the deliberations transcript below,
-      determine if a unanimous consensus has been reached.
+      determine if a unanimous consensus has been reached in the last round.
 
       If yes, respond ONLY with the final, agreed-upon recommendation. Be concise.
       If no, respond ONLY with the word "IMPASSE".
