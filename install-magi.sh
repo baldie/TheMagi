@@ -103,7 +103,45 @@ else
     echo "    [INFO] nvidia-smi not found. No NVIDIA GPU support detected."
 fi
 
-echo "[Magi Installer] All system dependencies verified."
+# Check system requirements
+echo "  - Checking system requirements..."
+
+# Check available disk space (need at least 10GB for models and dependencies)
+AVAILABLE_SPACE=$(df -BG . | tail -1 | awk '{print $4}' | sed 's/G//')
+if [ "$AVAILABLE_SPACE" -lt 10 ]; then
+    echo "[WARNING] Low disk space detected: ${AVAILABLE_SPACE}GB available."
+    echo "          At least 10GB recommended for AI models and dependencies."
+    echo "          Consider freeing up disk space before continuing."
+    read -p "Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "[ABORTED] Installation cancelled due to insufficient disk space."
+        exit 1
+    fi
+else
+    echo "    [OK] Sufficient disk space: ${AVAILABLE_SPACE}GB available."
+fi
+
+# Check available RAM (recommend at least 8GB)
+TOTAL_RAM=$(free -m | awk 'NR==2{printf "%.0f", $2/1024}')
+if [ "$TOTAL_RAM" -lt 8 ]; then
+    echo "[WARNING] Low RAM detected: ${TOTAL_RAM}GB total."
+    echo "          At least 8GB RAM recommended for optimal AI model performance."
+    echo "          The system may run slowly or experience memory issues."
+else
+    echo "    [OK] Sufficient RAM: ${TOTAL_RAM}GB total."
+fi
+
+# Check CPU cores
+CPU_CORES=$(nproc)
+if [ "$CPU_CORES" -lt 4 ]; then
+    echo "[WARNING] Limited CPU cores: $CPU_CORES cores detected."
+    echo "          At least 4 cores recommended for good performance."
+else
+    echo "    [OK] CPU cores: $CPU_CORES cores detected."
+fi
+
+echo "[Magi Installer] System requirements check complete."
 echo
 
 # ---------------------------------------------------------------------------------
@@ -132,13 +170,106 @@ if [ $? -ne 0 ]; then
 fi
 popd > /dev/null
 echo "    [OK] UI dependencies installed."
+
+echo "  - Installing Conduit dependencies..."
+pushd services/conduit > /dev/null
+npm install
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to install Conduit dependencies. Check logs for details."
+    popd > /dev/null
+    exit 1
+fi
+npm run build
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to build Conduit service. Check logs for details."
+    popd > /dev/null
+    exit 1
+fi
+popd > /dev/null
+echo "    [OK] Conduit dependencies installed and built."
 echo "[Magi Installer] All Node.js dependencies installed successfully."
 echo
 
 # ---------------------------------------------------------------------------------
-# Step 3: Python TTS Service Setup
+# Step 3: Ollama Installation and Setup
 # ---------------------------------------------------------------------------------
-echo "[Magi Installer] Step 3: Setting up Python environment for TTS service..."
+echo "[Magi Installer] Step 3: Installing and configuring Ollama for AI models..."
+
+# Check if Ollama is already installed
+if command -v ollama &> /dev/null; then
+    OLLAMA_VERSION=$(ollama --version 2>/dev/null || echo "unknown")
+    echo "  [OK] Ollama found: $OLLAMA_VERSION"
+else
+    echo "  - Installing Ollama..."
+    # Install Ollama using the official installation script
+    curl -fsSL https://ollama.ai/install.sh | sh
+    if [ $? -ne 0 ]; then
+        echo "[ERROR] Failed to install Ollama. Please check your internet connection."
+        echo "        You can manually install from: https://ollama.ai/"
+        exit 1
+    fi
+    echo "    [OK] Ollama installed successfully."
+fi
+
+# Create models directory
+MODELS_DIR="$(pwd)/.models"
+mkdir -p "$MODELS_DIR"
+echo "  - Models directory created at: $MODELS_DIR"
+
+# Set OLLAMA_MODELS environment variable
+export OLLAMA_MODELS="$MODELS_DIR"
+echo "  - Set OLLAMA_MODELS environment variable to: $MODELS_DIR"
+
+# Start Ollama service if not running
+echo "  - Checking Ollama service status..."
+if ! pgrep -f "ollama serve" > /dev/null; then
+    echo "    Starting Ollama service..."
+    ollama serve &
+    OLLAMA_PID=$!
+    sleep 5
+    
+    # Verify Ollama is responding
+    if ! curl -s http://localhost:11434/api/version > /dev/null; then
+        echo "[ERROR] Ollama service failed to start properly."
+        kill $OLLAMA_PID 2>/dev/null
+        exit 1
+    fi
+    echo "    [OK] Ollama service started (PID: $OLLAMA_PID)"
+else
+    echo "    [OK] Ollama service already running."
+fi
+
+# Download required AI models
+echo "  - Downloading required AI models (this may take several minutes)..."
+echo "    Downloading Mistral model..."
+ollama pull mistral:latest
+if [ $? -ne 0 ]; then
+    echo "[WARNING] Failed to download Mistral model. You may need to download it manually."
+fi
+
+echo "    Downloading Gemma model..."
+ollama pull gemma:latest
+if [ $? -ne 0 ]; then
+    echo "[WARNING] Failed to download Gemma model. You may need to download it manually."
+fi
+
+echo "    Downloading Llama2 model..."
+ollama pull llama2:latest
+if [ $? -ne 0 ]; then
+    echo "[WARNING] Failed to download Llama2 model. You may need to download it manually."
+fi
+
+echo "  - Verifying model installations..."
+AVAILABLE_MODELS=$(ollama list 2>/dev/null)
+echo "$AVAILABLE_MODELS"
+
+echo "[Magi Installer] Ollama setup complete."
+echo
+
+# ---------------------------------------------------------------------------------
+# Step 4: Python TTS Service Setup
+# ---------------------------------------------------------------------------------
+echo "[Magi Installer] Step 4: Setting up Python environment for TTS service..."
 
 TTS_DIR="$(pwd)/services/tts"
 if [ ! -d "$TTS_DIR" ]; then
@@ -226,6 +357,95 @@ except Exception as e:
 echo "    [OK] TTS service test complete."
 
 echo "[Magi Installer] TTS Service setup complete."
+echo
+
+# ---------------------------------------------------------------------------------
+# Step 5: Service Integration Testing
+# ---------------------------------------------------------------------------------
+echo "[Magi Installer] Step 5: Testing service integration and connectivity..."
+
+# Test Ollama connectivity
+echo "  - Testing Ollama service connectivity..."
+if curl -s http://localhost:11434/api/version > /dev/null; then
+    echo "    [OK] Ollama service is responding."
+else
+    echo "[WARNING] Ollama service not responding. You may need to start it manually."
+    echo "          Run: ollama serve"
+fi
+
+# Test if models are available
+echo "  - Verifying AI models are downloaded..."
+MODELS_OUTPUT=$(ollama list 2>/dev/null)
+if echo "$MODELS_OUTPUT" | grep -q "mistral"; then
+    echo "    [OK] Mistral model available."
+else
+    echo "[WARNING] Mistral model not found. Download with: ollama pull mistral"
+fi
+
+if echo "$MODELS_OUTPUT" | grep -q "gemma"; then
+    echo "    [OK] Gemma model available."
+else
+    echo "[WARNING] Gemma model not found. Download with: ollama pull gemma"
+fi
+
+if echo "$MODELS_OUTPUT" | grep -q "llama2"; then
+    echo "    [OK] Llama2 model available."
+else
+    echo "[WARNING] Llama2 model not found. Download with: ollama pull llama2"
+fi
+
+# Test TypeScript compilation
+echo "  - Testing TypeScript compilation..."
+pushd services/orchestrator > /dev/null
+npm run build > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "    [OK] Orchestrator builds successfully."
+else
+    echo "[WARNING] Orchestrator build failed. Check TypeScript errors."
+fi
+popd > /dev/null
+
+pushd services/conduit > /dev/null
+npm run build > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "    [OK] Conduit builds successfully."
+else
+    echo "[WARNING] Conduit build failed. Check TypeScript errors."
+fi
+popd > /dev/null
+
+pushd ui > /dev/null
+npm run build > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "    [OK] UI builds successfully."
+else
+    echo "[WARNING] UI build failed. Check for compilation errors."
+fi
+popd > /dev/null
+
+# Test Python TTS environment
+echo "  - Testing Python TTS environment..."
+cd "$TTS_DIR"
+source venv/bin/activate
+python3 -c "
+import sys
+try:
+    import torch, fastapi, uvicorn
+    print('    [OK] Core Python dependencies available.')
+except ImportError as e:
+    print(f'[WARNING] Missing Python dependency: {e}')
+    sys.exit(1)
+try:
+    from chatterbox.tts import ChatterboxTTS
+    print('    [OK] Chatterbox TTS available.')
+except ImportError:
+    print('[WARNING] Chatterbox TTS not available. May need manual installation.')
+except Exception as e:
+    print(f'[WARNING] Chatterbox TTS error: {e}')
+" 2>/dev/null
+deactivate
+
+echo "[Magi Installer] Service integration testing complete."
 echo
 
 # ---------------------------------------------------------------------------------

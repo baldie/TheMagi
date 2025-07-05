@@ -25,6 +25,7 @@ export class WebsocketService implements OnDestroy {
   private readonly WS_ENDPOINT = 'ws://localhost:8080';
   private readonly RECONNECT_INTERVAL = 2000;
   private readonly MAX_RETRIES = 3;
+  private connectionAttempts = 0;
 
   public logs$: Observable<string> = this.logSubject.asObservable();
   public isProcessRunning$: Observable<boolean> = this.processStatusSubject.asObservable();
@@ -40,21 +41,30 @@ export class WebsocketService implements OnDestroy {
   }
 
   public startConnecting(shouldStartMagi: boolean = false, inquiry?: string): void {
-    this.logSubject.next(`[CLIENT] startConnecting() called. Attempting to connect to ${this.WS_ENDPOINT}...`);
+    this.logSubject.next(`[CLIENT] startConnecting() called. shouldStartMagi: ${shouldStartMagi}, inquiry: ${inquiry || 'none'}`);
+    this.logSubject.next(`[CLIENT] Attempting to connect to ${this.WS_ENDPOINT}...`);
+    this.logSubject.next(`[CLIENT] Current socket state: ${this.socket$ ? (this.socket$.closed ? 'closed' : 'open') : 'null'}`);
+    
     if (!this.socket$ || this.socket$.closed) {
+      this.connectionAttempts++;
+      this.logSubject.next(`[CLIENT] Creating new WebSocket connection... (attempt ${this.connectionAttempts})`);
       this.socket$ = webSocket({
         url: this.WS_ENDPOINT,
         openObserver: {
-          next: () => {
-            this.logSubject.next('[CLIENT] WebSocket connection established.');
+          next: (event) => {
+            this.connectionAttempts = 0; // Reset on successful connection
+            this.logSubject.next(`[CLIENT] WebSocket connection established successfully. Event: ${JSON.stringify(event)}`);
+            this.logSubject.next(`[CLIENT] WebSocket readyState: ${(this.socket$ as any)?._socket?.readyState ?? 'unknown'}`);
             if (shouldStartMagi) {
+              this.logSubject.next('[CLIENT] Starting Magi as requested...');
               this.startMagi(inquiry);
             }
           }
         },
         closeObserver: {
-          next: () => {
-            this.logSubject.next('[CLIENT] WebSocket connection closed.');
+          next: (event) => {
+            this.logSubject.next(`[CLIENT] WebSocket connection closed. Event: ${JSON.stringify(event)}`);
+            this.logSubject.next(`[CLIENT] Close code: ${event.code}, reason: ${event.reason || 'none'}, wasClean: ${event.wasClean}`);
             this.processStatusSubject.next(false);
             // This will be handled by the retryWhen operator's completion
           }
@@ -69,17 +79,32 @@ export class WebsocketService implements OnDestroy {
           )
         )
       ).subscribe({
-        next: (msg) => this.handleMessage(msg),
+        next: (msg) => {
+          this.logSubject.next(`[CLIENT] WebSocket message received successfully`);
+          this.handleMessage(msg);
+        },
         error: (err) => {
           const errorMsg = this.formatError(err);
-          this.logSubject.next(`[CLIENT] WebSocket Error: ${errorMsg}`);
+          this.logSubject.next(`[CLIENT] WebSocket Error occurred: ${errorMsg}`);
+          this.logSubject.next(`[CLIENT] Error type: ${err.constructor.name}`);
+          this.logSubject.next(`[CLIENT] Error details: ${JSON.stringify(err, Object.getOwnPropertyNames(err))}`);
+          this.logSubject.next(`[CLIENT] Connection attempts so far: ${this.connectionAttempts}`);
+          this.logSubject.next(`[CLIENT] Will retry after ${this.RECONNECT_INTERVAL}ms if retries remaining...`);
           this.processStatusSubject.next(false);
         },
         complete: () => {
           this.logSubject.next('[CLIENT] WebSocket connection path has completed. This may be due to max retries being reached.');
+          this.logSubject.next(`[CLIENT] Final socket state: ${this.socket$ ? (this.socket$.closed ? 'closed' : 'open') : 'null'}`);
           this.processStatusSubject.next(false);
         }
       });
+    } else {
+      this.logSubject.next('[CLIENT] WebSocket already exists and is not closed. Skipping connection creation.');
+      this.logSubject.next(`[CLIENT] Current socket state: ${this.socket$ ? (this.socket$.closed ? 'closed' : 'open') : 'null'}`);
+      if (shouldStartMagi) {
+        this.logSubject.next('[CLIENT] Starting Magi on existing connection...');
+        this.startMagi(inquiry);
+      }
     }
   }
 
@@ -142,20 +167,26 @@ export class WebsocketService implements OnDestroy {
   }
 
   public startMagi(inquiry?: string): void {
-    this.logSubject.next('[CLIENT] startMagi() called.');
+    this.logSubject.next(`[CLIENT] startMagi() called with inquiry: ${inquiry || 'none'}`);
+    this.logSubject.next(`[CLIENT] Socket state check: ${this.socket$ ? (this.socket$.closed ? 'closed' : 'open') : 'null'}`);
+    
     try {
       if (!this.socket$ || this.socket$.closed) {
         this.logSubject.next('[CLIENT] WebSocket is not connected. Aborting startMagi(). Connection attempts will continue in the background.');
+        this.logSubject.next(`[CLIENT] Socket details: exists=${!!this.socket$}, closed=${this.socket$?.closed}`);
         return;
       }
       
+      this.logSubject.next('[CLIENT] WebSocket is connected, proceeding with message send...');
       const message: WebSocketMessage = { type: 'start-magi', data: { inquiry } };
-      this.logSubject.next(`[CLIENT] Sending message: ${JSON.stringify(message)}`);
+      this.logSubject.next(`[CLIENT] Preparing to send message: ${JSON.stringify(message)}`);
       this.processStatusSubject.next(true);
       this.socket$.next(message);
+      this.logSubject.next('[CLIENT] Message sent successfully');
     } catch (error) {
       const errorMsg = this.formatError(error);
       this.logSubject.next(`[CLIENT] Failed to start Magi: ${errorMsg}`);
+      this.logSubject.next(`[CLIENT] Error occurred while sending message: ${JSON.stringify(error, Object.getOwnPropertyNames(error))}`);
       this.processStatusSubject.next(false);
     }
   }

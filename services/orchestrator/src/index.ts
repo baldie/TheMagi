@@ -50,7 +50,7 @@ main().catch(error => {
 // This service provides the orchestrator'shealth route and a websocket server for the UI to connect to.
 function startHttpOrchestratorService() {
   const app = express();
-  app.use(cors({ origin: 'http://localhost:4200' }));
+  app.use(cors({ origin: ['http://localhost:4200', 'http://127.0.0.1:4200'] }));
   const server = http.createServer(app);
 
   app.get('/health', (req, res) => {

@@ -34,7 +34,9 @@
       "Bash(pip install:*)",
       "Bash(python:*)",
       "Bash(ollama ps:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(npm view:*)",
+      "Bash(gh pr:*)"
     ],
     "deny": []
   }

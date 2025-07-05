@@ -70,8 +70,16 @@ export class AppComponent implements OnInit, OnDestroy {
           console.log('Orchestrator status:', this.orchestratorStatus);
 
           // Use websocketService.isConnected() to check connection
-          if (this.isOrchestratorAvailable && !this.websocketService.isConnected()) {
+          const isWebSocketConnected = this.websocketService.isConnected();
+          console.log(`Orchestrator available: ${this.isOrchestratorAvailable}, WebSocket connected: ${isWebSocketConnected}`);
+          
+          if (this.isOrchestratorAvailable && !isWebSocketConnected) {
+            console.log('Orchestrator is available but WebSocket is not connected. Attempting to connect...');
             this.connectWebSocket();
+          } else if (!this.isOrchestratorAvailable) {
+            console.log('Orchestrator is not available. Skipping WebSocket connection.');
+          } else if (isWebSocketConnected) {
+            console.log('WebSocket is already connected.');
           }
         },
         error: (error) => {
@@ -81,15 +89,19 @@ export class AppComponent implements OnInit, OnDestroy {
           this.balthasarStatus = 'offline';
           this.casperStatus = 'offline';
           this.melchiorStatus = 'offline';
-          console.error(error);
+          console.error('Orchestrator health check failed:', error);
+          console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+          this.serverLogs.push(`[CLIENT] Orchestrator health check failed: ${error.message || 'Unknown error'}`);
         }
       })
     );
   }
 
   private connectWebSocket(): void {
+    console.log('connectWebSocket() called');
+    this.serverLogs.push('[CLIENT] Initiating WebSocket connection to Orchestrator...');
     this.websocketService.startConnecting(DO_NOT_START_MAGI);
-    this.serverLogs.push('[CLIENT] WebSocket connection established to Orchestrator.');
+    this.serverLogs.push(`[CLIENT] WebSocket connection request sent. DO_NOT_START_MAGI=${DO_NOT_START_MAGI}`);
   }
 
   ngOnDestroy(): void {
@@ -98,7 +110,9 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   async startMagi(): Promise<void> {
+    console.log('startMagi() called');
     if (this.isMagiStarting) {
+      console.log('Magi is already starting, aborting');
       return;
     }
     
@@ -106,13 +120,15 @@ export class AppComponent implements OnInit, OnDestroy {
     await this.audioService.resumeAudioContext();
     
     this.isMagiStarting = true;
-    this.serverLogs = ['[CLIENT] Initiating Magi startup...'];
-    this.serverLogs.push('[CLIENT] Now attempting to connect to Orchestrator WebSocket...');
+    console.log(`Starting Magi with inquiry: ${this.userInquiry}`);
+    this.serverLogs.push(`[CLIENT] Starting Magi with inquiry: ${this.userInquiry || 'none'}`);
+    this.serverLogs.push('[CLIENT] Connecting to Orchestrator WebSocket...');
     this.websocketService.startConnecting(true, this.userInquiry);
   }
 
   submitQuestion(): void {
-    // This will be implemented later
+    this.startMagi();
+    this.userInquiry = ''; // Clear the input field after submitting
   }
 
   toggleDisplayLogs() {
