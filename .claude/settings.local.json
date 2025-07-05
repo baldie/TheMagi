@@ -17,13 +17,24 @@
       "Bash(./venv/Scripts/python.exe -c \"import faster_whisper; print(''faster_whisper imported successfully'')\")",
       "Bash(grep:*)",
       "Bash(./venv/Scripts/pip.exe install faster-whisper==0.9.0)",
-      "Bash(./venv/Scripts/python.exe -c \"from openvoice.openvoice_server import app; print(''OpenVoice server imports working'')\")",
       "Bash(./venv/Scripts/pip.exe install whisper-timestamped==1.14.2)",
-      "Bash(./venv/Scripts/python.exe -c \"from openvoice.openvoice_server import app; print(''OpenVoice server imports working'')\")",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(./services/tts/clear_lock.bat)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(chmod:*)",
+      "Bash(ollama list:*)",
+      "Bash(ollama show:*)",
+      "Bash(nvcc:*)",
+      "Bash(python3:*)",
+      "Bash(wget:*)",
+      "Bash(sudo dpkg:*)",
+      "Bash(sudo apt-get install:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(ollama ps:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   }

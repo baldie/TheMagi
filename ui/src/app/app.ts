@@ -6,6 +6,8 @@ import { Subscription, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { MagiStatus, MagiHealth } from './components/base-magi.component';
 
+const DO_NOT_START_MAGI = false;
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.html',
@@ -58,25 +60,36 @@ export class AppComponent implements OnInit, OnDestroy {
         switchMap(() => this.http.get<MagiHealth>(this.ORCHESTRATOR_HEALTH_URL))
       ).subscribe({
         next: (response) => {
-
           this.isOrchestratorAvailable = response.status === 'available';
-          
           // Show the status of each individual Magi
           const {balthazar, caspar, melchior} = response.magi;
           this.balthasarStatus = balthazar.status;
           this.casperStatus = caspar.status;
           this.melchiorStatus = melchior.status;
-          
           this.orchestratorStatus = response.status === 'available' ? 'available' : response.status === 'busy' ? 'busy' : 'error';
           console.log('Orchestrator status:', this.orchestratorStatus);
+
+          // Use websocketService.isConnected() to check connection
+          if (this.isOrchestratorAvailable && !this.websocketService.isConnected()) {
+            this.connectWebSocket();
+          }
         },
         error: (error) => {
           this.isOrchestratorAvailable = false;
           this.orchestratorStatus = 'error';
+          // Set all Magi statuses to offline if orchestrator is offline
+          this.balthasarStatus = 'offline';
+          this.casperStatus = 'offline';
+          this.melchiorStatus = 'offline';
           console.error(error);
         }
       })
     );
+  }
+
+  private connectWebSocket(): void {
+    this.websocketService.startConnecting(DO_NOT_START_MAGI);
+    this.serverLogs.push('[CLIENT] WebSocket connection established to Orchestrator.');
   }
 
   ngOnDestroy(): void {

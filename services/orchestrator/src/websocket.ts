@@ -1,13 +1,14 @@
 /// <reference types="ws" />
 
 import { WebSocketServer, WebSocket } from 'ws';
+import { Server } from 'http';
 import { logger } from './logger';
 import { logStream } from './log-stream';
 
 // Store connected clients for audio streaming
 const connectedClients = new Set<WebSocket>();
 
-export function createWebSocketServer(server: any, startCallback: (inquiry?: string) => void) {
+export function createWebSocketServer(server: Server, startCallback: (inquiry?: string) => void) {
   const wss = new WebSocketServer({ server });
 
   wss.on('connection', (ws: WebSocket) => {
@@ -16,21 +17,30 @@ export function createWebSocketServer(server: any, startCallback: (inquiry?: str
     
     const logListener = (message: string) => {
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'log', data: message }));
+        try {
+          ws.send(JSON.stringify({ type: 'log', data: message }));
+        } catch (error) {
+          logger.error('[WebSocket] Failed to send log message', error);
+          connectedClients.delete(ws);
+          logStream.unsubscribe(logListener);
+        }
       }
     };
 
     logStream.subscribe(logListener);
 
-    ws.on('message', (message: string) => {
+    ws.on('message', (rawMessage: Buffer) => {
       try {
+        const message = rawMessage.toString();
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'start-magi') {
           logger.info('[WebSocket] Received start-magi signal from client.');
           startCallback(parsedMessage.data?.inquiry);
+        } else {
+          logger.warn('[WebSocket] Received unknown message type:', parsedMessage.type);
         }
       } catch (error) {
-        logger.error('[WebSocket] Failed to parse incoming message or unknown message type.', error);
+        logger.error('[WebSocket] Failed to parse incoming message.', error);
       }
     });
 

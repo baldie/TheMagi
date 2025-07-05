@@ -106,13 +106,21 @@ class Logger {
     const logHeader = `[${timestamp}] [ERROR]`;
     const plainMessage = `${logHeader} ${message}`;
 
-    this.log(LOG_LEVELS.ERROR, message);
+    // Write to file stream (un-colored)
+    fileStream.write(plainMessage + '\n');
+
+    // Emit to the stream for websockets (without color)
+    logStream.emit(plainMessage);
+
+    // Console output with color
+    console.log(chalk.red(plainMessage));
+
     if (error instanceof Error) {
       console.error(chalk.red(error.stack));
-      fileStream.write(`${plainMessage}\n${error.stack}\n`);
+      fileStream.write(`${error.stack}\n`);
     } else if (error !== undefined) {
       console.error(chalk.red('Additional error details:'), error);
-      fileStream.write(`${plainMessage}\n${JSON.stringify(error, null, 2)}\n`);
+      fileStream.write(`${JSON.stringify(error, null, 2)}\n`);
     }
   }
 }

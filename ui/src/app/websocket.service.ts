@@ -167,4 +167,8 @@ export class WebsocketService implements OnDestroy {
       this.socket$ = null;
     }
   }
-} 
+
+  public isConnected(): boolean {
+    return !!this.socket$ && !this.socket$.closed;
+  }
+}

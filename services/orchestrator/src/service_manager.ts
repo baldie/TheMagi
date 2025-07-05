@@ -7,7 +7,7 @@ import os from 'os';
 import express from 'express';
 import cors from 'cors';
 import http from 'http';
-import { ensureMagiConduitIsRunning } from '../../conduit';
+import { ensureMagiConduitIsRunning } from '../../conduit/src/index';
 
 const isWindows = os.platform() === 'win32';
 

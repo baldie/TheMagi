@@ -3,8 +3,7 @@ import { TTS_API_BASE_URL } from './config';
 import { MagiName } from './magi';
 import { logger } from './logger';
 import { serviceManager } from './service_manager';
-import { spawn } from 'child_process';
-import { Stream, PassThrough } from 'stream';
+import { Stream } from 'stream';
 import { broadcastAudioToClients } from './websocket';
 
 // Constants for TTS service
@@ -13,73 +12,35 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
 /**
- * Plays a single audio stream to the default output device using ffplay
- * and broadcasts it to WebSocket clients.
+ * Streams audio data to WebSocket clients for browser-based playback.
+ * Uses Web Audio API in the browser instead of server-side FFmpeg.
  * @param audioStream - A stream containing the audio data.
  * @param persona - The Magi persona speaking.
  */
-async function playSingleAudioStream(audioStream: Stream, persona: MagiName): Promise<void> {
-  const ffplay = spawn('ffplay', ['-i', '-', '-nodisp', '-autoexit']);
-  
-  // Create a pass-through stream to tee the audio data
-  const teeStream = new PassThrough();
-  
+async function streamAudioToClients(audioStream: Stream, persona: MagiName): Promise<void> {
   // Buffer to collect audio data for WebSocket clients
   const audioChunks: Buffer[] = [];
   
-  try {
-    await new Promise<void>((resolve, reject) => {
-      // Pipe audio to both ffplay and our tee stream
-      audioStream.pipe(teeStream);
-      teeStream.pipe(ffplay.stdin);
-
-      // Collect audio chunks for WebSocket broadcasting
-      teeStream.on('data', (chunk: Buffer) => {
-        audioChunks.push(chunk);
-        // Send chunks in real-time to WebSocket clients
-        broadcastAudioToClients(chunk, persona, false);
-      });
-
-      teeStream.on('end', () => {
-        // Send final notification to WebSocket clients
-        const completeAudio = Buffer.concat(audioChunks);
-        broadcastAudioToClients(Buffer.alloc(0), persona, true);
-        logger.debug(`Audio streaming completed for ${persona}, sent ${audioChunks.length} chunks to clients`);
-      });
-
-      let stderr = '';
-      ffplay.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
-      
-      ffplay.on('error', (err) => {
-        logger.error('Failed to start ffplay process.', err);
-        reject(err);
-      });
-
-      ffplay.on('close', (code) => {
-        if (code === 0) {
-          logger.debug('ffplay process finished successfully.');
-          resolve();
-        } else {
-          logger.error(`ffplay process exited with error code ${code}.`);
-          logger.error('ffplay stderr:', stderr);
-          reject(new Error(`ffplay exited with code ${code}`));
-        }
-      });
-
-      teeStream.on('error', (err) => {
-        logger.error('Error in tee stream', err);
-        reject(err);
-      });
+  return new Promise<void>((resolve, reject) => {
+    // Collect audio chunks and stream to WebSocket clients
+    audioStream.on('data', (chunk: Buffer) => {
+      audioChunks.push(chunk);
+      // Send chunks in real-time to WebSocket clients
+      broadcastAudioToClients(chunk, persona, false);
     });
-  } finally {
-    // Ensure ffplay is killed if the promise is resolved or rejected.
-    // This helps prevent orphaned processes.
-    if (ffplay.exitCode === null) {
-      ffplay.kill();
-    }
-  }
+
+    audioStream.on('end', () => {
+      // Send final notification to WebSocket clients
+      broadcastAudioToClients(Buffer.alloc(0), persona, true);
+      logger.debug(`Audio streaming completed for ${persona}, sent ${audioChunks.length} chunks to clients`);
+      resolve();
+    });
+
+    audioStream.on('error', (err) => {
+      logger.error('Error in audio stream', err);
+      reject(err);
+    });
+  });
 }
 
 /**
@@ -174,7 +135,8 @@ function splitIntoSentences(text: string): string[] {
 
 /**
  * Speaks the text using the TTS service with the specified Magi's voice,
- * processing and streaming the audio sentence by sentence.
+ * processing and streaming the audio sentence by sentence to WebSocket clients.
+ * Audio playback is handled by the browser using Web Audio API.
  * @param text - The full text to be spoken
  * @param persona - The Magi persona whose voice to use
  */
@@ -182,10 +144,7 @@ export async function speakWithMagiVoice(text: string, persona: MagiName): Promi
   try {
     validateInput(text);
     
-    const isServiceRunning = await serviceManager.ensureTTSServiceRunning();
-    if (!isServiceRunning) {
-      throw new Error('Failed to start TTS service');
-    }
+    await serviceManager.startTTSService();
 
     const sentences = splitIntoSentences(text);
     if (sentences.length === 0) {
@@ -212,7 +171,7 @@ export async function speakWithMagiVoice(text: string, persona: MagiName): Promi
             if (ttsRequestPromise) {
               const audioStream = await ttsRequestPromise;
               
-              await playSingleAudioStream(audioStream, persona);
+              await streamAudioToClients(audioStream, persona);
 
               logger.debug(`${persona}: "${currentSentence}"`);
             }
