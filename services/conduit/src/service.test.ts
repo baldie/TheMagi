@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AxiosResponse } from 'axios';
 import { ensureMagiConduitIsRunning } from './service';
 
 jest.mock('axios');
@@ -10,7 +11,14 @@ describe('Conduit Service', () => {
   });
 
   it('should detect when conduit is already running', async () => {
-    mockedAxios.get.mockResolvedValue({ data: 'OK' });
+    const mockResponse: AxiosResponse = {
+      data: 'OK',
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      config: {} as any
+    };
+    mockedAxios.get.mockResolvedValue(mockResponse);
     
     const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
     
