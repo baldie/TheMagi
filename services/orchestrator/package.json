@@ -7,7 +7,11 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "dev": "ts-node-dev --respawn src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,py,sh}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,py,sh}\""
   },
@@ -30,6 +34,12 @@
     "prettier": "^3.2.5",
     "prettier-plugin-sh": "^0.14.0",
     "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0"
+    "ts-node-dev": "^2.0.0",
+    "@types/jest": "^29.5.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0"
   }
 }

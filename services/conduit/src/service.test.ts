@@ -1,0 +1,24 @@
+import axios from 'axios';
+import { ensureMagiConduitIsRunning } from './service';
+
+jest.mock('axios');
+const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+describe('Conduit Service', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should detect when conduit is already running', async () => {
+    mockedAxios.get.mockResolvedValue({ data: 'OK' });
+    
+    const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+    
+    await ensureMagiConduitIsRunning();
+    
+    expect(mockedAxios.get).toHaveBeenCalledWith('http://127.0.0.1:11434');
+    expect(consoleSpy).toHaveBeenCalledWith('Magi Conduit service is already running.');
+    
+    consoleSpy.mockRestore();
+  });
+});

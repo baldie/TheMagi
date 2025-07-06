@@ -1,0 +1,97 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-typescript:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [orchestrator, conduit, ui]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: |
+          services/${{ matrix.service }}/package-lock.json
+          ${{ matrix.service }}/package-lock.json
+    
+    - name: Install dependencies
+      run: |
+        if [ "${{ matrix.service }}" = "ui" ]; then
+          cd ui && npm ci
+        else
+          cd services/${{ matrix.service }} && npm ci
+        fi
+    
+    - name: Build
+      run: |
+        if [ "${{ matrix.service }}" = "ui" ]; then
+          cd ui && npm run build
+        else
+          cd services/${{ matrix.service }} && npm run build
+        fi
+    
+    - name: Lint
+      run: |
+        if [ "${{ matrix.service }}" = "ui" ]; then
+          cd ui && npm run lint
+        else
+          cd services/${{ matrix.service }} && npm run lint
+        fi
+    
+    - name: Test
+      run: |
+        if [ "${{ matrix.service }}" = "ui" ]; then
+          cd ui && npm test -- --watch=false --browsers=ChromeHeadless
+        else
+          cd services/${{ matrix.service }} && npm test
+        fi
+
+  test-python:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        cache-dependency-path: services/tts/requirements.txt
+    
+    - name: Set up Python virtual environment
+      run: |
+        cd services/tts
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Python syntax check
+      run: |
+        cd services/tts
+        python -m py_compile *.py
+    
+    - name: Lint Python code
+      run: |
+        cd services/tts
+        source venv/bin/activate
+        flake8 *.py
+        black --check *.py
+    
+    - name: Test Python code
+      run: |
+        cd services/tts
+        source venv/bin/activate
+        pytest test_tts_service.py -v

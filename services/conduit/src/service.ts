@@ -20,14 +20,17 @@ export async function ensureMagiConduitIsRunning() {
   } catch (error) {
     console.info('Magi Conduit service not detected. Attempting to start it programmatically...');
 
-    const projectRoot = path.resolve(__dirname, '..', '..', '..');
+    const projectRoot = path.resolve(__dirname, '..', '..', '..', 'TheMagi');
     const modelsPath = path.join(projectRoot, '.models');
     // Prepare for shell command by escaping backslashes for the path
     const wslModelsPath = modelsPath.replace(/\\/g, '\\\\');
 
+    const localOllamaPath = path.join(projectRoot, 'services', 'conduit', 'CUDA', 'bin', 'ollama');
+    const wslLocalOllamaPath = localOllamaPath.replace(/\\/g, '/').replace(/^([a-zA-Z]):/, (match, p1) => `/mnt/${p1.toLowerCase()}`);
+
     // Command to kill any old processes and then start the server
     const killCommand = 'pkill -9 ollama 2>/dev/null || true';
-    const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); /snap/bin/ollama serve`;
+    const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); ${wslLocalOllamaPath} serve`;
     const fullCommand = `${killCommand} && ${startCommand}`;
 
     const magiConduitProcess = spawn('wsl.exe', ['-e', 'bash', '-c', fullCommand], {

@@ -28,12 +28,15 @@ export async function ensureMagiConduitIsRunning() {
     const logFile = path.join(logDir, 'conduit.log');
     const wslLogFile = logFile.replace(/\\/g, '/').replace(/^([a-zA-Z]):/, (match, p1) => `/mnt/${p1.toLowerCase()}`);
 
-    const projectRoot = path.resolve(__dirname, '..', '..', '..');
+    const projectRoot = path.resolve(__dirname, '..', '..', '..', 'TheMagi');
     const modelsPath = path.join(projectRoot, '.models');
     const wslModelsPath = modelsPath.replace(/\\/g, '\\\\');
 
+    const localOllamaPath = path.join(projectRoot, 'services', 'conduit', 'CUDA', 'bin', 'ollama');
+    const wslLocalOllamaPath = localOllamaPath.replace(/\\/g, '/').replace(/^([a-zA-Z]):/, (match, p1) => `/mnt/${p1.toLowerCase()}`);
+    
     const killCommand = 'pkill -9 ollama 2>/dev/null || true';
-    const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); /snap/bin/ollama serve > '${wslLogFile}' 2>&1`;
+    const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); ${wslLocalOllamaPath} serve > '${wslLogFile}' 2>&1`;
     const fullCommand = `${killCommand} && ${startCommand}`;
 
     const magiConduitProcess = spawn('wsl.exe', ['-e', 'bash', '-c', fullCommand], {

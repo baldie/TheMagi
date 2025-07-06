@@ -63,3 +63,4 @@ Each persona has its own personality file in `services/orchestrator/src/personal
 3. Then, begin working on the todo items, marking them as complete as you go.
 4. Please every step of the way just give me a high level explanation of what changes you made
 5. Make every task and code change you do as simple as possible. We want to avoid making any massive or complex changes. Every change should impact as little code as possible. Everything is about simplicity.
+6. instead of "spec" in the test file name, this project will use "test" in the file name

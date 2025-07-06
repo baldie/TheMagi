@@ -83,6 +83,83 @@ if ! command -v git &> /dev/null; then
 fi
 echo "  [OK] Git found."
 
+# Check for Chrome (for running UI tests)
+echo "  - Checking for Chrome browser for UI testing..."
+if command -v google-chrome &> /dev/null; then
+    CHROME_VERSION=$(google-chrome --version 2>/dev/null || echo "unknown")
+    echo "    [OK] Chrome found: $CHROME_VERSION"
+elif command -v chromium-browser &> /dev/null; then
+    CHROME_VERSION=$(chromium-browser --version 2>/dev/null || echo "unknown")
+    echo "    [OK] Chromium found: $CHROME_VERSION"
+elif command -v chromium &> /dev/null; then
+    CHROME_VERSION=$(chromium --version 2>/dev/null || echo "unknown")
+    echo "    [OK] Chromium found: $CHROME_VERSION"
+else
+    echo "    [INFO] Chrome/Chromium not found. Installing for UI testing..."
+    
+    # Install Chrome based on the distribution
+    if command -v apt &> /dev/null; then
+        # Debian/Ubuntu
+        echo "    Installing Google Chrome on Debian/Ubuntu..."
+        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+        echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        sudo apt update
+        sudo apt install -y google-chrome-stable
+        
+        if command -v google-chrome &> /dev/null; then
+            echo "    [OK] Google Chrome installed successfully."
+        else
+            echo "    [WARNING] Chrome installation may have failed. UI tests may not work."
+        fi
+        
+    elif command -v yum &> /dev/null || command -v dnf &> /dev/null; then
+        # RHEL/CentOS/Fedora
+        echo "    Installing Google Chrome on RHEL/CentOS/Fedora..."
+        
+        # Use dnf if available, otherwise yum
+        if command -v dnf &> /dev/null; then
+            PKG_MANAGER="dnf"
+        else
+            PKG_MANAGER="yum"
+        fi
+        
+        # Create repo file
+        cat << 'EOF' | sudo tee /etc/yum.repos.d/google-chrome.repo
+[google-chrome]
+name=google-chrome
+baseurl=http://dl.google.com/linux/chrome/rpm/stable/x86_64
+enabled=1
+gpgcheck=1
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub
+EOF
+        
+        sudo $PKG_MANAGER install -y google-chrome-stable
+        
+        if command -v google-chrome &> /dev/null; then
+            echo "    [OK] Google Chrome installed successfully."
+        else
+            echo "    [WARNING] Chrome installation may have failed. UI tests may not work."
+        fi
+        
+    elif command -v pacman &> /dev/null; then
+        # Arch Linux
+        echo "    Installing Chromium on Arch Linux..."
+        sudo pacman -S --noconfirm chromium
+        
+        if command -v chromium &> /dev/null; then
+            echo "    [OK] Chromium installed successfully."
+        else
+            echo "    [WARNING] Chromium installation may have failed. UI tests may not work."
+        fi
+        
+    else
+        echo "    [WARNING] Unknown package manager. Cannot auto-install Chrome."
+        echo "             Please install Chrome or Chromium manually for UI testing."
+        echo "             Chrome: https://www.google.com/chrome/"
+        echo "             Chromium: Available in most package managers"
+    fi
+fi
+
 # Check for CUDA/GPU support
 echo "  - Checking for CUDA support..."
 if command -v nvidia-smi &> /dev/null; then
@@ -483,6 +560,22 @@ else
 fi
 popd > /dev/null
 
+# Test UI testing capability
+echo "  - Testing UI test environment..."
+pushd ui > /dev/null
+if command -v google-chrome &> /dev/null || command -v chromium-browser &> /dev/null || command -v chromium &> /dev/null; then
+    # Run a quick test to see if Chrome headless works
+    timeout 30 npm test -- --watch=false --browsers=ChromeHeadless > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+        echo "    [OK] UI tests can run with Chrome headless."
+    else
+        echo "    [WARNING] UI tests may have issues. Check Chrome installation."
+    fi
+else
+    echo "    [WARNING] No Chrome browser available. UI tests will be skipped."
+fi
+popd > /dev/null
+
 # Test Python TTS environment
 echo "  - Testing Python TTS environment..."
 cd "$TTS_DIR"
@@ -502,7 +595,31 @@ except ImportError:
     print('[WARNING] Chatterbox TTS not available. May need manual installation.')
 except Exception as e:
     print(f'[WARNING] Chatterbox TTS error: {e}')
+try:
+    import pytest
+    print('    [OK] pytest available for testing.')
+except ImportError:
+    print('[WARNING] pytest not available. Tests will not run.')
 " 2>/dev/null
+
+# Test pytest functionality
+echo "  - Testing pytest functionality..."
+if command -v pytest &> /dev/null; then
+    if pytest --version > /dev/null 2>&1; then
+        echo "    [OK] pytest is working correctly."
+        # Run a quick syntax test
+        if pytest --collect-only test_tts_service.py > /dev/null 2>&1; then
+            echo "    [OK] TTS test file is valid."
+        else
+            echo "    [WARNING] TTS test file has issues, but pytest is working."
+        fi
+    else
+        echo "    [WARNING] pytest command failed. Tests may not work properly."
+    fi
+else
+    echo "    [WARNING] pytest command not found in virtual environment."
+fi
+
 deactivate
 
 echo "[Magi Installer] Service integration testing complete."
@@ -518,6 +635,10 @@ echo
 echo " Your environment is now ready. To start the system, run:"
 echo
 echo "     ./start-magi.sh"
+echo
+echo " To run all tests (including UI tests with Chrome), run:"
+echo
+echo "     ./run-all-tests.sh"
 echo
 echo " To test the TTS service with GPU acceleration, run:"
 echo

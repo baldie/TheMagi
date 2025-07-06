@@ -43,7 +43,17 @@
       "Bash(ldconfig:*)",
       "Bash(snap list:*)",
       "Bash(cat:*)",
-      "Bash(tar:*)"
+      "Bash(tar:*)",
+      "Bash(npm run lint)",
+      "Bash(npx eslint:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(./run-all-tests.sh)",
+      "Bash(command -v:*)",
+      "Bash(pytest:*)",
+      "Bash(npm run test:unit:*)",
+      "Bash(diff:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }

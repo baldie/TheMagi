@@ -16,3 +16,12 @@ git+https://github.com/resemble-ai/chatterbox.git
 
 # Alternative PyPI installation (if available)
 # chatterbox-tts
+
+# Testing dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0
+
+# Linting dependencies
+black>=23.0.0
+flake8>=6.0.0
