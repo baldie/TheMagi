@@ -1,18 +1,20 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { WebsocketService } from './websocket.service';
 import { AudioService } from './audio.service';
 import { Subscription, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { MagiStatus, MagiHealth } from './components/base-magi.component';
+import { CommonModule } from '@angular/common';
 
 const DO_NOT_START_MAGI = false;
 
 @Component({
   selector: 'app-root',
   templateUrl: './app.html',
-  standalone: false,
-  styleUrls: ['./components/magi.scss']
+  styleUrls: ['./app.css'],
+  standalone: true,
+  imports: [CommonModule]
 })
 
 export class AppComponent implements OnInit, OnDestroy {
@@ -20,21 +22,24 @@ export class AppComponent implements OnInit, OnDestroy {
   balthasarStatus: MagiStatus = 'offline';
   casperStatus: MagiStatus = 'offline';
   melchiorStatus: MagiStatus = 'offline';
-  displayLogs: boolean = false;
-  isMagiStarting: boolean = false;
+  displayLogs = false;
+  isMagiStarting = false;
   serverLogs: string[] = [];
-  userInquiry: string = '';
-  isOrchestratorAvailable: boolean = false;
+  userInquiry = '';
+  isOrchestratorAvailable = false;
   orchestratorStatus: 'available' | 'busy' | 'error' = 'error';
+  isConnected = false;
+  isPlaying = false;
+  isRecording = false;
+  currentText = '';
+  isProcessing = false;
 
   private subscriptions = new Subscription();
   private readonly ORCHESTRATOR_HEALTH_URL = 'http://localhost:8080/health';
 
-  constructor(
-    private websocketService: WebsocketService,
-    private http: HttpClient,
-    private audioService: AudioService
-  ) {}
+  private audioService = inject(AudioService);
+  private websocketService = inject(WebsocketService);
+  private http = inject(HttpClient);
 
   ngOnInit(): void {
     this.subscriptions.add(

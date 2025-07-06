@@ -245,6 +245,16 @@ if [ $? -ne 0 ]; then
     popd > /dev/null
     exit 1
 fi
+
+# Install testing dependencies
+echo "  - Installing UI testing dependencies..."
+npm install --save-dev @types/jest jest @jest/globals jest-environment-jsdom jest-preset-angular ts-jest
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to install UI testing dependencies. Check logs for details."
+    popd > /dev/null
+    exit 1
+fi
+
 popd > /dev/null
 echo "    [OK] UI dependencies installed."
 

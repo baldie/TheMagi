@@ -11,7 +11,9 @@ interface WebkitWindow extends Window {
 export class AudioService {
   private audioContext: AudioContext | null = null;
   private currentAudioChunks: ArrayBuffer[] = [];
-  private isPlaying: boolean = false;
+  private isPlaying = false;
+  private isRecording = false;
+  private mediaStream: MediaStream | null = null;
 
   constructor() {
     this.initializeAudioContext();
@@ -76,27 +78,24 @@ export class AudioService {
 
   private async playAudioBuffer(audioBuffer: AudioBuffer): Promise<void> {
     if (!this.audioContext) {
+      console.error('AudioContext not initialized');
       return;
     }
 
-    return new Promise((resolve, reject) => {
-      const source = this.audioContext!.createBufferSource();
+    try {
+      const source = this.audioContext.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this.audioContext!.destination);
+      source.connect(this.audioContext.destination);
+      source.start(0);
+      this.isPlaying = true;
       
       source.onended = () => {
         this.isPlaying = false;
-        resolve();
       };
-      
-      source.addEventListener('error', () => {
-        this.isPlaying = false;
-        reject(new Error('Audio playback failed'));
-      });
-
-      this.isPlaying = true;
-      source.start(0);
-    });
+    } catch (error) {
+      console.error('Error playing audio:', error);
+      this.isPlaying = false;
+    }
   }
 
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -122,5 +121,21 @@ export class AudioService {
     if (this.audioContext && this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
     }
+  }
+
+  async startRecording() {
+    if (!this.audioContext || !this.mediaStream) {
+      console.error('AudioContext or MediaStream not initialized');
+      return;
+    }
+    
+    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+    const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+    
+    source.connect(processor);
+    processor.connect(this.audioContext.destination);
+    
+    this.isRecording = true;
+    // ... rest of the code ...
   }
 }

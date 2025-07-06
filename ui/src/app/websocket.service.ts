@@ -44,7 +44,7 @@ export class WebsocketService implements OnDestroy {
     this.disconnect();
   }
 
-  public startConnecting(shouldStartMagi: boolean = false, inquiry?: string): void {
+  public startConnecting(shouldStartMagi = false, inquiry?: string): void {
     this.logSubject.next(`[CLIENT] startConnecting() called. shouldStartMagi: ${shouldStartMagi}, inquiry: ${inquiry || 'none'}`);
     this.logSubject.next(`[CLIENT] Attempting to connect to ${this.WS_ENDPOINT}...`);
     this.logSubject.next(`[CLIENT] Current socket state: ${this.socket$ ? (this.socket$.closed ? 'closed' : 'open') : 'null'}`);

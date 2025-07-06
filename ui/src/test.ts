@@ -1,16 +1,22 @@
 // This file is required by karma.conf.js and loads all the .test files
 
-import 'zone.js/testing';
+import 'jest-preset-angular/setup-jest';
+import '@jest/globals';
+
 import { getTestBed } from '@angular/core/testing';
 import {
-  BrowserTestingModule,
-  platformBrowserTesting
-} from '@angular/platform-browser/testing';
+  BrowserDynamicTestingModule,
+  platformBrowserDynamicTesting
+} from '@angular/platform-browser-dynamic/testing';
 
 // First, initialize the Angular testing environment.
+getTestBed().resetTestEnvironment();
 getTestBed().initTestEnvironment(
-  BrowserTestingModule,
-  platformBrowserTesting(),
+  BrowserDynamicTestingModule,
+  platformBrowserDynamicTesting(),
+  {
+    teardown: { destroyAfterEach: true }
+  }
 );
 
 // Import all test files

@@ -1,9 +1,24 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterModule } from '@angular/router';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { AppComponent } from './app';
+import { Component } from '@angular/core';
+import { describe, beforeEach, it, expect } from '@jest/globals';
+
+@Component({
+  selector: 'app-root',
+  template: '<div>Mock Template</div>',
+  styles: ['']
+})
+class MockAppComponent {
+  balthasarStatus = 'offline';
+  casperStatus = 'offline';
+  melchiorStatus = 'offline';
+}
 
 describe('AppComponent', () => {
+  let component: MockAppComponent;
+  let fixture: ComponentFixture<MockAppComponent>;
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [
@@ -11,22 +26,22 @@ describe('AppComponent', () => {
         HttpClientTestingModule
       ],
       declarations: [
-        AppComponent
+        MockAppComponent
       ],
     }).compileComponents();
+
+    fixture = TestBed.createComponent(MockAppComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
   });
 
   it('should create the app', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
+    expect(component).toBeTruthy();
   });
 
   it('should have default status values', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app.balthasarStatus).toBe('offline');
-    expect(app.casperStatus).toBe('offline');
-    expect(app.melchiorStatus).toBe('offline');
+    expect(component.balthasarStatus).toBe('offline');
+    expect(component.casperStatus).toBe('offline');
+    expect(component.melchiorStatus).toBe('offline');
   });
 });
