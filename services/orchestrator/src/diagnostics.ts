@@ -68,21 +68,23 @@ async function ensureServiceReady(
       
       logger.info(`... ${serviceName} service is now ready!`);
       return;
-    } catch (e: any) {
-      const errorMessage = e.code || e.message;
+    } catch (e: unknown) {
+      const errorMessage = e instanceof Error ? e.message : 
+                          typeof e === 'object' && e && 'code' in e ? String(e.code) : 
+                          'Unknown error';
       logger.warn(`... ${serviceName} is still not responding. (${errorMessage})`);
       
       // For Magi Conduit, provide more detailed error information
       if (serviceName === 'Magi Conduit') {
         try {
           // Check if port is in use
-          await new Promise((resolve, reject) => {
+          await new Promise<void>((resolve) => {
             exec('netstat -ano | findstr ":11434"', (error, stdout) => {
               if (stdout.trim()) {
                 logger.error('Port 11434 is in use. This may indicate a stale Ollama process.');
                 logger.error('Process information:', stdout.trim());
               }
-              resolve(null);
+              resolve();
             });
           });
         } catch (error) {

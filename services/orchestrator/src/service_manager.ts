@@ -4,9 +4,6 @@ import path from 'path';
 import axios from 'axios';
 import { TTS_API_BASE_URL } from './config';
 import os from 'os';
-import express from 'express';
-import cors from 'cors';
-import http from 'http';
 import { ensureMagiConduitIsRunning } from '../../conduit/src/index';
 
 const isWindows = os.platform() === 'win32';
@@ -46,7 +43,7 @@ class ServiceManager {
             }
             logger.debug(`${serviceName} status is '${response.data.status}', waiting...`);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (attempt === 1) {
             logger.info(`Waiting for ${serviceName} to launch (attempt ${attempt}/${maxAttempts})`);
         }

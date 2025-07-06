@@ -1,6 +1,10 @@
 import { Injectable } from '@angular/core';
 import { AudioMessage } from './websocket.service';
 
+interface WebkitWindow extends Window {
+  webkitAudioContext: typeof AudioContext;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -15,7 +19,7 @@ export class AudioService {
 
   private initializeAudioContext(): void {
     try {
-      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      this.audioContext = new (window.AudioContext || ((window as unknown) as WebkitWindow).webkitAudioContext)();
     } catch (error) {
       console.error('Failed to initialize AudioContext:', error);
     }
@@ -85,7 +89,7 @@ export class AudioService {
         resolve();
       };
       
-      source.addEventListener('error', (error: Event) => {
+      source.addEventListener('error', () => {
         this.isPlaying = false;
         reject(new Error('Audio playback failed'));
       });

@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import { TTS_API_BASE_URL } from './config';
 import { MagiName } from './magi';
 import { logger } from './logger';
@@ -8,8 +8,6 @@ import { broadcastAudioToClients } from './websocket';
 
 // Constants for TTS service
 const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
 
 /**
  * Streams audio data to WebSocket clients for browser-based playback.
@@ -57,12 +55,6 @@ function validateInput(text: string): void {
   }
 }
 
-/**
- * Makes a TTS API request for a single chunk of text and returns the audio stream.
- * @param text - The text to convert to speech
- * @param persona - The Magi persona whose voice to use
- * @returns The audio stream
- */
 /**
  * Get persona-specific TTS settings
  * @param persona - The Magi persona

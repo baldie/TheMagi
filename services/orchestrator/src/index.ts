@@ -4,7 +4,7 @@ import { loadMagi } from './loading';
 import { beginDeliberation } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics } from './diagnostics';
-import { balthazar, caspar, melchior, MagiName } from './magi';
+import { balthazar, caspar, melchior } from './magi';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';

@@ -1,17 +1,21 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
-import { Subject, Observable, timer } from 'rxjs';
+import { Subject, Observable } from 'rxjs';
 import { retryWhen, delay, take } from 'rxjs/operators';
 
 export interface WebSocketMessage {
   type: string;
-  data: any;
+  data: unknown;
 }
 
 export interface AudioMessage {
   audio: string; // base64 encoded audio data
   persona: string;
   isComplete: boolean;
+}
+
+interface WebSocketReadyState {
+  readyState: number;
 }
 
 @Injectable({
@@ -54,7 +58,8 @@ export class WebsocketService implements OnDestroy {
           next: (event) => {
             this.connectionAttempts = 0; // Reset on successful connection
             this.logSubject.next(`[CLIENT] WebSocket connection established successfully. Event: ${JSON.stringify(event)}`);
-            this.logSubject.next(`[CLIENT] WebSocket readyState: ${(this.socket$ as any)?._socket?.readyState ?? 'unknown'}`);
+            const socket = ((this.socket$ as unknown) as { _socket?: WebSocketReadyState })?._socket;
+            this.logSubject.next(`[CLIENT] WebSocket readyState: ${socket?.readyState ?? 'unknown'}`);
             if (shouldStartMagi) {
               this.logSubject.next('[CLIENT] Starting Magi as requested...');
               this.startMagi(inquiry);
@@ -108,7 +113,7 @@ export class WebsocketService implements OnDestroy {
     }
   }
 
-  private formatError(error: any): string {
+  private formatError(error: Error | Event | CloseEvent | ErrorEvent | unknown): string {
     if (error instanceof CloseEvent) {
       let reasonMessage: string;
       switch (error.code) {
@@ -149,10 +154,10 @@ export class WebsocketService implements OnDestroy {
     try {
       switch (msg.type) {
         case 'log':
-          this.logSubject.next(msg.data);
+          this.logSubject.next(msg.data as string);
           break;
         case 'PROCESS_EXITED':
-          this.logSubject.next(msg.data);
+          this.logSubject.next(msg.data as string);
           this.processStatusSubject.next(false);
           break;
         case 'audio':

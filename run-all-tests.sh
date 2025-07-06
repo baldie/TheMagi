@@ -45,12 +45,12 @@ run_test() {
 PROJECT_ROOT="/home/baldie/David/Project/TheMagi"
 
 # Test each service
-run_test "Orchestrator" "npm test" "$PROJECT_ROOT/services/orchestrator"
-run_test "Conduit" "npm test" "$PROJECT_ROOT/services/conduit"
+run_test "Orchestrator" "npm run lint && npm test" "$PROJECT_ROOT/services/orchestrator"
+run_test "Conduit" "npm run lint && npm test" "$PROJECT_ROOT/services/conduit"
 
 # Test UI with Chrome headless
 if command -v google-chrome &> /dev/null || command -v chromium-browser &> /dev/null || command -v chromium &> /dev/null; then
-    run_test "UI" "npm test -- --watch=false --browsers=ChromeHeadless" "$PROJECT_ROOT/ui"
+    run_test "UI" "npm run lint && npm test -- --watch=false --browsers=ChromeHeadless" "$PROJECT_ROOT/ui"
 else
     echo -e "${YELLOW}⚠️  UI tests skipped (Chrome not available)${NC}"
     echo -e "${YELLOW}   Run 'install-magi.sh' to install Chrome and enable UI testing${NC}"
