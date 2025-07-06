@@ -29,6 +29,9 @@ jobs:
       run: |
         if [ "${{ matrix.service }}" = "ui" ]; then
           cd ui && npm ci
+        elif [ "${{ matrix.service }}" = "orchestrator" ]; then
+          cd services/conduit && npm ci
+          cd ../orchestrator && npm ci
         else
           cd services/${{ matrix.service }} && npm ci
         fi
