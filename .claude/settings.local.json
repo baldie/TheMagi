@@ -56,5 +56,18 @@
       "Bash(node:*)"
     ],
     "deny": []
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf \\\\a"
+          }
+        ]
+      }
+    ]
   }
 }

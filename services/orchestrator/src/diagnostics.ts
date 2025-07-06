@@ -197,7 +197,7 @@ async function ensureMagiConduitReady(): Promise<void> {
  * Ensures the Text-to-Speech (TTS) service is running.
  */
 async function ensureTTSReady(): Promise<void> {
-  const ttsServiceDir = path.resolve(__dirname, '../../services/tts_microservice');
+  const ttsServiceDir = path.resolve(__dirname, '../../services/tts');
   await ensureServiceReady(
     'TTS',
     `${TTS_API_BASE_URL}/health`,

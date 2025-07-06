@@ -11,7 +11,7 @@ The system follows a microservices architecture:
 1. **Orchestrator** (`services/orchestrator/`): Main service that coordinates deliberation between three AI personas using different models (Mistral, Gemma, Llama2)
 2. **Conduit** (`services/conduit/`): Wrapper service around Ollama API for AI model communication
 3. **UI** (`ui/`): Angular 20 frontend that communicates via WebSocket to the orchestrator and displays status of the system visually to the user
-4. **TTS Service** (`services/tts_microservice/`): Python-based text-to-speech service
+4. **TTS Service** (`services/tts/`): Python-based text-to-speech service
 
 ### Startup process
 1. start-magi script launches the orchestrator service
