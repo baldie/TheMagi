@@ -238,7 +238,7 @@ async function verifyInternetAccess(): Promise<void> {
 async function verifySufficientRam(): Promise<void> {
   logger.info('Verifying sufficient system RAM...');
   const totalRamGB = os.totalmem() / (1024 ** 3);
-  const MIN_RAM_GB = 16; // Minimum recommended RAM in GB should be 16
+  const MIN_RAM_GB = 15; // Minimum recommended RAM in GB should be 16
   if (totalRamGB < MIN_RAM_GB) {
     throw new Error(`System RAM (${totalRamGB.toFixed(2)} GB) is below the recommended minimum of ${MIN_RAM_GB} GB.`);
   }

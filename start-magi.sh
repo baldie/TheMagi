@@ -45,7 +45,20 @@ fi
 
 # Check for required AI models
 echo "[Magi System] Verifying AI models..."
-MODELS_OUTPUT=$(ollama list 2>/dev/null)
+
+# Set up environment variables and determine correct Ollama binary path
+MODELS_DIR="$(pwd)/.models"
+export OLLAMA_MODELS="$MODELS_DIR"
+
+# Determine which Ollama binary to use
+OLLAMA_LOCAL_BIN="$(pwd)/services/conduit/CUDA/bin/ollama"
+if [ -f "$OLLAMA_LOCAL_BIN" ]; then
+    OLLAMA_CMD="$OLLAMA_LOCAL_BIN"
+else
+    OLLAMA_CMD="ollama"
+fi
+
+MODELS_OUTPUT=$(OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_CMD list 2>/dev/null)
 MISSING_MODELS=""
 
 if ! echo "$MODELS_OUTPUT" | grep -q "mistral"; then

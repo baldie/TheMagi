@@ -8,7 +8,7 @@ import { logStream } from './log-stream';
 // Store connected clients for audio streaming
 const connectedClients = new Set<WebSocket>();
 
-export function createWebSocketServer(server: Server, startCallback: (inquiry?: string) => void) {
+export function createWebSocketServer(server: Server, startCallback: (inquiry?: string) => Promise<string>) {
   const wss = new WebSocketServer({ server });
 
   wss.on('connection', (ws: WebSocket) => {
@@ -29,13 +29,32 @@ export function createWebSocketServer(server: Server, startCallback: (inquiry?: 
 
     logStream.subscribe(logListener);
 
-    ws.on('message', (rawMessage: Buffer) => {
+    ws.on('message', async (rawMessage: Buffer) => {
       try {
         const message = rawMessage.toString();
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'start-magi') {
           logger.info('[WebSocket] Received start-magi signal from client.');
-          startCallback(parsedMessage.data?.inquiry);
+          try {
+            const response = await startCallback(parsedMessage.data?.inquiry);
+            logger.info('[WebSocket] Deliberation completed successfully');
+            
+            // Send the final response back to the client
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ 
+                type: 'deliberation-complete', 
+                data: { response } 
+              }));
+            }
+          } catch (error) {
+            logger.error('[WebSocket] Deliberation failed:', error);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ 
+                type: 'deliberation-error', 
+                data: { error: error instanceof Error ? error.message : 'Unknown error' } 
+              }));
+            }
+          }
         } else {
           logger.warn('[WebSocket] Received unknown message type:', parsedMessage.type);
         }

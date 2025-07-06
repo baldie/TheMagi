@@ -629,34 +629,11 @@ echo
 # Finalization
 # ---------------------------------------------------------------------------------
 echo "================================================================================="
-echo " The Magi Installation Is Complete!"
+echo " ✨ The Magi Installation Is Complete!"
 echo "================================================================================="
-echo
 echo " Your environment is now ready. To start the system, run:"
-echo
 echo "     ./start-magi.sh"
 echo
 echo " To run all tests (including UI tests with Chrome), run:"
-echo
 echo "     ./run-all-tests.sh"
-echo
-echo " To test the TTS service with GPU acceleration, run:"
-echo
-echo "     cd services/tts && source venv/bin/activate && python test_tts_direct.py"
-echo
-echo " For GPU monitoring during AI inference:"
-echo
-echo "     ./monitor_gpu.sh"
-echo
-echo " To test Ollama GPU inference manually:"
-echo
-echo "     ./services/conduit/CUDA/bin/ollama serve &"
-echo "     curl -X POST http://localhost:11434/api/generate \\"
-echo "       -d '{\"model\": \"llama2\", \"prompt\": \"Hello\", \"stream\": false}' \\"
-echo "       -H \"Content-Type: application/json\""
-echo
-echo " To check if models are using GPU (look for size_vram > 0):"
-echo
-echo "     curl -s http://localhost:11434/api/ps"
-echo
 echo "================================================================================="

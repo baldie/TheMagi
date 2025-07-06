@@ -1,5 +1,6 @@
 import { balthazar, caspar, melchior, MagiName } from './magi';
 import { logger } from './logger';
+import { speakWithMagiVoice } from './tts';
 
 /**
  * Retry a function with exponential backoff.
@@ -24,9 +25,10 @@ async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
 
   // Process models sequentially to avoid overwhelming the system
-  const balthazarResponse = await retry(() => balthazar.contact(`Regarding "${inquiry}", what are your thoughts?`));
-  const melchiorResponse = await retry(() => melchior.contact(`Regarding "${inquiry}", what are your thoughts?`));
-  const casparResponse = await retry(() => caspar.contact(`Regarding "${inquiry}", what are your thoughts?`));
+  const prompt = `Regarding "${inquiry}", what are your thoughts? Be concise and on topic.`;
+  const balthazarResponse = await retry(() => balthazar.contact(prompt));
+  const melchiorResponse = await retry(() => melchior.contact(prompt));
+  const casparResponse = await retry(() => caspar.contact(prompt));
 
   const sealedEnvelope = `
     ---
@@ -72,7 +74,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       ${debateTranscript}
       ${roundResponses}
 
-      What is your response? Be concise.
+      What is your response? Be very concise.
       `;
       
       const response = await retry(() => currentMagi.contact(debatePrompt));
@@ -87,7 +89,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       You will now act as an impartial moderator. After reviewing the deliberations transcript below,
       determine if a unanimous consensus has been reached in the last round.
 
-      If yes, respond ONLY with the final, agreed-upon recommendation. Be concise.
+      If yes, respond ONLY with the final, agreed-upon recommendation. It is very important that you concise in your summary. Use as few words as possible to convey the outcome, if the user wants you to elaborate they will ask.
       If no, respond ONLY with the word "IMPASSE".
 
       Transcript:
@@ -136,6 +138,15 @@ export async function beginDeliberation(inquiry?: string): Promise<string> {
 
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });
+
+    // Trigger TTS for the final response using Caspar's voice (primary spokesperson)
+    try {
+      logger.info('Triggering TTS for final response...');
+      await speakWithMagiVoice(finalResponse, MagiName.Caspar);
+      logger.info('TTS delivery complete.');
+    } catch (error) {
+      logger.error('Failed to deliver TTS response, but deliberation was successful', error);
+    }
 
     return finalResponse;
   } catch (error) {
