@@ -21,8 +21,8 @@ const mockAudioContext = {
 };
 
 // Set up the mocks
-jest.spyOn(window, 'AudioContext').mockImplementation(() => mockAudioContext as any);
-(window as any).webkitAudioContext = window.AudioContext;
+global.window.AudioContext = jest.fn(() => mockAudioContext) as any;
+global.window.webkitAudioContext = global.window.AudioContext;
 
 // Mock window.getComputedStyle
 Object.defineProperty(window, 'getComputedStyle', {
