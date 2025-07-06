@@ -1,5 +1,4 @@
-import axios from 'axios';
-import type { AxiosResponse } from 'axios';
+import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { ensureMagiConduitIsRunning } from './service';
 
 jest.mock('axios');
@@ -16,7 +15,7 @@ describe('Conduit Service', () => {
       status: 200,
       statusText: 'OK',
       headers: {},
-      config: {} as any
+      config: {} as InternalAxiosRequestConfig,
     };
     mockedAxios.get.mockResolvedValue(mockResponse);
     
