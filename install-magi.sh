@@ -248,7 +248,7 @@ fi
 
 # Install testing dependencies
 echo "  - Installing UI testing dependencies..."
-npm install --save-dev @types/jest jest @jest/globals jest-environment-jsdom jest-preset-angular ts-jest
+npm install --save-dev @types/jest jest @jest/globals jest-environment-jsdom jest-preset-angular ts-jest @angular-eslint/eslint-plugin @angular-eslint/eslint-plugin-template @angular-eslint/template-parser @typescript-eslint/utils@latest
 if [ $? -ne 0 ]; then
     echo "[ERROR] Failed to install UI testing dependencies. Check logs for details."
     popd > /dev/null

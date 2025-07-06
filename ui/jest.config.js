@@ -12,7 +12,8 @@ module.exports = {
       'ts-jest',
       {
         tsconfig: '<rootDir>/tsconfig.spec.json',
-        stringifyContentPathRegex: '\\.(html|svg)$'
+        stringifyContentPathRegex: '\\.(html|svg)$',
+        useESM: true
       }
     ]
   },
