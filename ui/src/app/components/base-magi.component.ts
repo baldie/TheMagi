@@ -13,7 +13,7 @@ export type MagiHealth = {
 
 @Component({
   template: '',
-  standalone: false,
+  standalone: true,
 })
 export class BaseMagiComponent {
   @Input() status: MagiStatus = 'offline';

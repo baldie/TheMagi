@@ -5,7 +5,7 @@ import { BaseMagiComponent, MagiStatus } from './base-magi.component';
   selector: '[app-casper]',
   templateUrl: './magi.component.html',
   styleUrls: ['./magi.scss'],
-  standalone: false,
+  standalone: true,
 })
 export class CasperComponent extends BaseMagiComponent {
   @Input() override status: MagiStatus = 'offline';

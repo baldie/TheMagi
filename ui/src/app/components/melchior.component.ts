@@ -5,7 +5,7 @@ import { BaseMagiComponent, MagiStatus } from './base-magi.component';
   selector: '[app-melchior]',
   templateUrl: './magi.component.html',
   styleUrls: ['./magi.scss'],
-  standalone: false,
+  standalone: true,
 })
 export class MelchiorComponent extends BaseMagiComponent {
   @Input() override status: MagiStatus = 'offline';

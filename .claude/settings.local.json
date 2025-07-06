@@ -53,7 +53,10 @@
       "Bash(pytest:*)",
       "Bash(npm run test:unit:*)",
       "Bash(diff:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm ls:*)",
+      "Bash(flake8:*)",
+      "Bash(black:*)"
     ],
     "deny": []
   },

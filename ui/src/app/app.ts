@@ -6,6 +6,10 @@ import { Subscription, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { MagiStatus, MagiHealth } from './components/base-magi.component';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { BalthasarComponent } from './components/balthasar.component';
+import { CasperComponent } from './components/casper.component';
+import { MelchiorComponent } from './components/melchior.component';
 
 const DO_NOT_START_MAGI = false;
 
@@ -14,7 +18,7 @@ const DO_NOT_START_MAGI = false;
   templateUrl: './app.html',
   styleUrls: ['./app.css'],
   standalone: true,
-  imports: [CommonModule]
+  imports: [CommonModule, FormsModule, BalthasarComponent, CasperComponent, MelchiorComponent]
 })
 
 export class AppComponent implements OnInit, OnDestroy {
