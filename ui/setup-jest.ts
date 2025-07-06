@@ -1,6 +1,6 @@
 import 'jest-preset-angular/setup-jest';
 import '@jest/globals';
-import { jest } from '@jest/globals';
+import { jest, beforeAll } from '@jest/globals';
 
 // Mock AudioContext
 class MockAudioContext {
@@ -71,6 +71,22 @@ const mockAudioContext = {
   destination: {}
 };
 
-// Set up the mocks
-(window as any).AudioContext = jest.fn(() => mockAudioContext);
-(window as any).webkitAudioContext = window.AudioContext; 
+// Set up the mocks before any tests run
+beforeAll(() => {
+  // Delete existing properties
+  delete (window as any).AudioContext;
+  delete (window as any).webkitAudioContext;
+  
+  // Add our mocked versions
+  Object.defineProperty(window, 'AudioContext', {
+    value: jest.fn(() => mockAudioContext),
+    writable: true,
+    configurable: true
+  });
+  
+  Object.defineProperty(window, 'webkitAudioContext', {
+    value: window.AudioContext,
+    writable: true,
+    configurable: true
+  });
+}); 
