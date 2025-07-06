@@ -1,0 +1,1 @@
+When working on the TTS service, remember that there is a virtual environment you may need to load

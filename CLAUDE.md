@@ -50,12 +50,12 @@ Each persona has its own personality file in `services/orchestrator/src/personal
 - CORS configured to allow UI dev server (localhost:4200)
 - System initialization includes diagnostics and Magi loading phases
 - WebSocket used for real-time communication between UI and backend
+- The locations of the models are in a .models folder in the project root (not uploaded to git)
 
 ## Testing
 
-- Orchestrator: No tests currently configured
-- Conduit: No tests currently configured  
-- UI: Jasmine/Karma test suite (`npm run test`)
+- There are Github actions configured to run tests on all pushes
+- All tests can be run by running the `run-all-tests.sh` script
 
 ## Coding guidance
 1. First think through the problem, read the codebase for relevant files, and write a plan to tasks/todo.md.

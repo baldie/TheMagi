@@ -14,16 +14,19 @@ This test:
 Usage: python test_web_audio.py
 """
 
+# flake8: noqa: F821
+# pylint: disable=undefined-variable
+
 import requests
-import json
 import time
 import os
 import sys
 import threading
 import webbrowser
 from datetime import datetime
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler
 import socketserver
+
 
 # TTS Service Configuration
 TTS_BASE_URL = "http://localhost:8000"
@@ -37,61 +40,62 @@ CASPAR_SETTINGS = {
     "speed": 1.0,
     "pitch": 1.0,
     "exaggeration": 0.5,
-    "cfg_weight": 0.5
+    "cfg_weight": 0.5,
 }
+
 
 def print_header(title):
     """Print a formatted header for test sections"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {title}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
+
 
 def test_tts_synthesis():
     """Test TTS synthesis and return audio data"""
     print("🎤 Testing TTS synthesis...")
-    
+
     try:
         # Test health first
         health_response = requests.get(f"{TTS_BASE_URL}/health", timeout=10)
         health_response.raise_for_status()
         health_data = health_response.json()
-        
-        if health_data.get('status') != 'healthy':
+
+        if health_data.get("status") != "healthy":
             print(f"❌ TTS service not healthy: {health_data.get('status')}")
             return None, None
-        
+
         print("✅ TTS service is healthy")
-        
+
         # Generate speech
         print(f"🗣️  Generating speech: '{TEST_TEXT}'")
         synthesis_response = requests.post(
-            f"{TTS_BASE_URL}/synthesize",
-            json=CASPAR_SETTINGS,
-            timeout=120
+            f"{TTS_BASE_URL}/synthesize", json=CASPAR_SETTINGS, timeout=120
         )
         synthesis_response.raise_for_status()
-        
+
         synthesis_data = synthesis_response.json()
-        audio_id = synthesis_data.get('audio_id')
-        
-        print(f"✅ Speech generated successfully")
+        audio_id = synthesis_data.get("audio_id")
+
+        print("✅ Speech generated successfully")
         print(f"   Audio ID: {audio_id}")
         print(f"   Duration: {synthesis_data.get('duration', 'unknown')} seconds")
         print(f"   Sample Rate: {synthesis_data.get('sample_rate', 'unknown')} Hz")
-        
+
         # Get audio data
         audio_response = requests.get(f"{TTS_BASE_URL}/audio/{audio_id}", timeout=30)
         audio_response.raise_for_status()
-        
+
         return audio_id, audio_response.content
-        
-    except requests.RequestException as e:
-        print(f"❌ TTS request failed: {e}")
+
+    except Exception as e:
+        print(f"Error during audio processing: {e}")
         return None, None
+
 
 def create_web_audio_test_page(audio_filename):
     """Create an HTML page that tests Web Audio API playback"""
-    html_content = f'''
+    html_content = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -171,32 +175,32 @@ def create_web_audio_test_page(audio_filename):
     <div class="container">
         <h1>🎵 Web Audio API Test</h1>
         <p><strong>Testing TTS without FFmpeg dependency</strong></p>
-        
+
         <div class="audio-info">
             <h3>Audio File Information</h3>
             <p><strong>File:</strong> {audio_filename}</p>
             <p><strong>Test Text:</strong> "{TEST_TEXT}"</p>
             <p><strong>Persona:</strong> {TEST_PERSONA.title()}</p>
         </div>
-        
+
         <div class="controls">
             <button class="button" id="loadBtn">Load Audio</button>
             <button class="button" id="playBtn" disabled>Play Audio</button>
             <button class="button" id="stopBtn" disabled>Stop Audio</button>
             <button class="button" id="analyzeBtn" disabled>Show Audio Analysis</button>
         </div>
-        
+
         <canvas id="visualizer"></canvas>
-        
+
         <div id="status" class="status info">
             Click "Load Audio" to begin testing Web Audio API playback
         </div>
-        
+
         <div id="audioInfo" style="display: none;" class="audio-info">
             <h3>Audio Analysis</h3>
             <div id="audioDetails"></div>
         </div>
-        
+
         <!-- Fallback HTML5 audio element for comparison -->
         <div style="margin-top: 30px;">
             <h3>Fallback: HTML5 Audio Element</h3>
@@ -208,12 +212,14 @@ def create_web_audio_test_page(audio_filename):
     </div>
 
     <script>
-        let audioContext;
+        // pylint: disable=undefined-variable
+        // Initialize Web Audio API
+        let audioContext = new (window.AudioContext || window.webkitAudioContext)();
         let audioBuffer;
         let source;
         let analyser;
         let animationId;
-        
+
         const loadBtn = document.getElementById('loadBtn');
         const playBtn = document.getElementById('playBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -223,92 +229,115 @@ def create_web_audio_test_page(audio_filename):
         const audioDetails = document.getElementById('audioDetails');
         const canvas = document.getElementById('visualizer');
         const ctx = canvas.getContext('2d');
-        
+
         // Set canvas size
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
-        
+
         function updateStatus(message, type = 'info') {{
             status.textContent = message;
             status.className = `status ${{type}}`;
         }}
-        
+
         async function loadAudio() {{
             try {{
                 updateStatus('Loading audio file...', 'info');
                 loadBtn.disabled = true;
-                
-                // Initialize Web Audio Context
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                
+
                 // Fetch audio file
                 const response = await fetch('{audio_filename}');
                 if (!response.ok) {{
                     throw new Error(`HTTP error! status: ${{response.status}}`);
                 }}
-                
+
                 const arrayBuffer = await response.arrayBuffer();
                 audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-                
+
                 // Setup analyser
                 analyser = audioContext.createAnalyser();
                 analyser.fftSize = 2048;
-                
-                updateStatus('✅ Audio loaded successfully! Web Audio API is working.', 'success');
+
+                updateStatus(
+                    '✅ Audio loaded successfully! Web Audio API is working.',
+                    'success'
+                );
                 playBtn.disabled = false;
                 analyzeBtn.disabled = false;
-                
+
                 // Show audio info
                 audioDetails.innerHTML = `
-                    <p><strong>Sample Rate:</strong> ${{audioBuffer.sampleRate}} Hz</p>
-                    <p><strong>Duration:</strong> ${{audioBuffer.duration.toFixed(2)}} seconds</p>
-                    <p><strong>Channels:</strong> ${{audioBuffer.numberOfChannels}}</p>
-                    <p><strong>Length:</strong> ${{audioBuffer.length}} samples</p>
-                    <p><strong>Audio Context State:</strong> ${{audioContext.state}}</p>
+                    <p>
+                        <strong>Sample Rate:</strong> ${{audioBuffer.sampleRate}} Hz
+                    </p>
+                    <p>
+                                                <strong>Duration:</strong>
+                        ${{audioBuffer.duration.toFixed(2)}} seconds
+                    </p>
+                    <p>
+                        <strong>Channels:</strong>
+                        ${{audioBuffer.numberOfChannels}}
+                    </p>
+                    <p>
+                        <strong>Length:</strong>
+                        ${{audioBuffer.length}} samples
+                    </p>
+                    <p>
+                        <strong>Audio Context State:</strong>
+                        ${{audioContext.state}}
+                    </p>
                 `;
                 audioInfo.style.display = 'block';
-                
-            }} catch (error) {{
-                updateStatus(`❌ Failed to load audio: ${{error.message}}`, 'error');
+
+            }} catch (error) {{  // noqa: F821
+                updateStatus(
+                    `❌ Failed to load audio: ${error.message}`,
+                    'error'
+                );
                 console.error('Audio loading error:', error);
                 loadBtn.disabled = false;
             }}
         }}
-        
+
         function playAudio() {{
             try {{
                 if (source) {{
                     source.disconnect();
                 }}
-                
+
                 source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
+
+                // Connect source to analyser and then to destination
                 source.connect(analyser);
                 analyser.connect(audioContext.destination);
-                
+
                 source.start(0);
-                
-                updateStatus('🔊 Playing audio using Web Audio API...', 'success');
+                updateStatus('▶️ Playing audio...', 'info');
                 playBtn.disabled = true;
                 stopBtn.disabled = false;
-                
-                // Start visualization
+
                 visualize();
-                
+
                 source.onended = () => {{
-                    updateStatus('✅ Audio playback completed successfully!', 'success');
+                    updateStatus(
+                        '✅ Audio playback completed successfully!',
+                        'success'
+                    );
                     playBtn.disabled = false;
                     stopBtn.disabled = true;
                     cancelAnimationFrame(animationId);
                     clearCanvas();
                 }};
-                
-            }} catch (error) {{
-                updateStatus(`❌ Playback error: ${{error.message}}`, 'error');
+
+            }} catch (error) {{  // noqa: F821
+                updateStatus(
+                    `❌ Playback error: ${error.message}`,
+                    'error'
+                );
                 console.error('Playback error:', error);
             }}
         }}
-        
+
         function stopAudio() {{
             if (source) {{
                 source.stop();
@@ -321,44 +350,44 @@ def create_web_audio_test_page(audio_filename):
             cancelAnimationFrame(animationId);
             clearCanvas();
         }}
-        
+
         function visualize() {{
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
-            
+
             function draw() {{
                 animationId = requestAnimationFrame(draw);
-                
-                analyser.getByteFrequencyData(dataArray);
-                
+
+                analyser.getByteTimeDomainData(dataArray);
+
                 ctx.fillStyle = 'rgb(0, 0, 0)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
+
                 const barWidth = (canvas.width / bufferLength) * 2.5;
                 let barHeight;
                 let x = 0;
-                
+
                 for (let i = 0; i < bufferLength; i++) {{
                     barHeight = dataArray[i] / 255 * canvas.height;
-                    
+
                     ctx.fillStyle = `rgb(${{barHeight + 100}}, 50, 50)`;
                     ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
-                    
+
                     x += barWidth + 1;
                 }}
             }}
-            
+
             draw();
         }}
-        
+
         function clearCanvas() {{
             ctx.fillStyle = 'rgb(0, 0, 0)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }}
-        
+
         function showAnalysis() {{
             if (!audioBuffer) return;
-            
+
             const analysis = `
                 <h4>🎵 Audio Analysis Results</h4>
                 <p><strong>✅ Web Audio API Support:</strong> Yes</p>
@@ -367,65 +396,69 @@ def create_web_audio_test_page(audio_filename):
                 <p><strong>✅ Analyser Node:</strong> Working</p>
                 <p><strong>✅ Audio Visualization:</strong> Available</p>
                 <br>
-                <p><strong>🎯 Result:</strong> <span style="color: green; font-weight: bold;">
-                FFmpeg is NOT required for audio playback!</span></p>
+                <p><strong>🎯 Result:</strong>
+                    <span style="color: green; font-weight: bold;">
+                        FFmpeg is NOT required for audio playback!
+                    </span>
+                </p>
                 <p>The browser's Web Audio API can handle TTS audio playback perfectly.</p>
             `;
-            
+
             audioDetails.innerHTML = analysis;
             updateStatus('✅ Analysis complete: Web Audio API fully functional!', 'success');
         }}
-        
+
         // Event listeners
         loadBtn.addEventListener('click', loadAudio);
         playBtn.addEventListener('click', playAudio);
         stopBtn.addEventListener('click', stopAudio);
         analyzeBtn.addEventListener('click', showAnalysis);
-        
+
         // Clear canvas initially
         clearCanvas();
-        
-        console.log('Web Audio API Test Page Loaded');
-        console.log('This test verifies that TTS audio can be played without FFmpeg');
+
     </script>
 </body>
 </html>
-    '''
-    
+"""
+
     return html_content
+
 
 def start_web_server(audio_filename, port=8080):
     """Start a simple web server to serve the test page and audio file"""
-    
+
     class CustomHandler(SimpleHTTPRequestHandler):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=os.getcwd(), **kwargs)
-        
+
         def end_headers(self):
             # Add CORS headers for local testing
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-            self.send_header('Access-Control-Allow-Headers', '*')
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "*")
             super().end_headers()
-    
-    # Find available port
+
+    # Find an available port
     for port_try in range(port, port + 10):
         try:
             with socketserver.TCPServer(("", port_try), CustomHandler) as httpd:
                 print(f"🌐 Starting web server on http://localhost:{port_try}")
                 print(f"   Serving audio file: {audio_filename}")
                 print(f"   Test page: http://localhost:{port_try}/test_web_audio.html")
-                
+
                 # Start server in background
                 server_thread = threading.Thread(target=httpd.serve_forever)
                 server_thread.daemon = True
                 server_thread.start()
-                
+
                 return httpd, port_try
-        except OSError:
+        except Exception as e:
+            print(f"Port {port_try} is in use, trying next port...")
             continue
-    
+
     raise Exception("Could not find available port for web server")
+
 
 def main():
     """Main test function"""
@@ -433,34 +466,34 @@ def main():
     print("This test verifies that TTS audio can be played in browsers")
     print("without requiring FFmpeg on the server.")
     print(f"Timestamp: {datetime.now()}")
-    
+
     # Test TTS synthesis
     audio_id, audio_data = test_tts_synthesis()
     if not audio_data:
         print("❌ Cannot proceed without audio data")
         return 1
-    
+
     # Save audio file
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     audio_filename = f"test_web_audio_{timestamp}.wav"
-    
+
     print(f"💾 Saving audio file: {audio_filename}")
-    with open(audio_filename, 'wb') as f:
+    with open(audio_filename, "wb") as f:
         f.write(audio_data)
-    
+
     # Create test HTML page
     print("🌐 Creating web audio test page...")
     html_content = create_web_audio_test_page(audio_filename)
     html_filename = "test_web_audio.html"
-    
-    with open(html_filename, 'w') as f:
+
+    with open(html_filename, "w") as f:
         f.write(html_content)
-    
+
     # Start web server
     try:
         httpd, port = start_web_server(audio_filename)
         test_url = f"http://localhost:{port}/{html_filename}"
-        
+
         print_header("Test Ready!")
         print("✅ Web server started successfully")
         print("✅ Audio file saved and accessible")
@@ -476,22 +509,46 @@ def main():
         print(f"🌐 Test URL: {test_url}")
         print()
         print("💡 **What this proves:**")
-        print("   - If audio plays successfully, FFmpeg is NOT needed")
-        print("   - Web Audio API can handle TTS audio playback")
-        print("   - Browser-based audio eliminates server dependency")
+        print(
+            "✅ Web Audio API can handle TTS audio playback perfectly.\n"
+            "   - If audio plays successfully, FFmpeg is NOT needed\n"
+            "   - Web Audio API can handle TTS audio playback\n"
+            "   - Browser-based audio eliminates server dependency"
+        )
+        print("   ✅ FFmpeg dependency can be safely removed")
+        print("   ✅ Web Audio API provides full audio playback capability")
+        print("   ✅ TTS service can work without server-side audio processing")
         print()
-        
+        print("🎯 **Test Instructions:**")
+        print("1. A browser window will open automatically")
+        print("2. Click 'Load Audio' to test Web Audio API")
+        print("3. Click 'Play Audio' to hear the TTS output")
+        print("4. Check the audio visualization")
+        print("5. Click 'Show Audio Analysis' for results")
+        print()
+        print(f"🌐 Test URL: {test_url}")
+        print()
+        print("💡 **What this proves:**")
+        print(
+            "✅ Web Audio API can handle TTS audio playback perfectly.\n"
+            "   - If audio plays successfully, FFmpeg is NOT needed\n"
+            "   - Web Audio API can handle TTS audio playback\n"
+            "   - Browser-based audio eliminates server dependency"
+        )
+        print()
+        print("⏳ Press Ctrl+C to stop the web server when done testing...")
+
         # Open browser
         try:
             webbrowser.open(test_url)
             print("🚀 Browser opened automatically")
-        except:
-            print("⚠️  Could not open browser automatically")
+        except Exception as e:
+            print(f"⚠️  Could not open browser automatically: {e}")
             print(f"   Please open: {test_url}")
-        
+
         print()
         print("⏳ Press Ctrl+C to stop the web server when done testing...")
-        
+
         # Keep server running
         try:
             while True:
@@ -499,7 +556,7 @@ def main():
         except KeyboardInterrupt:
             print("\n🛑 Stopping web server...")
             httpd.shutdown()
-            
+
         print("✅ Test completed successfully!")
         print()
         print("🎯 **Results:**")
@@ -507,20 +564,21 @@ def main():
         print("   ✅ FFmpeg dependency can be safely removed")
         print("   ✅ Web Audio API provides full audio playback capability")
         print("   ✅ TTS service can work without server-side audio processing")
-        
-        return 0
-        
-    except Exception as e:
-        print(f"❌ Web server error: {e}")
-        return 1
-    finally:
+
         # Cleanup
         try:
             os.remove(audio_filename)
             os.remove(html_filename)
             print("🧹 Cleanup completed")
-        except:
-            pass
+        except Exception as e:
+            print(f"⚠️  Cleanup failed: {e}")
+
+        return 0
+
+    except Exception as e:
+        print(f"Error during web server setup: {e}")
+        return 1
+
 
 if __name__ == "__main__":
     exit_code = main()

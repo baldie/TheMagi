@@ -62,12 +62,12 @@ cd "$PROJECT_ROOT/services/tts"
 if [ -f "venv/bin/activate" ]; then
     echo -e "${YELLOW}Testing TTS (using virtual environment)...${NC}"
     # Test using the virtual environment
-    if bash -c "source venv/bin/activate && command -v pytest &> /dev/null && pytest test_tts_service.py" > /dev/null 2>&1; then
+    if bash -c "source venv/bin/activate && command -v pytest &> /dev/null && flake8 *.py && black --check *.py && pytest test_tts_service.py" > /dev/null 2>&1; then
         echo -e "${GREEN}✅ TTS tests passed${NC}"
     else
         echo -e "${RED}❌ TTS tests failed${NC}"
         echo -e "${YELLOW}Re-running with output to show error:${NC}"
-        bash -c "source venv/bin/activate && pytest test_tts_service.py"
+        bash -c "source venv/bin/activate && flake8 *.py && black --check *.py && pytest test_tts_service.py"
         OVERALL_SUCCESS=false
     fi
     echo
