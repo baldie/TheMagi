@@ -71,27 +71,28 @@ jobs:
         cache-dependency-path: services/tts/requirements.txt
     
     - name: Set up Python virtual environment
+      working-directory: services/tts
       run: |
-        cd services/tts
         python -m venv venv
         source venv/bin/activate
         pip install --upgrade pip
         pip install -r requirements.txt
     
     - name: Python syntax check
+      working-directory: services/tts
       run: |
-        cd services/tts
+        source venv/bin/activate
         python -m py_compile *.py
     
     - name: Lint Python code
+      working-directory: services/tts
       run: |
-        cd services/tts
         source venv/bin/activate
         flake8 *.py
         black --check *.py
     
     - name: Test Python code
+      working-directory: services/tts
       run: |
-        cd services/tts
         source venv/bin/activate
         pytest test_tts_service.py -v
