@@ -56,7 +56,8 @@
       "Bash(node:*)",
       "Bash(npm ls:*)",
       "Bash(flake8:*)",
-      "Bash(black:*)"
+      "Bash(black:*)",
+      "Bash(npm start)"
     ],
     "deny": []
   },

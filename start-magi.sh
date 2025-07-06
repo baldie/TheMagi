@@ -17,19 +17,30 @@ fi
 
 echo "[Magi System] Node.js and npm found."
 
-# Check for Ollama
-if ! command -v ollama &> /dev/null; then
-    echo "ERROR: Ollama not found in PATH"
+# Determine which Ollama binary to use
+OLLAMA_LOCAL_BIN="$(pwd)/services/conduit/CUDA/bin/ollama"
+if [ -f "$OLLAMA_LOCAL_BIN" ]; then
+    OLLAMA_CMD="$OLLAMA_LOCAL_BIN"
+    echo "[Magi System] Using local GPU-enabled Ollama installation."
+elif command -v ollama &> /dev/null; then
+    OLLAMA_CMD="ollama"
+    echo "[Magi System] Using system Ollama installation."
+else
+    echo "ERROR: Ollama not found in PATH or local installation"
     echo "       Please run ./install-magi.sh first to install Ollama and AI models."
     exit 1
 fi
 
+# Set up environment variables
+MODELS_DIR="$(pwd)/.models"
+export OLLAMA_MODELS="$MODELS_DIR"
+
 # Check if Ollama service is running
 if ! curl -s http://localhost:11434/api/version > /dev/null; then
     echo "[Magi System] Starting Ollama service..."
-    ollama serve &
+    CUDA_VISIBLE_DEVICES=0 OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_CMD serve &
     OLLAMA_PID=$!
-    sleep 3
+    sleep 5  # Give more time for GPU initialization
     
     # Verify Ollama started
     if ! curl -s http://localhost:11434/api/version > /dev/null; then
@@ -45,18 +56,6 @@ fi
 
 # Check for required AI models
 echo "[Magi System] Verifying AI models..."
-
-# Set up environment variables and determine correct Ollama binary path
-MODELS_DIR="$(pwd)/.models"
-export OLLAMA_MODELS="$MODELS_DIR"
-
-# Determine which Ollama binary to use
-OLLAMA_LOCAL_BIN="$(pwd)/services/conduit/CUDA/bin/ollama"
-if [ -f "$OLLAMA_LOCAL_BIN" ]; then
-    OLLAMA_CMD="$OLLAMA_LOCAL_BIN"
-else
-    OLLAMA_CMD="ollama"
-fi
 
 MODELS_OUTPUT=$(OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_CMD list 2>/dev/null)
 MISSING_MODELS=""
