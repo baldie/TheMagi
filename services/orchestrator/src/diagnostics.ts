@@ -228,7 +228,7 @@ async function checkPersonaFiles(): Promise<void> {
 async function verifyInternetAccess(): Promise<void> {
   logger.info('Verifying internet access...');
   try {
-    await axios.get('http://www.google.com/generate_204');
+    await axios.get('http://www.gstatic.com/generate_204');
     logger.info('... Internet access verified.');
   } catch (error) {
     throw new Error('Internet access verification failed.');
@@ -238,7 +238,7 @@ async function verifyInternetAccess(): Promise<void> {
 async function verifySufficientRam(): Promise<void> {
   logger.info('Verifying sufficient system RAM...');
   const totalRamGB = os.totalmem() / (1024 ** 3);
-  const MIN_RAM_GB = 15; // Minimum recommended RAM in GB should be 16
+  const MIN_RAM_GB = 16; // Minimum recommended RAM in GB should be 16
   if (totalRamGB < MIN_RAM_GB) {
     throw new Error(`System RAM (${totalRamGB.toFixed(2)} GB) is below the recommended minimum of ${MIN_RAM_GB} GB.`);
   }
@@ -255,7 +255,7 @@ export async function runDiagnostics(): Promise<void> {
     await verifySufficientRam();
     await checkPersonaFiles();
     await ensureMagiConduitReady();
-    //await ensureTTSReady();
+    await ensureTTSReady();
     logger.info('--- System Diagnostics Passed ---');
   } catch (error) {
     logger.error('System diagnostics failed.', error);

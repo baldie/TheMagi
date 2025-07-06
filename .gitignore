@@ -99,4 +99,7 @@ ffprobe.exe
 launcher/logs/
 
 # Large files
-/.models/ 
+/.models/
+
+# Local Ollama installation with GPU support
+services/conduit/CUDA/ 

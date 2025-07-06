@@ -36,7 +36,14 @@
       "Bash(ollama ps:*)",
       "Bash(rg:*)",
       "Bash(npm view:*)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(systemctl status:*)",
+      "Bash(echo:*)",
+      "Bash(ldconfig:*)",
+      "Bash(snap list:*)",
+      "Bash(cat:*)",
+      "Bash(tar:*)"
     ],
     "deny": []
   }

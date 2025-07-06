@@ -195,20 +195,45 @@ echo
 # ---------------------------------------------------------------------------------
 echo "[Magi Installer] Step 3: Installing and configuring Ollama for AI models..."
 
-# Check if Ollama is already installed
-if command -v ollama &> /dev/null; then
+# Check if local GPU-enabled Ollama exists
+OLLAMA_LOCAL_DIR="$(pwd)/services/conduit/CUDA"
+OLLAMA_BIN="$OLLAMA_LOCAL_DIR/bin/ollama"
+
+if [ -f "$OLLAMA_BIN" ]; then
+    OLLAMA_VERSION=$($OLLAMA_BIN --version 2>/dev/null || echo "unknown")
+    echo "  [OK] Local GPU-enabled Ollama found: $OLLAMA_VERSION"
+    echo "  [INFO] Using local installation at: services/conduit/CUDA/"
+elif command -v ollama &> /dev/null; then
     OLLAMA_VERSION=$(ollama --version 2>/dev/null || echo "unknown")
-    echo "  [OK] Ollama found: $OLLAMA_VERSION"
+    echo "  [OK] System Ollama found: $OLLAMA_VERSION"
+    echo "  [WARNING] System Ollama may not have optimal GPU support."
+    echo "  [INFO] Consider using local GPU-enabled installation for better performance."
+    OLLAMA_BIN="ollama"
 else
-    echo "  - Installing Ollama..."
-    # Install Ollama using the official installation script
-    curl -fsSL https://ollama.ai/install.sh | sh
+    echo "  - Installing GPU-enabled Ollama locally..."
+    
+    # Create local directory
+    mkdir -p "$OLLAMA_LOCAL_DIR"
+    cd "$OLLAMA_LOCAL_DIR"
+    
+    # Download and extract Ollama with GPU support
+    echo "    Downloading Ollama (this may take a few minutes)..."
+    curl -L https://github.com/ollama/ollama/releases/download/v0.5.2/ollama-linux-amd64.tgz -o ollama.tgz
     if [ $? -ne 0 ]; then
-        echo "[ERROR] Failed to install Ollama. Please check your internet connection."
-        echo "        You can manually install from: https://ollama.ai/"
+        echo "[ERROR] Failed to download Ollama. Please check your internet connection."
+        cd ..
+        rm -rf "$OLLAMA_LOCAL_DIR"
         exit 1
     fi
-    echo "    [OK] Ollama installed successfully."
+    
+    # Extract and set permissions
+    tar -xzf ollama.tgz
+    chmod +x bin/ollama
+    rm ollama.tgz
+    cd ..
+    
+    echo "    [OK] GPU-enabled Ollama installed locally at: services/conduit/CUDA/"
+    OLLAMA_BIN="$OLLAMA_BIN"
 fi
 
 # Create models directory
@@ -216,17 +241,30 @@ MODELS_DIR="$(pwd)/.models"
 mkdir -p "$MODELS_DIR"
 echo "  - Models directory created at: $MODELS_DIR"
 
-# Set OLLAMA_MODELS environment variable
+# Set environment variables for GPU support and models directory
 export OLLAMA_MODELS="$MODELS_DIR"
+export CUDA_VISIBLE_DEVICES=0
 echo "  - Set OLLAMA_MODELS environment variable to: $MODELS_DIR"
+echo "  - Set CUDA_VISIBLE_DEVICES=0 for GPU support"
 
 # Start Ollama service if not running
 echo "  - Checking Ollama service status..."
 if ! pgrep -f "ollama serve" > /dev/null; then
-    echo "    Starting Ollama service..."
-    ollama serve &
+    echo "    Starting GPU-enabled Ollama service..."
+    
+    # Check for GPU support
+    if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
+        echo "    [INFO] NVIDIA GPU detected, enabling GPU acceleration"
+        GPU_INFO=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)
+        echo "    [INFO] GPU: $GPU_INFO"
+    else
+        echo "    [WARNING] No NVIDIA GPU detected, using CPU mode"
+    fi
+    
+    # Start Ollama with environment variables
+    CUDA_VISIBLE_DEVICES=0 OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_BIN serve &
     OLLAMA_PID=$!
-    sleep 5
+    sleep 10  # Allow more time for GPU initialization
     
     # Verify Ollama is responding
     if ! curl -s http://localhost:11434/api/version > /dev/null; then
@@ -241,27 +279,49 @@ fi
 
 # Download required AI models
 echo "  - Downloading required AI models (this may take several minutes)..."
+echo "    Note: Models will be stored in $MODELS_DIR"
+
 echo "    Downloading Mistral model..."
-ollama pull mistral:latest
+timeout 600 $OLLAMA_BIN pull mistral:latest
 if [ $? -ne 0 ]; then
     echo "[WARNING] Failed to download Mistral model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull mistral:latest"
 fi
 
 echo "    Downloading Gemma model..."
-ollama pull gemma:latest
+timeout 600 $OLLAMA_BIN pull gemma:latest
 if [ $? -ne 0 ]; then
     echo "[WARNING] Failed to download Gemma model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull gemma:latest"
 fi
 
 echo "    Downloading Llama2 model..."
-ollama pull llama2:latest
+timeout 600 $OLLAMA_BIN pull llama2:latest
 if [ $? -ne 0 ]; then
     echo "[WARNING] Failed to download Llama2 model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull llama2:latest"
 fi
 
 echo "  - Verifying model installations..."
-AVAILABLE_MODELS=$(ollama list 2>/dev/null)
+AVAILABLE_MODELS=$($OLLAMA_BIN list 2>/dev/null)
 echo "$AVAILABLE_MODELS"
+
+# Test GPU functionality if models are available
+if echo "$AVAILABLE_MODELS" | grep -q "llama2\|mistral\|gemma"; then
+    echo "  - Testing GPU acceleration..."
+    
+    # Get a quick test to see if GPU is being used
+    sleep 2
+    GPU_TEST_RESULT=$(curl -s http://localhost:11434/api/ps 2>/dev/null)
+    if echo "$GPU_TEST_RESULT" | grep -q '"size_vram":[0-9]*[^0]'; then
+        echo "    [OK] GPU acceleration confirmed (models loaded in VRAM)"
+    elif echo "$GPU_TEST_RESULT" | grep -q '"size_vram":0'; then
+        echo "    [WARNING] Models using CPU only (size_vram:0)"
+        echo "             Check GPU drivers and CUDA installation"
+    else
+        echo "    [INFO] GPU test inconclusive (no models currently loaded)"
+    fi
+fi
 
 echo "[Magi Installer] Ollama setup complete."
 echo
@@ -370,28 +430,28 @@ if curl -s http://localhost:11434/api/version > /dev/null; then
     echo "    [OK] Ollama service is responding."
 else
     echo "[WARNING] Ollama service not responding. You may need to start it manually."
-    echo "          Run: ollama serve"
+    echo "          Run: $OLLAMA_BIN serve"
 fi
 
 # Test if models are available
 echo "  - Verifying AI models are downloaded..."
-MODELS_OUTPUT=$(ollama list 2>/dev/null)
+MODELS_OUTPUT=$($OLLAMA_BIN list 2>/dev/null)
 if echo "$MODELS_OUTPUT" | grep -q "mistral"; then
     echo "    [OK] Mistral model available."
 else
-    echo "[WARNING] Mistral model not found. Download with: ollama pull mistral"
+    echo "[WARNING] Mistral model not found. Download with: $OLLAMA_BIN pull mistral"
 fi
 
 if echo "$MODELS_OUTPUT" | grep -q "gemma"; then
     echo "    [OK] Gemma model available."
 else
-    echo "[WARNING] Gemma model not found. Download with: ollama pull gemma"
+    echo "[WARNING] Gemma model not found. Download with: $OLLAMA_BIN pull gemma"
 fi
 
 if echo "$MODELS_OUTPUT" | grep -q "llama2"; then
     echo "    [OK] Llama2 model available."
 else
-    echo "[WARNING] Llama2 model not found. Download with: ollama pull llama2"
+    echo "[WARNING] Llama2 model not found. Download with: $OLLAMA_BIN pull llama2"
 fi
 
 # Test TypeScript compilation
@@ -463,8 +523,19 @@ echo " To test the TTS service with GPU acceleration, run:"
 echo
 echo "     cd services/tts && source venv/bin/activate && python test_tts_direct.py"
 echo
-echo " For GPU monitoring during TTS synthesis:"
+echo " For GPU monitoring during AI inference:"
 echo
-echo "     cd services/tts && source venv/bin/activate && python test_gpu_usage.py"
+echo "     ./monitor_gpu.sh"
+echo
+echo " To test Ollama GPU inference manually:"
+echo
+echo "     ./services/conduit/CUDA/bin/ollama serve &"
+echo "     curl -X POST http://localhost:11434/api/generate \\"
+echo "       -d '{\"model\": \"llama2\", \"prompt\": \"Hello\", \"stream\": false}' \\"
+echo "       -H \"Content-Type: application/json\""
+echo
+echo " To check if models are using GPU (look for size_vram > 0):"
+echo
+echo "     curl -s http://localhost:11434/api/ps"
 echo
 echo "================================================================================="

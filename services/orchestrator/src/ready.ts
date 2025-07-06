@@ -23,11 +23,10 @@ async function retry<T>(
 async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
 
-  const [balthazarResponse, melchiorResponse, casparResponse] = await Promise.all([
-    retry(() => balthazar.contact(`Regarding "${inquiry}", what are your thoughts?`)),
-    retry(() => melchior.contact(`Regarding "${inquiry}", what are your thoughts?`)),
-    retry(() => caspar.contact(`Regarding "${inquiry}", what are your thoughts?`)),
-  ]);
+  // Process models sequentially to avoid overwhelming the system
+  const balthazarResponse = await retry(() => balthazar.contact(`Regarding "${inquiry}", what are your thoughts?`));
+  const melchiorResponse = await retry(() => melchior.contact(`Regarding "${inquiry}", what are your thoughts?`));
+  const casparResponse = await retry(() => caspar.contact(`Regarding "${inquiry}", what are your thoughts?`));
 
   const sealedEnvelope = `
     ---
