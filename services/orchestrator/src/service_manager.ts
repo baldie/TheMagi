@@ -94,7 +94,16 @@ class ServiceManager {
 
     this.ttsProcess.stderr?.on('data', (data) => {
         data.toString().split('\n').forEach((line: string) => {
-            if (line.trim().length > 0) logger.error(`[TTS STDERR] ${line.trim()}`);
+            if (line.trim().length > 0) {
+                const trimmedLine = line.trim();
+                // Check if this is actually an info message sent to stderr
+                if (trimmedLine.includes('INFO:') || trimmedLine.includes('Application startup complete') || 
+                    trimmedLine.includes('Uvicorn running on')) {
+                    logger.info(`[TTS] ${trimmedLine}`);
+                } else {
+                    logger.error(`[TTS STDERR] ${trimmedLine}`);
+                }
+            }
         });
     });
 
@@ -157,7 +166,21 @@ class ServiceManager {
 
     this.uiProcess.stderr?.on('data', (data) => {
         data.toString().split('\n').forEach((line: string) => {
-            if (line.trim().length > 0) logger.error(`[UI STDERR] ${line.trim()}`);
+            if (line.trim().length > 0) {
+                const trimmedLine = line.trim();
+                // Check if this is actually an info/progress message sent to stderr
+                if (trimmedLine.includes('Generating browser application bundles') || 
+                    trimmedLine.includes('Browser application bundle generation complete') ||
+                    trimmedLine.includes('✔') || trimmedLine.includes('Local:') || 
+                    trimmedLine.includes('Angular Live Development Server')) {
+                    logger.info(`[UI] ${trimmedLine}`);
+                } else if (trimmedLine.includes('ERROR') || trimmedLine.includes('FAILED') || 
+                          trimmedLine.includes('error TS')) {
+                    logger.error(`[UI ERROR] ${trimmedLine}`);
+                } else {
+                    logger.warn(`[UI] ${trimmedLine}`);
+                }
+            }
         });
     });
 
