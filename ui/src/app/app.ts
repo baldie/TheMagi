@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { WebsocketService } from './websocket.service';
 import { AudioService } from './audio.service';
@@ -21,13 +21,17 @@ const DO_NOT_START_MAGI = false;
   imports: [CommonModule, FormsModule, BalthasarComponent, CasperComponent, MelchiorComponent]
 })
 
-export class AppComponent implements OnInit, OnDestroy {
+export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
+  @ViewChild('logsContainer') logsContainer!: ElementRef<HTMLDivElement>;
+  
   protected title = 'ui';
   balthasarStatus: MagiStatus = 'offline';
   casperStatus: MagiStatus = 'offline';
   melchiorStatus: MagiStatus = 'offline';
   displayLogs = false;
   isMagiStarting = false;
+  private isUserScrolling = false;
+  private shouldAutoScroll = true;
   serverLogs: string[] = [];
   userInquiry = '';
   isOrchestratorAvailable = false;
@@ -119,7 +123,11 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   async startMagi(): Promise<void> {
-    console.log('startMagi() called');
+    await this.startMagiWithInquiry(this.userInquiry);
+  }
+
+  async startMagiWithInquiry(inquiry: string): Promise<void> {
+    console.log('startMagiWithInquiry() called with:', inquiry);
     if (this.isMagiStarting) {
       console.log('Magi is already starting, aborting');
       return;
@@ -128,16 +136,20 @@ export class AppComponent implements OnInit, OnDestroy {
     // Resume audio context for browsers that require user interaction
     await this.audioService.resumeAudioContext();
     
+    // Reset audio queue for new deliberation
+    this.audioService.resetAudioQueue();
+    
     this.isMagiStarting = true;
-    console.log(`Starting Magi with inquiry: ${this.userInquiry}`);
-    this.serverLogs.push(`[CLIENT] Starting Magi with inquiry: ${this.userInquiry || 'none'}`);
+    console.log(`Starting Magi with inquiry: ${inquiry}`);
+    this.serverLogs.push(`[CLIENT] Starting Magi with inquiry: ${inquiry || 'none'}`);
     this.serverLogs.push('[CLIENT] Connecting to Orchestrator WebSocket...');
-    this.websocketService.startConnecting(true, this.userInquiry);
+    this.websocketService.startConnecting(true, inquiry);
   }
 
   submitQuestion(): void {
-    this.startMagi();
-    this.userInquiry = ''; // Clear the input field after submitting
+    const inquiry = this.userInquiry; // Capture the inquiry before clearing
+    this.userInquiry = ''; // Clear the input field immediately
+    this.startMagiWithInquiry(inquiry); // Pass the captured inquiry
   }
 
   toggleDisplayLogs() {
@@ -146,5 +158,41 @@ export class AppComponent implements OnInit, OnDestroy {
 
   clearLogs() {
     this.serverLogs = [];
+  }
+
+  ngAfterViewChecked() {
+    if (this.shouldAutoScroll && this.displayLogs && this.logsContainer) {
+      this.scrollToBottom();
+    }
+  }
+
+  onLogsScroll(event: Event) {
+    if (!this.logsContainer) return;
+    
+    const element = this.logsContainer.nativeElement;
+    const tolerance = 10; // Allow small tolerance for scroll position
+    
+    // Check if user is near the bottom
+    const isNearBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - tolerance;
+    
+    // Enable auto-scroll if user scrolled to bottom, disable if they scrolled up
+    this.shouldAutoScroll = isNearBottom;
+    
+    // Reset user scrolling flag after a delay
+    this.isUserScrolling = true;
+    setTimeout(() => {
+      this.isUserScrolling = false;
+    }, 150);
+  }
+
+  private scrollToBottom() {
+    if (!this.logsContainer || this.isUserScrolling) return;
+    
+    try {
+      const element = this.logsContainer.nativeElement;
+      element.scrollTop = element.scrollHeight;
+    } catch (err) {
+      // Ignore scroll errors
+    }
   }
 }

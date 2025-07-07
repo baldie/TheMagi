@@ -12,15 +12,24 @@ from typing import Optional
 import tempfile
 import uuid
 
-# Configure detailed logging
+# Suppress progress bars and verbose outputs
+os.environ["TQDM_DISABLE"] = "1"
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
+# Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
         logging.FileHandler("tts_service.log", mode="a"),
     ],
 )
+
+# Suppress noisy loggers
+logging.getLogger("numba").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("transformers").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Log startup information
@@ -251,7 +260,6 @@ async def synthesize_speech(request: TTSRequest):
         audio_id = str(uuid.uuid4())
         audio_filename = f"tts_{audio_id}.wav"
         audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
-        logger.debug(f"[{request_id}] Output file: {audio_path}")
 
         # Prepare generation parameters
         generation_kwargs = {
@@ -280,7 +288,6 @@ async def synthesize_speech(request: TTSRequest):
             logger.info(
                 f"[{request_id}] Generation completed in {generation_time:.2f} seconds"
             )
-            logger.debug(f"[{request_id}] Generated audio shape: {wav.shape}")
         except Exception as gen_error:
             logger.error(f"[{request_id}] Model generation failed: {gen_error}")
             logger.error(
@@ -327,7 +334,6 @@ async def synthesize_speech(request: TTSRequest):
             "file_size": file_size,
         }
 
-        logger.debug(f"[{request_id}] Response: {response}")
         return response
 
     except HTTPException:

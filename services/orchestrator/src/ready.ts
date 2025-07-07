@@ -24,11 +24,14 @@ async function retry<T>(
 async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
 
-  // Process models sequentially to avoid overwhelming the system
+  // Process models in parallel for faster response
   const prompt = `Regarding "${inquiry}", what are your thoughts? Be concise and on topic.`;
-  const balthazarResponse = await retry(() => balthazar.contact(prompt));
-  const melchiorResponse = await retry(() => melchior.contact(prompt));
-  const casparResponse = await retry(() => caspar.contact(prompt));
+  
+  const [balthazarResponse, melchiorResponse, casparResponse] = await Promise.all([
+    retry(() => balthazar.contact(prompt)),
+    retry(() => melchior.contact(prompt)),
+    retry(() => caspar.contact(prompt))
+  ]);
 
   const sealedEnvelope = `
     ---
@@ -50,6 +53,7 @@ async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
 async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> {
   let debateTranscript = sealedEnvelope;
   const MAX_ROUNDS = 3;
+  let previousRoundResponses = '';
 
   const magiInstances = {
     [MagiName.Balthazar]: balthazar,
@@ -66,12 +70,17 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
 
     for (const currentMagiName of deliberationOrder) {
       const currentMagi = magiInstances[currentMagiName];
+      
+      // Send only initial positions and previous round (not full transcript)
+      const recentContext = round === 1 ? sealedEnvelope : 
+        `${sealedEnvelope}\n\n**Previous Round ${round - 1} Arguments:**${previousRoundResponses}`;
+      
       const debatePrompt = `${currentMagi.name},
-      Review the complete debate transcript below. Your task is to persuade the others if you believe
+      Review the context below. Your task is to persuade the others if you believe
       your argument is stronger or concede if their argument is stronger. Append your response.
 
-      Full Transcript Thus Far:
-      ${debateTranscript}
+      Context:
+      ${recentContext}
       ${roundResponses}
 
       What is your response? Be very concise.
@@ -82,18 +91,25 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       logger.info(`${currentMagi.name} has contributed to Round ${round}.`);
     }
 
+    // Keep full transcript for final consensus check
     debateTranscript += `\n**Round ${round} Arguments:**${roundResponses}`;
+    previousRoundResponses = roundResponses;
 
     logger.info(`Checking for consensus after Round ${round}.`);
+    
+    // For consensus check, only send the latest round responses
     const consensusCheckPrompt = `
-      You will now act as an impartial moderator. After reviewing the deliberations transcript below,
-      determine if a unanimous consensus has been reached in the last round.
+      You will now act as an impartial moderator. After reviewing the latest round of deliberations below,
+      determine if a unanimous consensus has been reached.
 
-      If yes, respond ONLY with the final, agreed-upon recommendation. It is very important that you concise in your summary. Use as few words as possible to convey the outcome, if the user wants you to elaborate they will ask.
+      Initial Positions:
+      ${sealedEnvelope}
+
+      Latest Round ${round} Arguments:
+      ${roundResponses}
+
       If no, respond ONLY with the word "IMPASSE".
-
-      Transcript:
-      ${debateTranscript}
+      If yes, respond with the final, agreed-upon recommendation summarized so that it directly answers the inquiry. It is very important that you concise in your summary. Use as few words as possible to convey the outcome, if the user wants you to elaborate they will ask. Also you will be speaking the answer directly to the user so do not refer to them in the third person.
       `;
     const consensusResult = await retry(() => caspar.contact(consensusCheckPrompt));
 

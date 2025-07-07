@@ -1,5 +1,5 @@
 <div class="magi-container" [class.expanded]="displayLogs">
-  <svg [attr.viewBox]="'0 0 1200 ' + (displayLogs ? '900' : '800')" preserveAspectRatio="xMidYMid meet">
+  <svg [attr.viewBox]="'0 0 1200 ' + (displayLogs ? '1200' : '800')" preserveAspectRatio="xMidYMid meet">
     <!-- Defs for patterns and gradients -->
     <defs>
       <pattern id="psychedelic-pattern" patternUnits="userSpaceOnUse" width="100" height="100">
@@ -8,8 +8,8 @@
     </defs>
 
     <!-- Frame -->
-    <rect x="10" y="10" [attr.width]="1180" [attr.height]="displayLogs ? 880 : 780" class="frame" />
-    <rect x="20" y="20" [attr.width]="1160" [attr.height]="displayLogs ? 860 : 760" class="frame" />
+    <rect x="10" y="10" [attr.width]="1180" [attr.height]="displayLogs ? 1180 : 780" class="frame" />
+    <rect x="20" y="20" [attr.width]="1160" [attr.height]="displayLogs ? 1160 : 760" class="frame" />
 
     <!-- header box -->
     <rect x="25" y="25" width="1150" height="100" [class.green-box]="orchestratorStatus === 'available'" [class.orange-box]="orchestratorStatus === 'busy'" [class.red-box]="orchestratorStatus === 'error'" />
@@ -84,13 +84,17 @@
     </foreignObject>
 
     <!-- Logs Panel -->
-    <foreignObject x="100" y="710" width="1000" height="150">
+    <foreignObject x="100" [attr.y]="displayLogs ? '710' : '710'" width="1000" [attr.height]="displayLogs ? '450' : '150'">
       <div class="advanced-panel" [class.visible]="displayLogs">
         <div class="panel-header">
           <h3>Server Logs</h3>
           <button class="clear-logs-btn" (click)="clearLogs()">Clear Logs</button>
         </div>
-        <pre>{{ serverLogs.join('\n') }}</pre>
+        <div class="logs-container" 
+             #logsContainer
+             (scroll)="onLogsScroll($event)">
+          <pre>{{ serverLogs.join('\n') }}</pre>
+        </div>
       </div>
     </foreignObject>
 

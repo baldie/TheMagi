@@ -12,24 +12,24 @@ body, html {
 }
 
 .magi-container {
-  margin-top: -10%;
   width: 100%;
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
   flex-direction: column;
-  transition: all 0.3s ease-in-out;
   
   &.expanded {
-    height: 112.5%;  // 900/800 = 1.125
+    flex-direction: row;
+    height: 150%;  // 1200/800 = 1.5
+    align-items: flex-start;
+    padding-top: 5vh;
   }
 }
 
 svg {
   width: 90%;
   max-width: 1200px;
-  transition: all 0.3s ease-in-out;
 }
 
 .connector {
@@ -97,7 +97,6 @@ svg {
   fill: none;
   stroke: #ffa500;
   stroke-width: 2;
-  transition: all 0.3s ease-in-out;
 }
 
 .input-area {
@@ -151,12 +150,12 @@ svg {
   overflow: hidden;
   opacity: 0;
   height: 0;
-  transition: all 0.3s ease-in-out;
+  transition: all 0.3s ease-out;
   box-sizing: border-box;
   
   &.visible {
     opacity: 1;
-    height: 150px;
+    height: 100%;
   }
   
   .panel-header {
@@ -171,6 +170,30 @@ svg {
     color: #ffa500;
     font-size: 0.9rem;
   }
+  .logs-container {
+    height: calc(100% - 25px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #ffa500 rgba(255, 165, 0, 0.2);
+    
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: rgba(255, 165, 0, 0.1);
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #ffa500;
+      border-radius: 3px;
+    }
+    
+    &::-webkit-scrollbar-thumb:hover {
+      background: #ffb732;
+    }
+  }
+
   pre {
     color: #ddd;
     font-family: 'Sans Serif', Courier, monospace;
@@ -178,8 +201,7 @@ svg {
     word-wrap: break-word;
     font-size: 0.8rem;
     margin: 0;
-    height: calc(100% - 25px);
-    overflow-y: auto;
+    min-height: 100%;
   }
 }
 

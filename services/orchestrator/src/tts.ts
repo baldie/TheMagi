@@ -14,8 +14,9 @@ const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
  * Uses Web Audio API in the browser instead of server-side FFmpeg.
  * @param audioStream - A stream containing the audio data.
  * @param persona - The Magi persona speaking.
+ * @param sequenceNumber - The sequence number for this audio chunk.
  */
-async function streamAudioToClients(audioStream: Stream, persona: MagiName): Promise<void> {
+async function streamAudioToClients(audioStream: Stream, persona: MagiName, sequenceNumber: number): Promise<void> {
   // Buffer to collect audio data for WebSocket clients
   const audioChunks: Buffer[] = [];
   
@@ -24,13 +25,13 @@ async function streamAudioToClients(audioStream: Stream, persona: MagiName): Pro
     audioStream.on('data', (chunk: Buffer) => {
       audioChunks.push(chunk);
       // Send chunks in real-time to WebSocket clients
-      broadcastAudioToClients(chunk, persona, false);
+      broadcastAudioToClients(chunk, persona, false, sequenceNumber);
     });
 
     audioStream.on('end', () => {
       // Send final notification to WebSocket clients
-      broadcastAudioToClients(Buffer.alloc(0), persona, true);
-      logger.debug(`Audio streaming completed for ${persona}, sent ${audioChunks.length} chunks to clients`);
+      broadcastAudioToClients(Buffer.alloc(0), persona, true, sequenceNumber);
+      logger.debug(`Audio streaming completed for ${persona}, sent ${audioChunks.length} chunks to clients (sequence: ${sequenceNumber})`);
       resolve();
     });
 
@@ -92,7 +93,8 @@ async function makeTTSRequest(text: string, persona: MagiName): Promise<Stream> 
       speed: 1.0,
       pitch: 1.0,
       exaggeration: personaSettings.exaggeration,
-      cfg_weight: personaSettings.cfg_weight
+      cfg_weight: personaSettings.cfg_weight,
+      audio_prompt_path: '/home/baldie/David/Project/TheMagi/services/tts/GLaDOS.wav'
     },
     {
       timeout: 60000, // 60-second timeout for a single sentence
@@ -163,12 +165,12 @@ export async function speakWithMagiVoice(text: string, persona: MagiName): Promi
             if (ttsRequestPromise) {
               const audioStream = await ttsRequestPromise;
               
-              await streamAudioToClients(audioStream, persona);
+              await streamAudioToClients(audioStream, persona, i);
 
-              logger.debug(`${persona}: "${currentSentence}"`);
+              logger.debug(`${persona}: "${currentSentence}" (sequence: ${i})`);
             }
         } catch (error) {
-            logger.error(`Failed to process TTS for sentence: "${currentSentence}"`, error);
+            logger.error(`Failed to process TTS for sentence: "${currentSentence}" (sequence: ${i})`, error);
             // Continue to the next sentence even if one fails.
         }
         

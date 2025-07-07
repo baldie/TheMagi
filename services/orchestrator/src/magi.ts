@@ -90,7 +90,13 @@ export class Magi {
       system: systemPrompt,
       prompt: userPrompt,
       stream: false,
-      options: this.config.options,
+      keep_alive: "30m",
+      options: {
+        ...this.config.options,
+        num_ctx: 4096,
+        num_predict: 512,
+        repeat_penalty: 1.1,
+      },
     };
 
     try {

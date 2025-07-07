@@ -84,14 +84,16 @@ export function createWebSocketServer(server: Server, startCallback: (inquiry?: 
  * @param audioData - The audio data as a Buffer
  * @param persona - The Magi persona speaking
  * @param isComplete - Whether this is the final chunk of audio
+ * @param sequenceNumber - The sequence number for proper ordering
  */
-export function broadcastAudioToClients(audioData: Buffer, persona: string, isComplete: boolean = false) {
+export function broadcastAudioToClients(audioData: Buffer, persona: string, isComplete: boolean = false, sequenceNumber: number = 0) {
   const message = JSON.stringify({
     type: 'audio',
     data: {
       audio: audioData.toString('base64'),
       persona,
-      isComplete
+      isComplete,
+      sequenceNumber
     }
   });
 
@@ -109,6 +111,6 @@ export function broadcastAudioToClients(audioData: Buffer, persona: string, isCo
   });
 
   if (connectedClients.size > 0) {
-    logger.debug(`[WebSocket] Broadcasted audio chunk to ${connectedClients.size} clients`);
+    logger.debug(`[WebSocket] Broadcasted audio chunk to ${connectedClients.size} clients (sequence: ${sequenceNumber})`);
   }
 } 

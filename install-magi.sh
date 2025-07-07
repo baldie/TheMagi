@@ -331,8 +331,20 @@ echo "  - Models directory created at: $MODELS_DIR"
 # Set environment variables for GPU support and models directory
 export OLLAMA_MODELS="$MODELS_DIR"
 export CUDA_VISIBLE_DEVICES=0
+
+# Ollama performance optimization environment variables
+export OLLAMA_NUM_THREADS=8
+export OLLAMA_NUM_PARALLEL=2
+export OLLAMA_MAX_LOADED_MODELS=3
+export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_KV_CACHE_TYPE=q8_0
+export OLLAMA_FLASH_ATTENTION=1
+export OLLAMA_MAX_QUEUE=256
+export OLLAMA_CONTEXT_LENGTH=4096
+
 echo "  - Set OLLAMA_MODELS environment variable to: $MODELS_DIR"
 echo "  - Set CUDA_VISIBLE_DEVICES=0 for GPU support"
+echo "  - Set Ollama performance optimization variables"
 
 # Start Ollama service if not running
 echo "  - Checking Ollama service status..."
@@ -349,7 +361,7 @@ if ! pgrep -f "ollama serve" > /dev/null; then
     fi
     
     # Start Ollama with environment variables
-    CUDA_VISIBLE_DEVICES=0 OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_BIN serve &
+    CUDA_VISIBLE_DEVICES=0 OLLAMA_MODELS="$MODELS_DIR" OLLAMA_NUM_THREADS=8 OLLAMA_NUM_PARALLEL=2 OLLAMA_MAX_LOADED_MODELS=3 OLLAMA_KEEP_ALIVE=30m OLLAMA_KV_CACHE_TYPE=q8_0 OLLAMA_FLASH_ATTENTION=1 OLLAMA_MAX_QUEUE=256 OLLAMA_CONTEXT_LENGTH=4096 $OLLAMA_BIN serve &
     OLLAMA_PID=$!
     sleep 10  # Allow more time for GPU initialization
     

@@ -35,6 +35,16 @@ fi
 MODELS_DIR="$(pwd)/.models"
 export OLLAMA_MODELS="$MODELS_DIR"
 
+# Ollama performance optimization environment variables
+export OLLAMA_NUM_THREADS=8
+export OLLAMA_NUM_PARALLEL=2
+export OLLAMA_MAX_LOADED_MODELS=3
+export OLLAMA_KEEP_ALIVE=30m
+export OLLAMA_KV_CACHE_TYPE=q8_0
+export OLLAMA_FLASH_ATTENTION=1
+export OLLAMA_MAX_QUEUE=256
+export OLLAMA_CONTEXT_LENGTH=4096
+
 # Check if Ollama service is running
 if ! curl -s http://localhost:11434/api/version > /dev/null; then
     echo "[Magi System] Starting Ollama service..."

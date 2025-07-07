@@ -5,6 +5,13 @@ interface WebkitWindow extends Window {
   webkitAudioContext: typeof AudioContext;
 }
 
+interface QueuedAudio {
+  sequenceNumber: number;
+  audioChunks: ArrayBuffer[];
+  persona: string;
+  isComplete: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -14,6 +21,9 @@ export class AudioService {
   private isPlaying = false;
   private isRecording = false;
   private mediaStream: MediaStream | null = null;
+  private audioQueue: Map<number, QueuedAudio> = new Map();
+  private nextExpectedSequence = 0;
+  private isProcessingQueue = false;
 
   constructor() {
     this.initializeAudioContext();
@@ -34,36 +44,82 @@ export class AudioService {
     }
 
     try {
-      // Decode base64 audio data
-      const audioData = this.base64ToArrayBuffer(audioMessage.audio);
+      const sequenceNumber = audioMessage.sequenceNumber;
       
-      if (audioData.byteLength > 0) {
-        this.currentAudioChunks.push(audioData);
+      // Initialize queue entry if it doesn't exist
+      if (!this.audioQueue.has(sequenceNumber)) {
+        this.audioQueue.set(sequenceNumber, {
+          sequenceNumber,
+          audioChunks: [],
+          persona: audioMessage.persona,
+          isComplete: false
+        });
       }
 
-      // If this is the complete message, play all accumulated chunks
-      if (audioMessage.isComplete && this.currentAudioChunks.length > 0) {
-        await this.playAccumulatedAudio();
-        this.currentAudioChunks = [];
+      const queuedAudio = this.audioQueue.get(sequenceNumber)!;
+      
+      // Decode base64 audio data and add to queue
+      const audioData = this.base64ToArrayBuffer(audioMessage.audio);
+      if (audioData.byteLength > 0) {
+        queuedAudio.audioChunks.push(audioData);
       }
+
+      // Mark as complete if this is the final chunk
+      if (audioMessage.isComplete) {
+        queuedAudio.isComplete = true;
+        console.log(`Audio sequence ${sequenceNumber} is complete`);
+      }
+
+      // Try to process the queue
+      await this.processAudioQueue();
     } catch (error) {
-      console.error('Error playing audio:', error);
+      console.error('Error processing audio message:', error);
     }
   }
 
-  private async playAccumulatedAudio(): Promise<void> {
-    if (!this.audioContext || this.currentAudioChunks.length === 0) {
+  private async processAudioQueue(): Promise<void> {
+    if (this.isProcessingQueue) {
+      return;
+    }
+
+    this.isProcessingQueue = true;
+
+    try {
+      // Process audio in sequence order
+      while (this.audioQueue.has(this.nextExpectedSequence)) {
+        const queuedAudio = this.audioQueue.get(this.nextExpectedSequence)!;
+        
+        // Only play if the audio is complete
+        if (queuedAudio.isComplete) {
+          console.log(`Playing audio sequence ${this.nextExpectedSequence}`);
+          await this.playQueuedAudio(queuedAudio);
+          this.audioQueue.delete(this.nextExpectedSequence);
+          this.nextExpectedSequence++;
+        } else {
+          // Wait for this sequence to be complete
+          break;
+        }
+      }
+    } catch (error) {
+      console.error('Error processing audio queue:', error);
+    } finally {
+      this.isProcessingQueue = false;
+    }
+  }
+
+  private async playQueuedAudio(queuedAudio: QueuedAudio): Promise<void> {
+    if (!this.audioContext || queuedAudio.audioChunks.length === 0) {
       return;
     }
 
     try {
       // Concatenate all audio chunks
-      const totalLength = this.currentAudioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+      const totalLength = queuedAudio.audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
       const concatenatedBuffer = new ArrayBuffer(totalLength);
       const view = new Uint8Array(concatenatedBuffer);
       
       let offset = 0;
-      for (const chunk of this.currentAudioChunks) {
+      for (const chunk of queuedAudio.audioChunks) {
         view.set(new Uint8Array(chunk), offset);
         offset += chunk.byteLength;
       }
@@ -72,7 +128,7 @@ export class AudioService {
       const audioBuffer = await this.audioContext.decodeAudioData(concatenatedBuffer);
       await this.playAudioBuffer(audioBuffer);
     } catch (error) {
-      console.error('Error playing accumulated audio:', error);
+      console.error('Error playing queued audio:', error);
     }
   }
 
@@ -82,20 +138,31 @@ export class AudioService {
       return;
     }
 
-    try {
-      const source = this.audioContext.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(this.audioContext.destination);
-      source.start(0);
-      this.isPlaying = true;
-      
-      source.onended = () => {
-        this.isPlaying = false;
-      };
-    } catch (error) {
-      console.error('Error playing audio:', error);
-      this.isPlaying = false;
+    // Wait for previous audio to finish
+    while (this.isPlaying) {
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
+
+    return new Promise<void>((resolve, reject) => {
+      try {
+        const source = this.audioContext!.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(this.audioContext!.destination);
+        
+        this.isPlaying = true;
+        
+        source.onended = () => {
+          this.isPlaying = false;
+          resolve();
+        };
+        
+        source.start(0);
+      } catch (error) {
+        console.error('Error playing audio:', error);
+        this.isPlaying = false;
+        reject(error);
+      }
+    });
   }
 
   private base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -121,6 +188,13 @@ export class AudioService {
     if (this.audioContext && this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
     }
+  }
+
+  public resetAudioQueue(): void {
+    this.audioQueue.clear();
+    this.nextExpectedSequence = 0;
+    this.isProcessingQueue = false;
+    console.log('Audio queue reset');
   }
 
   async startRecording() {

@@ -12,6 +12,7 @@ export interface AudioMessage {
   audio: string; // base64 encoded audio data
   persona: string;
   isComplete: boolean;
+  sequenceNumber: number;
 }
 
 interface WebSocketReadyState {
@@ -150,7 +151,10 @@ export class WebsocketService implements OnDestroy {
   }
 
   private handleMessage(msg: WebSocketMessage): void {
-    this.logSubject.next(`[CLIENT] Received message: ${JSON.stringify(msg)}`);
+    // Skip logging audio messages as they contain binary data
+    if (msg.type !== 'audio') {
+      this.logSubject.next(`[CLIENT] Received message: ${JSON.stringify(msg)}`);
+    }
     try {
       switch (msg.type) {
         case 'log':
