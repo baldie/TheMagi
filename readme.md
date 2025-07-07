@@ -2,7 +2,7 @@
 
 # The Magi
 
-![Tests](https://github.com/baldie/TheMagi/workflows/CI/badge.svg)
+![Tests](https://github.com/baldie/TheMagi/workflows/Build%20and%20Test/badge.svg)
 ![License](https://img.shields.io/badge/license-ISC-blue.svg)
 ![Version](https://img.shields.io/badge/version-0.1.0-orange)
 ![Node.js](https://img.shields.io/badge/node.js-16+-green)
