@@ -20,7 +20,7 @@
 ![Code Style](https://img.shields.io/badge/code%20style-prettier-ff69b4.svg)
 ![Linting](https://img.shields.io/badge/linting-ESLint-4B32C3)
 
-A personal, omnipresent Artificial Intelligence system, built to serve a human as an omi-present board of directors. Built on Windows using WSL.
+A personal, omnipresent Artificial Intelligence system, built to serve a human as a board of directors for decisions large and small.
 
 * Caspar - Mistral
 * Melchior - Gemma
