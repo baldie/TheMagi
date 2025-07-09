@@ -23,11 +23,11 @@ The system follows a microservices architecture:
 ## Key Components
 
 ### Magi Personas
-- **Caspar** (Mistral): Temperature 0.7, primary voice for responses
-- **Melchior** (Gemma): Temperature 0.9, creative/intuitive perspective  
-- **Balthazar** (Llama2): Temperature 0.2, logical/analytical perspective
+- **Caspar** (Mistral): primary voice for responses
+- **Melchior** (Gemma): creative/intuitive perspective  
+- **Balthazar** (Llama2): logical/analytical perspective
 
-Each persona has its own personality file in `services/orchestrator/src/personalities/`
+Each persona has its own personality file in `services/orchestrator/src/magi/personalities/`
 
 ### Communication Flow
 1. UI sends WebSocket message to Orchestrator (port 8080)

@@ -1,4 +1,4 @@
-import { balthazar, caspar, melchior, MagiName } from './magi';
+import { balthazar, caspar, melchior, MagiName } from './magi/magi';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
 import { MemoryService } from './memory';
@@ -25,29 +25,27 @@ async function retry<T>(
 async function runSealedEnvelopePhase(inquiry: string, memoryService: MemoryService): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
 
-  // Process models in parallel for faster response
-  const prompt = `Regarding "${inquiry}", what are your thoughts? Be concise and on topic.`;
-  
+  // Process models in parallel using their new agentic analysis capabilities
   const [balthazarResponse, melchiorResponse, casparResponse] = await Promise.all([
-    retry(() => balthazar.contact(prompt)),
-    retry(() => melchior.contact(prompt)),
-    retry(() => caspar.contact(prompt))
+    retry(() => balthazar.performIndependentAnalysis(inquiry)),
+    retry(() => melchior.performIndependentAnalysis(inquiry)),
+    retry(() => caspar.performIndependentAnalysis(inquiry))
   ]);
 
   const sealedEnvelope = `
     ---
-    Balthazar's Initial response:
+    Balthazar's Independent Analysis:
     ${balthazarResponse}
     ---
-    Melchior's Initial response:
+    Melchior's Independent Analysis:
     ${melchiorResponse}
     ---
-    Caspar's Initial response:
+    Caspar's Independent Analysis:
     ${casparResponse}
     ---
     `;
-  logger.info('Phase 1: "Sealed envelope" created with 3 responses.');
-  logger.debug('A peek into the sealed envelope:', { sealedEnvelope });
+  logger.info('Phase 1: "Sealed envelope" created with 3 agentic analyses.');
+  logger.debug(`A peek into the sealed envelope ✉️:\n ${sealedEnvelope}`);
   return sealedEnvelope;
 }
 
@@ -110,7 +108,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       ${roundResponses}
 
       If no, respond ONLY with the word "IMPASSE".
-      If yes, respond with the final, agreed-upon recommendation summarized so that it directly answers the inquiry. It is very important that you concise in your summary. Use as few words as possible to convey the outcome, if the user wants you to elaborate they will ask. Also you will be speaking the answer directly to the user so do not refer to them in the third person.
+      If yes, respond with the final, agreed-upon recommendation/answer summarized so that it directly answers the inquiry. It is very important that you concise in your summary. Use as few words as possible to convey the outcome, if the user wants you to elaborate they will ask.
       `;
     const consensusResult = await retry(() => caspar.contact(consensusCheckPrompt));
 
@@ -119,6 +117,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       return consensusResult; // Return the consensus
     } else {
       logger.info(`IMPASSE after Round ${round}.`);
+      logger.info(`Round ${round}: responses were:\n${roundResponses}`);
     }
   }
 

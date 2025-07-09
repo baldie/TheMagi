@@ -168,6 +168,6 @@ echo
 
 # Start the orchestrator in the current window. This will block the script.
 cd services/orchestrator
-npm start
+npm run dev
 
 echo "[Magi System] Orchestrator has shut down."

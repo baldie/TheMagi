@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import { logger } from './logger';
-import { balthazar, caspar, melchior, Magi, MagiName, PERSONAS_CONFIG } from './magi';
+import { balthazar, caspar, melchior, Magi, MagiName, PERSONAS_CONFIG } from './magi/magi';
 
 async function checkPersonaReadiness(magi: Magi): Promise<void> {
   const maxRetries = 3;

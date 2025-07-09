@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { TTS_API_BASE_URL } from './config';
-import { MagiName } from './magi';
+import { MagiName } from './magi/magi';
 import { logger } from './logger';
 import { serviceManager } from './service_manager';
 import { Stream } from 'stream';

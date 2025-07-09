@@ -82,7 +82,12 @@ class ServiceManager {
         {
             cwd: ttsServiceDir,
             stdio: ['ignore', 'pipe', 'pipe'], // stdin, stdout, stderr
-            env: { ...process.env, PYTHONUNBUFFERED: "1" }
+            env: { 
+                ...process.env, 
+                PYTHONUNBUFFERED: "1",
+                TQDM_DISABLE: "1",
+                TRANSFORMERS_VERBOSITY: "error"
+            }
         }
     );
 
@@ -100,6 +105,9 @@ class ServiceManager {
                 if (trimmedLine.includes('INFO:') || trimmedLine.includes('Application startup complete') || 
                     trimmedLine.includes('Uvicorn running on')) {
                     logger.info(`[TTS] ${trimmedLine}`);
+                } else if (trimmedLine.includes('Sampling:') && trimmedLine.includes('it/s')) {
+                    // Filter out sampling progress messages completely - they clutter the logs
+                    return;
                 } else {
                     logger.error(`[TTS STDERR] ${trimmedLine}`);
                 }
