@@ -11,10 +11,39 @@ from pydantic import BaseModel
 from typing import Optional
 import tempfile
 import uuid
+import tqdm
 
 # Suppress progress bars and verbose outputs
 os.environ["TQDM_DISABLE"] = "1"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
+
+# Monkey patch tqdm to redirect to null
+class NullTqdm:
+    def __init__(self, *args, **kwargs):
+        self.iterable = args[0] if args else None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def __iter__(self):
+        return iter(self.iterable) if self.iterable is not None else iter([])
+
+    def update(self, *args, **kwargs):
+        pass
+
+    def set_postfix(self, *args, **kwargs):
+        pass
+
+    def close(self):
+        pass
+
+
+# Override tqdm completely
+tqdm.tqdm = NullTqdm
 
 # Configure logging
 logging.basicConfig(

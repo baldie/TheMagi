@@ -4,7 +4,7 @@ import os from 'os';
 import path from 'path';
 import { logger } from './logger';
 import { MAGI_CONDUIT_API_BASE_URL, TTS_API_BASE_URL, REQUIRED_MODELS } from './config';
-import { PERSONAS_CONFIG } from './magi';
+import { PERSONAS_CONFIG } from './magi/magi';
 import { promises as fs } from 'fs';
 import { exec } from 'child_process';
 

@@ -4,7 +4,8 @@ import { loadMagi } from './loading';
 import { beginDeliberation } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics } from './diagnostics';
-import { balthazar, caspar, melchior } from './magi';
+import { balthazar, caspar, melchior } from './magi/magi';
+import { mcpToolRegistry } from './mcp';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -34,6 +35,12 @@ async function main() {
   try {
     await runDiagnostics();
     await loadMagi();
+    
+    // Initialize MCP tool registry for agentic capabilities
+    logger.info('Initializing MCP tool registry...');
+    await mcpToolRegistry.initialize();
+    logger.info('MCP tool registry initialized successfully.');
+    
     isInitialized = true; 
     logger.info('The Magi are ready.');
   } catch (error) {

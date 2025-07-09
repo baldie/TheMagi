@@ -86,7 +86,6 @@ export class WebsocketService implements OnDestroy {
         )
       ).subscribe({
         next: (msg) => {
-          this.logSubject.next(`[CLIENT] WebSocket message received successfully`);
           this.handleMessage(msg);
         },
         error: (err) => {
@@ -151,10 +150,6 @@ export class WebsocketService implements OnDestroy {
   }
 
   private handleMessage(msg: WebSocketMessage): void {
-    // Skip logging audio messages as they contain binary data
-    if (msg.type !== 'audio') {
-      this.logSubject.next(`[CLIENT] Received message: ${JSON.stringify(msg)}`);
-    }
     try {
       switch (msg.type) {
         case 'log':

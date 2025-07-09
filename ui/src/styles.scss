@@ -100,7 +100,7 @@ svg {
 }
 
 .input-area {
-  font-family: 'Sans Serif', Courier, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 1.2rem;
   color: #ffa500;
   .input-row {
@@ -117,7 +117,7 @@ svg {
       color: #ffa500;
       font-size: 1.2rem;
       width: 70%;
-      font-family: 'Sans Serif', Courier, monospace;
+      font-family: 'Courier New', Courier, monospace;
 
       &:focus {
         outline: none;
@@ -133,7 +133,7 @@ svg {
     color: black;
     border: none;
     padding: 8px 15px;
-    font-family: 'Orbitron', sans-serif;
+    font-family: 'Courier New', Courier, monospace;
     cursor: pointer;
     font-size: 0.8rem;
     &:hover {
@@ -196,7 +196,7 @@ svg {
 
   pre {
     color: #ddd;
-    font-family: 'Sans Serif', Courier, monospace;
+    font-family: 'Courier New', Courier, monospace;
     white-space: pre-wrap;
     word-wrap: break-word;
     font-size: 0.8rem;
@@ -210,7 +210,7 @@ svg {
   border: 1px solid #ffa500;
   color: #ffa500;
   padding: 2px 8px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Courier New', Courier, monospace;
   cursor: pointer;
   font-size: 0.7rem;
   &:hover {
@@ -223,7 +223,7 @@ svg {
   border: 1px solid #00aaff;
   color: #00aaff;
   padding: 2px 8px;
-  font-family: 'Orbitron', sans-serif;
+  font-family: 'Courier New', Courier, monospace;
   cursor: pointer;
   font-size: 0.9rem;
   margin-left: 10px;

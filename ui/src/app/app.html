@@ -47,18 +47,11 @@
     </foreignObject>
 
     <foreignObject x="950" y="220" width="100" height="50">
-      <a (click)="startMagi()" 
-         class="magi-start-button"
-         [class.disabled]="isMagiStarting || !isOrchestratorAvailable"
-         title="start magi"
-         aria-label="start magi">
+      <div class="magi-start-button">
         <div class="info-box-small">
-          <span *ngIf="isOrchestratorAvailable; else offline">
-            {{ isMagiStarting ? 'Running...' : '打ち上げ' }}
-          </span>
-          <ng-template #offline>不在</ng-template>
+          <span>打ち上げ</span>
         </div>
-      </a>
+      </div>
     </foreignObject>
 
     <!-- Bottom Inputs -->

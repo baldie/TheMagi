@@ -47,7 +47,13 @@ be provided all three analyses and then decide whether any other arguments have 
 convince them to change their initial position, or whether they will adjust their argument further.
 This process will continue until a consensus is reached or a predetermined number of rounds has
 been reached (this is known as an IMPASSE). In either case, a summary of the discussion will
-be presented to the user.`;
+be presented to the user.
+
+7. Tool Use:
+In order to provide up to date helpful information, you may be given access to certain tools.
+An example of this might be a web search tool, or access to the user's calendar. If you have access
+to a tool, consider how it can be used to enhance your analysis and deliberation. You may not
+always need to make use of the tools in order to successfully complete your tasks.`;
 
 export const MAGI_EXAMPLE = `On a timer, the Magi system is triggered and the three Magi are
 activated. They load their shared memory and initialization data.

@@ -57,7 +57,10 @@
       "Bash(npm ls:*)",
       "Bash(flake8:*)",
       "Bash(black:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(npx tsc:*)",
+      "Bash(mkdir:*)",
+      "Bash(./start-magi.sh:*)"
     ],
     "deny": []
   },
