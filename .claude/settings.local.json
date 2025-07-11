@@ -60,7 +60,16 @@
       "Bash(npm start)",
       "Bash(npx tsc:*)",
       "Bash(mkdir:*)",
-      "Bash(./start-magi.sh:*)"
+      "Bash(./start-magi.sh:*)",
+      "Bash(./services/conduit/CUDA/bin/ollama list:*)",
+      "Bash(./services/conduit/CUDA/bin/ollama pull:*)",
+      "Bash(./services/conduit/CUDA/bin/ollama:*)",
+      "Bash(services/conduit/CUDA/bin/ollama:*)",
+      "Bash(./bin/ollama:*)",
+      "Bash(export:*)",
+      "WebFetch(domain:ollama.com)",
+      "Bash(npm run:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   },

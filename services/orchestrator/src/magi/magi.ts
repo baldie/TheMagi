@@ -1,7 +1,6 @@
 import path from 'path';
 import { Model } from '../config';
 import { logger } from '../logger';
-import { MAGI_MANIFESTO } from './magi_manifesto';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { Planner, PlanStep } from './planner';
@@ -52,7 +51,7 @@ export class Magi extends ConduitClient {
   private personalityPrompt: string = '';
   private status: 'available' | 'busy' | 'offline' = 'offline';
   private toolUser: ToolUser;
-  private planner: Planner;
+  public planner: Planner;
   
   constructor(public name: MagiName, private config: MagiConfig) {
     super(name);
@@ -93,20 +92,16 @@ export class Magi extends ConduitClient {
     return this.status;
   }
 
-  async performIndependentAnalysis(topic: string): Promise<string> {
+  async performIndependentAnalysis(inquiry: string): Promise<string> {
     try {
-      logger.info(`${this.name} beginning independent analysis for: ${topic}`);
+      logger.info(`${this.name} beginning independent analysis for: ${inquiry}`);
       
-      // Step 1: Generate analysis plan
-      const plan = await this.planner.generateAnalysisPlan(topic);
-      logger.debug(`${this.name} generated analysis plan:`, { plan });
-      
-      // Step 2: Execute the plan step by step
-      const analysisResult = await this.planner.executePlan(plan, topic);
+      // Step 1: Execute the plan step by step
+      const analysisResult = await this.planner.executePlan(this.planner.getInitialPlan(), inquiry);
       logger.debug(`${this.name} completed plan execution`);
       
-      // Step 3: Synthesize final response
-      const finalResponse = await this.planner.synthesizeResponse(analysisResult, topic);
+      // Step 2: Synthesize final response
+      const finalResponse = await this.planner.synthesizeResponse(analysisResult, inquiry);
       logger.info(`${this.name} completed independent analysis`);
       
       return finalResponse;
@@ -120,19 +115,8 @@ export class Magi extends ConduitClient {
   /**
    * Expose parsePlanSteps for testing - delegates to Planner
    */
-  public parsePlanSteps(planResponse: string): PlanStep[] {
-    return this.planner.parsePlanSteps(planResponse);
-  }
-
-  /**
-   * Expose identifyRequiredTool for testing - delegates to ToolUser
-   * @deprecated This method should be replaced with the new tool architecture
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, no-unused-vars
-  public identifyRequiredTool(_step: string): string | null {
-    // For backward compatibility with tests, return null since the new architecture
-    // uses getAvailableTools() instead of step-based tool identification
-    return null;
+  public async parsePlanSteps(planResponse: string): Promise<PlanStep[]> {
+    return await this.planner.parsePlanSteps(planResponse);
   }
 
   /**
@@ -142,12 +126,11 @@ export class Magi extends ConduitClient {
    */
   async contact(userPrompt: string): Promise<string> {
     this.status = 'busy';
-    const systemPrompt = `${MAGI_MANIFESTO}\n\n${this.getPersonality()}`;
-
+    
     try {
       const response = await super.contact(
         userPrompt,
-        systemPrompt,
+        this.getPersonality(),
         this.config.model,
         this.config.options
       );

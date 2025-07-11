@@ -24,12 +24,15 @@ async function retry<T>(
 async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
 
-  // Process models in parallel using their new agentic analysis capabilities
-  const [balthazarResponse, melchiorResponse, casparResponse] = await Promise.all([
-    retry(() => balthazar.performIndependentAnalysis(inquiry)),
-    retry(() => melchior.performIndependentAnalysis(inquiry)),
-    retry(() => caspar.performIndependentAnalysis(inquiry))
-  ]);
+  // Process models sequentially to avoid network errors
+  logger.info('Running Balthazar analysis...');
+  const balthazarResponse = await retry(() => balthazar.performIndependentAnalysis(inquiry));
+  
+  logger.info('Running Melchior analysis...');
+  const melchiorResponse = await retry(() => melchior.performIndependentAnalysis(inquiry));
+  
+  logger.info('Running Caspar analysis...');
+  const casparResponse = await retry(() => caspar.performIndependentAnalysis(inquiry));
 
   const sealedEnvelope = `
     ---
