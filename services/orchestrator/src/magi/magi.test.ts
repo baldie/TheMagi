@@ -12,6 +12,16 @@ describe('Magi Configuration', () => {
     expect(PERSONAS_CONFIG[MagiName.Melchior].options.temperature).toBe(0.7);
     expect(PERSONAS_CONFIG[MagiName.Caspar].options.temperature).toBe(0.5);
   });
+
+  it('should have initial plan configured', () => {
+    const { InitialPlan } = require('./planner');
+    
+    expect(InitialPlan).toHaveLength(3);
+    expect(InitialPlan[0].description).toContain('Create response plan');
+    expect(InitialPlan[1].description).toContain('Review plan');
+    expect(InitialPlan[2].description).toContain('Create custom plan');
+    expect(InitialPlan.every((step: any) => !step.skipped)).toBe(true);
+  });
 });
 
 describe('Magi parsePlanSteps', () => {
@@ -21,46 +31,68 @@ describe('Magi parsePlanSteps', () => {
     magi = new Magi(MagiName.Balthazar, PERSONAS_CONFIG[MagiName.Balthazar]);
   });
 
-  it('should parse correctly formatted 3-step plan with tools', () => {
+  it('should parse correctly formatted 3-step plan with tools', async () => {
     const planResponse = `
 Here is my analysis plan:
 
-1. I will perform web search [TOOL][web_search] to gather relevant data [ARGS][topic research][data collection]
-2. I will analyze the search results to identify key points
-3. I will develop argument based on the data points found
+{
+  "Step1": {
+    "description": "perform web search to gather relevant data",
+    "tool": {
+      "name": "web_search",
+      "args": ["topic research", "data collection"]
+    }
+  },
+  "Step2": {
+    "description": "analyze the search results to identify key points"
+  },
+  "Step3": {
+    "description": "develop argument based on the data points found"
+  }
+}
 
 I will execute these steps systematically.
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
-    expect(result[0].description).toBe('I will perform web search to gather relevant data');
+    expect(result[0].description).toBe('perform web search to gather relevant data');
     expect(result[0].requiresTool).toBe(true);
     expect(result[0].toolName).toBe('web_search');
-    expect(result[0].toolArguments).toEqual({"arguments": ["topic research", "data collection"]});
+    expect(result[0].toolArguments).toEqual(["topic research", "data collection"]);
     
-    expect(result[1].description).toBe('I will analyze the search results to identify key points');
+    expect(result[1].description).toBe('analyze the search results to identify key points');
     expect(result[1].requiresTool).toBe(false);
     expect(result[1].toolName).toBeUndefined();
     expect(result[1].toolArguments).toBeUndefined();
     
-    expect(result[2].description).toBe('I will develop argument based on the data points found');
+    expect(result[2].description).toBe('develop argument based on the data points found');
     expect(result[2].requiresTool).toBe(false);
     expect(result[2].toolName).toBeUndefined();
     expect(result[2].toolArguments).toBeUndefined();
   });
 
-  it('should parse plan with tool bypass', () => {
+  it('should parse plan with tool bypass', async () => {
     const planResponse = `
 My approach:
 
-1) Research the topic thoroughly
-2) Evaluate different perspectives
-3) Synthesize findings into coherent response
+{
+  "Step1": {
+    "description": "Research the topic thoroughly"
+  },
+  "Step2": {
+    "description": "Evaluate different perspectives"
+  },
+  "Step3": {
+    "description": "Synthesize findings into coherent response"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
     expect(result[0].description).toBe('Research the topic thoroughly');
@@ -71,59 +103,79 @@ My approach:
     expect(result[2].requiresTool).toBe(false);
   });
 
-  it('should handle mixed formatting and incomplete tool info', () => {
+  it('should handle mixed formatting and incomplete tool info', async () => {
     const planResponse = `
 I will approach this systematically:
 
-1. First, I'll gather relevant information [TOOL][web_search] [ARGS][relevant information]
-2. Then I'll analyze the data carefully
-Some explanation here...
-3. Finally, I'll develop my response
+{
+  "Step1": {
+    "description": "gather relevant information",
+    "tool": {
+      "name": "web_search",
+      "args": ["relevant information"]
+    }
+  },
+  "Step2": {
+    "description": "analyze the data carefully"
+  },
+  "Step3": {
+    "description": "develop my response"
+  }
+}
 
 This is my complete plan.
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
-    expect(result[0].description).toBe("First, I'll gather relevant information");
+    expect(result[0].description).toBe("gather relevant information");
     expect(result[0].requiresTool).toBe(true);
     expect(result[0].toolName).toBe("web_search");
-    expect(result[0].toolArguments).toEqual({"arguments": ["relevant information"]});
-    expect(result[1].description).toBe("Then I'll analyze the data carefully");
+    expect(result[0].toolArguments).toEqual(["relevant information"]);
+    expect(result[1].description).toBe("analyze the data carefully");
     expect(result[1].requiresTool).toBe(false);
-    expect(result[2].description).toBe("Finally, I'll develop my response");
+    expect(result[2].description).toBe("develop my response");
     expect(result[2].requiresTool).toBe(false);
   });
 
-  it('should return skipped steps when no numbered steps are found', () => {
+  it('should return default plan when no JSON is found', async () => {
     const planResponse = `
 I think we should start by looking at the data.
 Then we need to consider various options.
 Finally, we should make a decision.
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
-    expect(result[0].description).toBe('Step 1: [Not provided - skipped]');
+    expect(result[0].description).toBe('respond with the answer to the simple question');
     expect(result[0].requiresTool).toBe(false);
-    expect(result[0].skipped).toBe(true);
-    expect(result[1].description).toBe('Step 2: [Not provided - skipped]');
+    expect(result[0].skipped).toBe(false);
+    expect(result[1].description).toBe('');
     expect(result[1].requiresTool).toBe(false);
     expect(result[1].skipped).toBe(true);
-    expect(result[2].description).toBe('Step 3: [Not provided - skipped]');
+    expect(result[2].description).toBe('');
     expect(result[2].requiresTool).toBe(false);
     expect(result[2].skipped).toBe(true);
   });
 
-  it('should return skipped steps when fewer than 3 steps are found', () => {
+  it('should return skipped steps when fewer than 3 steps are found', async () => {
     const planResponse = `
-1. Do some research
-2. Make a conclusion
+{
+  "Step1": {
+    "description": "Do some research"
+  },
+  "Step2": {
+    "description": "Make a conclusion"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
     expect(result[0].description).toBe('Do some research');
@@ -137,33 +189,47 @@ Finally, we should make a decision.
     expect(result[2].skipped).toBe(true);
   });
 
-  it('should handle empty or whitespace-only response', () => {
+  it('should handle empty or whitespace-only response', async () => {
     const planResponse = '   \n\n   ';
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
-    expect(result[0].description).toBe('Step 1: [Not provided - skipped]');
+    expect(result[0].description).toBe('respond with the answer to the simple question');
     expect(result[0].requiresTool).toBe(false);
-    expect(result[0].skipped).toBe(true);
-    expect(result[1].description).toBe('Step 2: [Not provided - skipped]');
+    expect(result[0].skipped).toBe(false);
+    expect(result[1].description).toBe('');
     expect(result[1].requiresTool).toBe(false);
     expect(result[1].skipped).toBe(true);
-    expect(result[2].description).toBe('Step 3: [Not provided - skipped]');
+    expect(result[2].description).toBe('');
     expect(result[2].requiresTool).toBe(false);
     expect(result[2].skipped).toBe(true);
   });
 
-  it('should ignore steps numbered beyond 3', () => {
+  it('should ignore steps numbered beyond 3', async () => {
     const planResponse = `
-1. First step
-2. Second step
-3. Third step
-4. Fourth step should be ignored
-5. Fifth step should also be ignored
+{
+  "Step1": {
+    "description": "First step"
+  },
+  "Step2": {
+    "description": "Second step"
+  },
+  "Step3": {
+    "description": "Third step"
+  },
+  "Step4": {
+    "description": "Fourth step should be ignored"
+  },
+  "Step5": {
+    "description": "Fifth step should also be ignored"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
     expect(result[0].description).toBe('First step');
@@ -174,52 +240,89 @@ Finally, we should make a decision.
     expect(result[2].requiresTool).toBe(false);
   });
 
-  it('should handle invalid JSON in tool arguments gracefully', () => {
+  it('should handle invalid JSON gracefully', async () => {
     const planResponse = `
-1. Search for information [TOOL][web_search] [ARGS][invalid][malformed args]
-2. Analyze without tools
-3. Synthesize results
+{
+  "Step1": {
+    "description": "Search for information",
+    "tool": {
+      "name": "web_search",
+      "args": ["invalid", "malformed args"]
+    }
+  },
+  "Step2": {
+    "description": "Analyze without tools"
+  },
+  "Step3": {
+    "description": "Synthesize results"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
     expect(result[0].description).toBe('Search for information');
     expect(result[0].requiresTool).toBe(true);
     expect(result[0].toolName).toBe('web_search');
-    expect(result[0].toolArguments).toEqual({"arguments": ["invalid", "malformed args"]});
+    expect(result[0].toolArguments).toEqual(["invalid", "malformed args"]);
   });
 
-  it('should handle mixed case tool names and arguments', () => {
+  it('should handle mixed case tool names and arguments', async () => {
     const planResponse = `
-1. Search for information [TOOL][WEB_SEARCH] [ARGS][test][10]
-2. Analyze data
-3. Final step [TOOL][data_analysis] [ARGS][results][summary]
+{
+  "Step1": {
+    "description": "Search for information",
+    "tool": {
+      "name": "WEB_SEARCH",
+      "args": ["test", "10"]
+    }
+  },
+  "Step2": {
+    "description": "Analyze data"
+  },
+  "Step3": {
+    "description": "Final step"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
     expect(result[0].requiresTool).toBe(true);
     expect(result[0].toolName).toBe('WEB_SEARCH');
-    expect(result[0].toolArguments).toEqual({"arguments": ["test", "10"]});
+    expect(result[0].toolArguments).toEqual(["test", "10"]);
     expect(result[1].requiresTool).toBe(false);
-    expect(result[2].requiresTool).toBe(true);
-    expect(result[2].toolName).toBe('data_analysis');
-    expect(result[2].toolArguments).toEqual({"arguments": ["results", "summary"]});
+    expect(result[2].requiresTool).toBe(false);
   });
 
-  it('should handle [SKIP] format for steps that are not needed', () => {
+  it('should handle [SKIP] format for steps that are not needed', async () => {
     const planResponse = `
-1. I will gather information [TOOL][web_search] [ARGS][topic info]
-2. [SKIP] This analysis step is not needed for this simple query
-3. I will synthesize the final response
+{
+  "Step1": {
+    "description": "gather information",
+    "tool": {
+      "name": "web_search",
+      "args": ["topic info"]
+    }
+  },
+  "Step2": {
+    "description": "[SKIP] This analysis step is not needed for this simple query"
+  },
+  "Step3": {
+    "description": "synthesize the final response"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
-    expect(result[0].description).toBe('I will gather information');
+    expect(result[0].description).toBe('gather information');
     expect(result[0].requiresTool).toBe(true);
     expect(result[0].toolName).toBe('web_search');
     expect(result[0].skipped).toBe(false);
@@ -228,29 +331,86 @@ Finally, we should make a decision.
     expect(result[1].requiresTool).toBe(false);
     expect(result[1].skipped).toBe(true);
     
-    expect(result[2].description).toBe('I will synthesize the final response');
+    expect(result[2].description).toBe('synthesize the final response');
     expect(result[2].requiresTool).toBe(false);
     expect(result[2].skipped).toBe(false);
   });
 
-  it('should handle mixed [SKIP] and regular steps', () => {
+  it('should handle mixed [SKIP] and regular steps', async () => {
     const planResponse = `
-1. [SKIP] No initial research needed
-2. I will analyze the provided data [TOOL][analysis] [ARGS][data]
-3. [SKIP] No tool verification required
+{
+  "Step1": {
+    "description": "analyze the provided data",
+    "tool": {
+      "name": "analysis",
+      "args": ["data"]
+    }
+  },
+  "Step2": {
+    "description": "[SKIP] No additional analysis needed"
+  },
+  "Step3": {
+    "description": "[SKIP] No tool verification required"
+  }
+}
     `.trim();
 
-    const result = magi.parsePlanSteps(planResponse);
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
     
     expect(result).toHaveLength(3);
-    expect(result[0].skipped).toBe(true);
-    expect(result[0].description).toBe('No initial research needed');
+    expect(result[0].skipped).toBe(false);
+    expect(result[0].requiresTool).toBe(true);
+    expect(result[0].toolName).toBe('analysis');
+    expect(result[0].description).toBe('analyze the provided data');
     
-    expect(result[1].skipped).toBe(false);
-    expect(result[1].requiresTool).toBe(true);
-    expect(result[1].toolName).toBe('analysis');
+    expect(result[1].skipped).toBe(true);
+    expect(result[1].requiresTool).toBe(false);
+    expect(result[1].description).toBe('No additional analysis needed');
     
     expect(result[2].skipped).toBe(true);
+    expect(result[2].requiresTool).toBe(false);
     expect(result[2].description).toBe('No tool verification required');
+  });
+
+  it('should handle JSON wrapped in markdown code blocks', async () => {
+    const planResponse = `
+Here is my analysis plan:
+
+\`\`\`json
+{
+  "Step1": {
+    "description": "search for information about the topic",
+    "tool": {
+      "name": "web-search",
+      "args": ["topic information", "research data"]
+    }
+  },
+  "Step2": {
+    "description": "analyze the search results"
+  },
+  "Step3": {
+    "description": "synthesize findings into a response"
+  }
+}
+\`\`\`
+
+This plan will help me address the inquiry systematically.
+    `.trim();
+
+    const formattedJSON = await magi.planner.reviewPlan(planResponse);
+    const result = await magi.parsePlanSteps(formattedJSON);
+    
+    expect(result).toHaveLength(3);
+    expect(result[0].description).toBe('search for information about the topic');
+    expect(result[0].requiresTool).toBe(true);
+    expect(result[0].toolName).toBe('web-search');
+    expect(result[0].toolArguments).toEqual(["topic information", "research data"]);
+    
+    expect(result[1].description).toBe('analyze the search results');
+    expect(result[1].requiresTool).toBe(false);
+    
+    expect(result[2].description).toBe('synthesize findings into a response');
+    expect(result[2].requiresTool).toBe(false);
   });
 });

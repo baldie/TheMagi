@@ -48,16 +48,21 @@ export class ConduitClient {
     options: ConduitRequestOptions
   ): Promise<string> {
     const requestData = this.buildRequestData(userPrompt, systemPrompt, model, options);
+    const startTime = Date.now();
 
     try {
       const response = await axios.post<ConduitResponse>(
         `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
         requestData,
-        { timeout: 300000 } // 5-minute timeout
+        { timeout: 60000 } // 1-minute timeout
       );
 
+      const duration = Date.now() - startTime;
+      logger.info(`${this.magiName} conduit contact took ${duration}ms`);
       return response.data.response;
     } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.info(`${this.magiName} conduit contact failed after ${duration}ms`);
       return this.handleError(error);
     }
   }

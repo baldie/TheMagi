@@ -305,7 +305,7 @@ else
     
     # Download and extract Ollama with GPU support
     echo "    Downloading Ollama (this may take a few minutes)..."
-    curl -L https://github.com/ollama/ollama/releases/download/v0.5.2/ollama-linux-amd64.tgz -o ollama.tgz
+    curl -L https://github.com/ollama/ollama/releases/download/v0.9.6/ollama-linux-amd64.tgz -o ollama.tgz
     if [ $? -ne 0 ]; then
         echo "[ERROR] Failed to download Ollama. Please check your internet connection."
         cd ..
@@ -387,11 +387,16 @@ if [ $? -ne 0 ]; then
     echo "          Run: $OLLAMA_BIN pull mistral:latest"
 fi
 
-echo "    Downloading Gemma model..."
-timeout 600 $OLLAMA_BIN pull gemma:latest
-if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Gemma model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull gemma:latest"
+echo "    Downloading Gemma 3 4B model..."
+timeout 600 $OLLAMA_BIN pull gemma3:4b
+if [ $? -eq 0 ]; then
+    # Tag as 'gemma' for compatibility with existing config
+    $OLLAMA_BIN tag gemma3:4b gemma
+    $OLLAMA_BIN rm gemma3:4b
+    echo "    [OK] Gemma 3 4B model installed and tagged as 'gemma'"
+else
+    echo "[WARNING] Failed to download Gemma 3 model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull gemma3:4b && $OLLAMA_BIN tag gemma3:4b gemma"
 fi
 
 echo "    Downloading Llama2 model..."
@@ -544,7 +549,7 @@ fi
 if echo "$MODELS_OUTPUT" | grep -q "gemma"; then
     echo "    [OK] Gemma model available."
 else
-    echo "[WARNING] Gemma model not found. Download with: $OLLAMA_BIN pull gemma"
+    echo "[WARNING] Gemma model not found. Download with: $OLLAMA_BIN pull gemma3:4b && $OLLAMA_BIN tag gemma3:4b gemma"
 fi
 
 if echo "$MODELS_OUTPUT" | grep -q "llama2"; then

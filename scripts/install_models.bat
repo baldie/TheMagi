@@ -11,13 +11,18 @@ if errorlevel 1 (
 )
 
 echo.
-echo Installing gemma...
-wsl -e ollama pull gemma
+echo Installing gemma3:4b...
+wsl -e ollama pull gemma3:4b
 if errorlevel 1 (
-    echo Failed to install gemma model.
+    echo Failed to install gemma3 model.
     pause
     exit /b 1
 )
+
+echo.
+echo Tagging gemma3:4b as gemma for compatibility...
+wsl -e ollama tag gemma3:4b gemma
+wsl -e ollama rm gemma3:4b
 
 echo.
 echo Installing mistral...

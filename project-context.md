@@ -3,7 +3,7 @@ description: Understanding the background of this project
 globs: 
 alwaysApply: false
 ---
-![Magi UI](mdc:../../magi_ui.png)
+![Magi UI](mdc:./magi_ui.png)
 
 ### ---
 
@@ -11,7 +11,7 @@ alwaysApply: false
 
 * **Version:** 1.1
 * **Date:** June 20, 2025  
-* **Author:** AI Product Manager
+* **Author:** David Baldie
 
 ### **1\. Vision & Core Concept**
 
@@ -32,18 +32,18 @@ alwaysApply: false
 
 The system is comprised of three AI agents, each with a distinct personality, voice, and area of expertise, named after the Three Wise Men.
 
-* **Balthazar (Coach) Llama 2**  
+* **Balthazar (Coach) Llama 3.2 3B**  
   * **Voice:** Male.  
   * **Core Trait:** Highly logical, disciplined, data-driven, and focused on pushing the user to reach ambitious long-term goals, as well as personal and professional growth.  
   * **Domain:** Career, finance, fitness, strategic planning, and long term success of the human.  
   * **Data Access:** Internet access, long term goals, user's calendar.  
   * **Information Sources:** Prioritizes reputable sources like academic research, established news outlets, and analyst reports.  
-* **Melchior (The Oracle) Gemma**  
+* **Melchior (The Oracle) Gemma 3 7B**  
   * **Voice:** Female.  
   * **Core Trait:** Intuitive, empathetic, and looks out for the user's well-being, comfort, mental health, and personal relationships.  
   * **Domain:** Emotional well-being, physical and mental health, personal relationships, and inner growth.  
   * **Data Access:** The only Magi with access to highly sensitive personal data (e.g., journal entries, mood tracking, health metrics) with no direct internet access.  
-* **Caspar (The Synthesizer) Mistral**  
+* **Caspar (The Synthesizer) Qwen2.5-VL 7B**  
   * **Voice:** Unisex.  
   * **Core Trait:** Resourceful, practical, and focused on tangible solutions and immediate actionable steps. Acts as the primary orchestrator and interface23.  
   * **Domain:** Smart home device access, daily routines, practical problem-solving, and technology.  

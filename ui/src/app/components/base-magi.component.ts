@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 
-export type MagiStatus = 'offline' | 'busy' | 'evailable';
+export type MagiStatus = 'offline' | 'busy' | 'available';
 
 export type MagiHealth = {
   status: 'available' | 'busy' | 'error';
