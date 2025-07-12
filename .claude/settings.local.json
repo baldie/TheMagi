@@ -69,7 +69,8 @@
       "Bash(export:*)",
       "WebFetch(domain:ollama.com)",
       "Bash(npm run:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(ollama pull:*)"
     ],
     "deny": []
   },

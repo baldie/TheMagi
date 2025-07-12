@@ -27,7 +27,7 @@ interface MagiConfig {
  */
 export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
-    model: Model.Llama2,
+    model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
     options: { temperature: 0.3 },
   },
@@ -37,7 +37,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     options: { temperature: 0.7 },
   },
   [MagiName.Caspar]: {
-    model: Model.Mistral,
+    model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
     options: { temperature: 0.5 },
   },

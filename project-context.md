@@ -26,7 +26,7 @@ alwaysApply: false
   * **Collaborative Decision-Making:** The Magi personas discuss and debate internally to provide high-quality, applicable advice.  
   * **Proactive & Adaptive:** The system learns from user behavior and feedback to anticipate needs and refine its interactions over time.  
   * **Human-Centric:** Designed to augment user autonomy, not replace it.  
-  * **Cost-Effective:** Leverages free and open-source LLM models like **Llama 2, Gemma, and Mistral**, which are small enough to be run locally using a single consumer GPU.
+  * **Cost-Effective:** Leverages free and open-source LLM models like **Llama 3.2, Gemma, and Qwen2.5**, which are small enough to be run locally using a single consumer GPU.
 
 ### **2\. The Magi: Personalities, Roles & Names**
 

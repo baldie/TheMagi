@@ -70,14 +70,14 @@ echo "[Magi System] Verifying AI models..."
 MODELS_OUTPUT=$(OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_CMD list 2>/dev/null)
 MISSING_MODELS=""
 
-if ! echo "$MODELS_OUTPUT" | grep -q "mistral"; then
-    MISSING_MODELS="$MISSING_MODELS mistral"
+if ! echo "$MODELS_OUTPUT" | grep -q "qwen2.5vl:3b"; then
+    MISSING_MODELS="$MISSING_MODELS qwen2.5vl:3b"
 fi
-if ! echo "$MODELS_OUTPUT" | grep -q "gemma"; then
-    MISSING_MODELS="$MISSING_MODELS gemma"
+if ! echo "$MODELS_OUTPUT" | grep -q "gemma3:4b"; then
+    MISSING_MODELS="$MISSING_MODELS gemma3:4b"
 fi
-if ! echo "$MODELS_OUTPUT" | grep -q "llama2"; then
-    MISSING_MODELS="$MISSING_MODELS llama2"
+if ! echo "$MODELS_OUTPUT" | grep -q "llama3.2:3b-instruct-q8_0"; then
+    MISSING_MODELS="$MISSING_MODELS llama3.2:3b-instruct-q8_0"
 fi
 
 if [ -n "$MISSING_MODELS" ]; then

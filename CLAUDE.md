@@ -8,7 +8,7 @@ More detail on the project can be found in the [project-context.md](project-cont
 
 The system follows a microservices architecture:
 
-1. **Orchestrator** (`services/orchestrator/`): Main service that coordinates deliberation between three AI personas using different models (Mistral, Gemma, Llama2)
+1. **Orchestrator** (`services/orchestrator/`): Main service that coordinates deliberation between three AI personas using different models (Qwen2.5, Gemma, Llama3.2)
 2. **Conduit** (`services/conduit/`): Wrapper service around Ollama API for AI model communication
 3. **UI** (`ui/`): Angular 20 frontend that communicates via WebSocket to the orchestrator and displays status of the system visually to the user
 4. **TTS Service** (`services/tts/`): Python-based text-to-speech service
@@ -23,9 +23,9 @@ The system follows a microservices architecture:
 ## Key Components
 
 ### Magi Personas
-- **Caspar** (Mistral): primary voice for responses
+- **Caspar** (Qwen2.5): primary voice for responses
 - **Melchior** (Gemma): creative/intuitive perspective  
-- **Balthazar** (Llama2): logical/analytical perspective
+- **Balthazar** (Llama3.2): logical/analytical perspective
 
 Each persona has its own personality file in `services/orchestrator/src/magi/personalities/`
 

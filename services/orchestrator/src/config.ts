@@ -4,9 +4,9 @@
 
 /** Enum for the LLM models used */
 export enum Model {
-  Llama2 = 'llama2',
-  Gemma = 'gemma',
-  Mistral = 'mistral',
+  Llama = 'llama3.2:3b-instruct-q8_0',
+  Gemma = 'gemma3:4b',
+  Qwen = 'qwen2.5vl:3b',
 }
 
 /** Base URL for the Magi Conduit API (powered by Ollama) */
@@ -18,7 +18,7 @@ export const TTS_API_BASE_URL = 'http://localhost:8000';
 /**
  * Required models for the system to function
  */
-export const REQUIRED_MODELS = [Model.Llama2, Model.Gemma, Model.Mistral];
+export const REQUIRED_MODELS = [Model.Llama, Model.Gemma, Model.Qwen];
 
 /** Configuration for logging levels */
 export const LOG_LEVELS = {
