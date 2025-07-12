@@ -8,8 +8,8 @@ describe('Magi Configuration', () => {
   });
 
   it('should have correct temperature settings', () => {
-    expect(PERSONAS_CONFIG[MagiName.Balthazar].options.temperature).toBe(0.3);
-    expect(PERSONAS_CONFIG[MagiName.Melchior].options.temperature).toBe(0.7);
+    expect(PERSONAS_CONFIG[MagiName.Balthazar].options.temperature).toBe(0.4);
+    expect(PERSONAS_CONFIG[MagiName.Melchior].options.temperature).toBe(0.6);
     expect(PERSONAS_CONFIG[MagiName.Caspar].options.temperature).toBe(0.5);
   });
 
