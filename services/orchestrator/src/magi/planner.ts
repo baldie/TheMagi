@@ -90,10 +90,9 @@ export class Planner {
     Should you decide the inquiry warrants use of a tool, you may include that tool in step 1.
     The tool name must match the name of the one of the tools you have access to.
     You can provide one or more arguments to the tool in the "args" array.
-    You have access to the following tools:
+    Here are the tools you have access to:
     ${this.toolsList}
-    Only respond with the properly formatted JSON of your 3 step plan.
-
+    
     Below are examples of different inquiries and how your plan should look:
     
     INQUIRY: "Suggest a meal for dinner"`;
@@ -181,7 +180,8 @@ export class Planner {
     ${DEFAULT_PLAN_JSON}
     \`\`\`
 
-    Now ${this.magiName}, answer the following inquiry based on how the above questions were handled
+    Now ${this.magiName}, what would be your plan for responding to the following inquiry based on how the above questions were handled?
+    Only respond with the JSON plan, do not include any other text.
 
     INQUIRY: "${inquiry}"`;
     

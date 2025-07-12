@@ -29,15 +29,15 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
-    options: { temperature: 0.3 },
+    options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
-    model: Model.Gemma,
+    model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
-    options: { temperature: 0.7 },
+    options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
-    model: Model.Qwen,
+    model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
     options: { temperature: 0.5 },
   },
@@ -131,6 +131,25 @@ export class Magi extends ConduitClient {
       const response = await super.contact(
         userPrompt,
         this.getPersonality(),
+        this.config.model,
+        this.config.options
+      );
+      
+      this.status = 'available';
+      return response;
+    } catch (error) {
+      this.status = 'available';
+      throw error;
+    }
+  }
+
+  async contactWithoutPersonality(userPrompt: string): Promise<string> {
+    this.status = 'busy';
+      
+    try {
+      const response = await super.contact(
+        userPrompt,
+        '',
         this.config.model,
         this.config.options
       );
