@@ -380,30 +380,25 @@ fi
 echo "  - Downloading required AI models (this may take several minutes)..."
 echo "    Note: Models will be stored in $MODELS_DIR"
 
-echo "    Downloading Mistral model..."
-timeout 600 $OLLAMA_BIN pull mistral:latest
+echo "    Downloading Qwen2.5 7B model..."
+timeout 600 $OLLAMA_BIN pull qwen2.5:7b-instruct-q6_k
 if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Mistral model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull mistral:latest"
+    echo "[WARNING] Failed to download Qwen2.5 model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull qwen2.5:7b-instruct-q6_k"
 fi
 
-echo "    Downloading Gemma 3 4B model..."
-timeout 600 $OLLAMA_BIN pull gemma3:4b
-if [ $? -eq 0 ]; then
-    # Tag as 'gemma' for compatibility with existing config
-    $OLLAMA_BIN tag gemma3:4b gemma
-    $OLLAMA_BIN rm gemma3:4b
-    echo "    [OK] Gemma 3 4B model installed and tagged as 'gemma'"
-else
-    echo "[WARNING] Failed to download Gemma 3 model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull gemma3:4b && $OLLAMA_BIN tag gemma3:4b gemma"
+echo "    Downloading Gemma3n E2B model..."
+timeout 600 $OLLAMA_BIN pull gemma3n:e2b
+if [ $? -ne 0 ]; then
+    echo "[WARNING] Failed to download Gemma3n model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull gemma3n:e2b"
 fi
 
-echo "    Downloading Llama2 model..."
-timeout 600 $OLLAMA_BIN pull llama2:latest
+echo "    Downloading Llama3.2 3B model..."
+timeout 600 $OLLAMA_BIN pull llama3.2:3b
 if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Llama2 model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull llama2:latest"
+    echo "[WARNING] Failed to download Llama3.2 model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull llama3.2:3b"
 fi
 
 echo "  - Verifying model installations..."
@@ -411,7 +406,7 @@ AVAILABLE_MODELS=$($OLLAMA_BIN list 2>/dev/null)
 echo "$AVAILABLE_MODELS"
 
 # Test GPU functionality if models are available
-if echo "$AVAILABLE_MODELS" | grep -q "llama2\|mistral\|gemma"; then
+if echo "$AVAILABLE_MODELS" | grep -q "llama3.2\|qwen2.5\|gemma3n"; then
     echo "  - Testing GPU acceleration..."
     
     # Get a quick test to see if GPU is being used
@@ -540,22 +535,22 @@ fi
 # Test if models are available
 echo "  - Verifying AI models are downloaded..."
 MODELS_OUTPUT=$($OLLAMA_BIN list 2>/dev/null)
-if echo "$MODELS_OUTPUT" | grep -q "mistral"; then
-    echo "    [OK] Mistral model available."
+if echo "$MODELS_OUTPUT" | grep -q "qwen2.5"; then
+    echo "    [OK] Qwen2.5 model available."
 else
-    echo "[WARNING] Mistral model not found. Download with: $OLLAMA_BIN pull mistral"
+    echo "[WARNING] Qwen2.5 model not found. Download with: $OLLAMA_BIN pull qwen2.5:7b-instruct-q6_k"
 fi
 
-if echo "$MODELS_OUTPUT" | grep -q "gemma"; then
-    echo "    [OK] Gemma model available."
+if echo "$MODELS_OUTPUT" | grep -q "gemma3n"; then
+    echo "    [OK] Gemma3n model available."
 else
-    echo "[WARNING] Gemma model not found. Download with: $OLLAMA_BIN pull gemma3:4b && $OLLAMA_BIN tag gemma3:4b gemma"
+    echo "[WARNING] Gemma3n model not found. Download with: $OLLAMA_BIN pull gemma3n:e2b"
 fi
 
-if echo "$MODELS_OUTPUT" | grep -q "llama2"; then
-    echo "    [OK] Llama2 model available."
+if echo "$MODELS_OUTPUT" | grep -q "llama3.2"; then
+    echo "    [OK] Llama3.2 model available."
 else
-    echo "[WARNING] Llama2 model not found. Download with: $OLLAMA_BIN pull llama2"
+    echo "[WARNING] Llama3.2 model not found. Download with: $OLLAMA_BIN pull llama3.2:3b"
 fi
 
 # Test TypeScript compilation

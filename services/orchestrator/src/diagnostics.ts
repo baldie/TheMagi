@@ -175,7 +175,7 @@ async function ensureMagiConduitReady(): Promise<void> {
   logger.info('Verifying access to LLM models via Magi Conduit...');
   try {
     const response = await axios.get(`${MAGI_CONDUIT_API_BASE_URL}/api/tags`);
-    const availableModels = response.data.models.map((m: { name: string }) => m.name.split(':')[0]);
+    const availableModels = response.data.models.map((m: { name: string }) => m.name);
     
     // Detailed logging to see what models are being reported by the API
     logger.debug('Models reported by Magi Conduit API:', response.data.models.map((m: {name: string}) => m.name));

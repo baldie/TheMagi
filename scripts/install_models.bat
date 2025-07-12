@@ -2,10 +2,10 @@
 echo Installing required Ollama models...
 
 echo.
-echo Installing llama2...
-wsl -e ollama pull llama2
+echo Installing llama3.2:3b-instruct-q8_0...
+wsl -e ollama pull llama3.2:3b-instruct-q8_0
 if errorlevel 1 (
-    echo Failed to install llama2 model.
+    echo Failed to install llama3.2:3b-instruct-q8_0 model.
     pause
     exit /b 1
 )
@@ -14,21 +14,16 @@ echo.
 echo Installing gemma3:4b...
 wsl -e ollama pull gemma3:4b
 if errorlevel 1 (
-    echo Failed to install gemma3 model.
+    echo Failed to install gemma3:4b model.
     pause
     exit /b 1
 )
 
 echo.
-echo Tagging gemma3:4b as gemma for compatibility...
-wsl -e ollama tag gemma3:4b gemma
-wsl -e ollama rm gemma3:4b
-
-echo.
-echo Installing mistral...
-wsl -e ollama pull mistral
+echo Installing qwen2.5vl:3b...
+wsl -e ollama pull qwen2.5vl:3b
 if errorlevel 1 (
-    echo Failed to install mistral model.
+    echo Failed to install qwen2.5vl:3b model.
     pause
     exit /b 1
 )

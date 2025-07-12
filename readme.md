@@ -22,9 +22,9 @@
 
 A personal, omnipresent Artificial Intelligence system, built to serve a human as a board of directors for decisions large and small.
 
-* Caspar - Mistral
-* Melchior - Gemma
-* Balthazar - Llama2
+* Caspar - qwen2.5vl:3b
+* Melchior - gemma3:4b
+* Balthazar - llama3.2:3b-instruct-q8_0
 
 To run, clone the repo, launch a terminal and run:
 
