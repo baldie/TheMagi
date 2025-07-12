@@ -23,8 +23,8 @@ The system follows a microservices architecture:
 ## Key Components
 
 ### Magi Personas
-- **Caspar** (Qwen2.5): primary voice for responses
-- **Melchior** (Gemma): creative/intuitive perspective  
+- **Caspar** (Gemma): primary voice for responses
+- **Melchior** (Qwen2.5): creative/intuitive perspective  
 - **Balthazar** (Llama3.2): logical/analytical perspective
 
 Each persona has its own personality file in `services/orchestrator/src/magi/personalities/`

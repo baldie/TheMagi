@@ -78,18 +78,22 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
         `${sealedEnvelope}\n\n**Previous Round ${round - 1} Arguments:**${previousRoundResponses}`;
       
       const debatePrompt = `${currentMagi.name},
-      Review the context below. Your task is to persuade the others if you believe
-      your argument is stronger or concede if their argument is stronger. Append your response.
+      Review the discussion transcript below.
+      Your task is to persuade the other 2 participants of your position
+      if you believe your argument is stronger, concede if their argument is stronger, or express
+      agreement if you are more or less aligned.
 
-      Context:
+      Dsicussion Transcript:
+      --------------------------------
       ${recentContext}
       ${roundResponses}
+      --------------------------------
 
       What is your response? Be very concise.
       `;
       
       const response = await retry(() => currentMagi.contact(debatePrompt));
-      roundResponses += `\n${currentMagi.name}'s Round ${round} Argument:\n${response}\n---`;
+      roundResponses += `\n${currentMagi.name}'s Round ${round} response:\n${response}\n---`;
       logger.info(`${currentMagi.name} has contributed to Round ${round}.`);
     }
 
@@ -101,8 +105,8 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
     
     // For consensus check, only send the latest round responses
     const consensusCheckPrompt = `
-      You will now act as an impartial moderator. After reviewing the latest round of deliberations below,
-      determine if a unanimous consensus has been reached.
+      You will now act as an impartial moderator of a discussion.
+      Review the latest round of deliberations below and determine if an consensus has been reached.
 
       Initial Positions:
       ${sealedEnvelope}
@@ -110,21 +114,23 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       Latest Round ${round} Arguments:
       ${roundResponses}
 
-      If no, respond ONLY with the word "IMPASSE".
-      If yes, respond with the final, agreed-upon recommendation/answer summarized so that it directly answers the inquiry. It is very important that you concise in your summary. Use as few words as possible to convey the outcome, if the user wants you to elaborate they will ask.
+      If there are fundamental disagreements still, respond ONLY with the word "IMPASSE".
+      Otherwise, respond with the final, agreed-upon recommendation/answer summarized so that it directly answers the inquiry.
+      It is very important that you concise in your summary.
+      Use as few words as possible to convey the outcome.
       `;
-    const consensusResult = await retry(() => caspar.contact(consensusCheckPrompt));
+    const consensusResult = await retry(() => caspar.contactWithoutPersonality(consensusCheckPrompt));
 
     if (consensusResult.trim().toUpperCase() !== 'IMPASSE') {
       logger.info(`Consensus reached in Round ${round}.`);
-      return consensusResult; // Return the consensus
+      return consensusResult;
     } else {
       logger.info(`IMPASSE after Round ${round}.`);
       logger.info(`Round ${round}: responses were:\n${roundResponses}`);
     }
   }
 
-  logger.error(`No consensus reached after ${MAX_ROUNDS} rounds. Generating summary of positions.`);
+  logger.info(`No consensus reached after ${MAX_ROUNDS} rounds. Generating summary of positions.`);
   const impasseSummaryPrompt = `
   A unanimous decision could not be reached after ${MAX_ROUNDS} rounds of deliberations. Your
   final task is to impartially summarize all the final positions and present them clearly
@@ -133,9 +139,11 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
   Final Debate Transcript:
   ${debateTranscript}
   
-  Please capture each Magi's final position and present them clearly to the user. Be concise.
+  Please capture each Magi's final position and present them clearly to the user.
+  Be very concise and do not use bullet points, use conversational prose.
+  The user should be able to understand the differing viewpoints and the nature of the impasse.
   `;
-  return await retry(() => caspar.contact(impasseSummaryPrompt));
+  return await retry(() => caspar.contactWithoutPersonality(impasseSummaryPrompt));
 }
 
 async function extractAndStoreMemory(inquiry: string, deliberationTranscript: string, memoryService: MemoryService): Promise<void> {

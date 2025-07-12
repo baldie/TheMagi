@@ -38,12 +38,12 @@ The system is comprised of three AI agents, each with a distinct personality, vo
   * **Domain:** Career, finance, fitness, strategic planning, and long term success of the human.  
   * **Data Access:** Internet access, long term goals, user's calendar.  
   * **Information Sources:** Prioritizes reputable sources like academic research, established news outlets, and analyst reports.  
-* **Melchior (The Oracle) Gemma 3 7B**  
+* **Melchior (The Oracle) Qwen2.5 7B**  
   * **Voice:** Female.  
   * **Core Trait:** Intuitive, empathetic, and looks out for the user's well-being, comfort, mental health, and personal relationships.  
   * **Domain:** Emotional well-being, physical and mental health, personal relationships, and inner growth.  
   * **Data Access:** The only Magi with access to highly sensitive personal data (e.g., journal entries, mood tracking, health metrics) with no direct internet access.  
-* **Caspar (The Synthesizer) Qwen2.5-VL 7B**  
+* **Caspar (The Synthesizer) Gemma 7B**  
   * **Voice:** Unisex.  
   * **Core Trait:** Resourceful, practical, and focused on tangible solutions and immediate actionable steps. Acts as the primary orchestrator and interface23.  
   * **Domain:** Smart home device access, daily routines, practical problem-solving, and technology.  
