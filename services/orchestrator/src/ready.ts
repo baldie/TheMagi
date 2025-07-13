@@ -22,32 +22,35 @@ async function retry<T>(
   }
 }
 
-async function runSealedEnvelopePhase(inquiry: string, memoryService: MemoryService): Promise<string> {
-  logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
+async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
+  logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
 
   // Process models sequentially to avoid network errors
-  logger.info('Running Balthazar analysis...');
-  const balthazarResponse = await retry(() => balthazar.performIndependentAnalysis(inquiry));
+  logger.info('Running Balthazar assessment...');
+  const balthazarResponse = await retry(() => balthazar.performIndependentAssessment(inquiry));
   
-  logger.info('Running Melchior analysis...');
-  const melchiorResponse = await retry(() => melchior.performIndependentAnalysis(inquiry));
+  logger.info('Running Melchior assessment...');
+  const melchiorResponse = await retry(() => melchior.performIndependentAssessment(inquiry));
   
-  logger.info('Running Caspar analysis...');
-  const casparResponse = await retry(() => caspar.performIndependentAnalysis(inquiry));
+  logger.info('Running Caspar assessment...');
+  const casparResponse = await retry(() => caspar.performIndependentAssessment(inquiry));
 
   const sealedEnvelope = `
-    ---
-    Balthazar's Independent Analysis:
-    ${balthazarResponse}
-    ---
-    Melchior's Independent Analysis:
-    ${melchiorResponse}
-    ---
-    Caspar's Independent Analysis:
-    ${casparResponse}
-    ---
-    `;
-  logger.info('Phase 1: "Sealed envelope" created with 3 agentic analyses.');
+    
+--------------------------------------------------------------------------
+Balthazar's Independent assessment:
+${balthazarResponse}
+
+--------------------------------------------------------------------------
+Melchior's Independent assessment:
+${melchiorResponse}
+
+--------------------------------------------------------------------------
+Caspar's Independent assessment:
+${casparResponse}
+--------------------------------------------------------------------------
+
+  `;
   logger.debug(`A peek into the sealed envelope ✉️:\n ${sealedEnvelope}`);
   return sealedEnvelope;
 }
