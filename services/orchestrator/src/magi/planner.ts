@@ -4,39 +4,53 @@ import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { Model } from '../config';
 
+/**
+ * Custom error types for better error handling
+ */
+export class PlanParsingError extends Error {
+  constructor(message: string, public readonly planData?: string) {
+    super(message);
+    this.name = 'PlanParsingError';
+  }
+}
+
+export class StepExecutionError extends Error {
+  constructor(message: string, public readonly stepNumber: number, public readonly stepType?: StepType) {
+    super(message);
+    this.name = 'StepExecutionError';
+  }
+}
+
 export const DEFAULT_PLAN_JSON = 
 `    {
       "Step1": {
-        "description": "respond with the answer to the simple question"
-      },
-      "Step2": {
-        "description": "[SKIP]"
-      },
-      "Step3": {
-        "description": "[SKIP]"
+        "instruction": "respond with the answer to the simple question"
       }
     }`;
+
+/**
+ * Maximum number of steps allowed in a plan to prevent runaway planning
+ */
+const MAX_PLAN_STEPS = 20;
+
+/**
+ * Types of plan steps for execution control
+ */
+export enum StepType {
+  PLAN_CREATION = 'plan_creation',
+  PLAN_EXPANSION = 'plan_expansion',
+  PLAN_EXECUTION = 'plan_execution',
+}
 
 /**
  * Enhanced plan step with tool information
  */
 export interface PlanStep {
-  description: string;
-  requiresTool: boolean;
+  instruction: string;
   toolName?: string;
   toolArguments?: string[];
-  skipped?: boolean;
+  type?: StepType;
 }
-
-/*
- This is the initial plan for all Magi personas.
- Once they get to step 3, this plan expand to include steps from the Magi's plan
-*/
-export const InitialPlan: PlanStep [] = [
-  { description: 'Step1: Create response plan for inquiry', requiresTool: false, skipped: false },
-  { description: 'Step2: Review plan', requiresTool: false, skipped: false },
-  { description: 'Step3: Create custom plan based on review', requiresTool: false, skipped: false }
-];
 
 /**
  * Planner handles plan generation, parsing, and execution for the Magi system.
@@ -52,7 +66,7 @@ export class Planner {
   ) {
     this.toolsList = this.toolUser.getAvailableTools().map(t => {
       const parameterName = t.inputSchema?.parameterName;
-      return `- { "tool": { "name": "${t.name}", "description": "${t.description}", "args": "${parameterName || 'query'}" } }`;
+      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "args": "${parameterName || 'query'}" } }`;
     }).join('\n');
   }
 
@@ -60,22 +74,13 @@ export class Planner {
    * Returns a fresh copy of the initial plan so each Magi has its own copy
    * @returns A new array with the initial plan steps
    */
-  getInitialPlan(): PlanStep[] {
+  static getSeedPlan(): PlanStep[] {
     return [
-      { description: 'Step1: Create response plan for inquiry', requiresTool: false, skipped: false },
-      { description: 'Step2: Review plan', requiresTool: false, skipped: false },
-      { description: 'Step3: Create custom plan based on review', requiresTool: false, skipped: false }
+      { instruction: 'Create response plan for inquiry', type: StepType.PLAN_CREATION },
+      { instruction: 'Execute custom plan', type: StepType.PLAN_EXPANSION }
     ];
   }
 
-  /**
-   * Update the personality prompt - called when the Magi personality is set
-   */
-  setPersonality(personalityPrompt: string): void {
-    this.personalityPrompt = personalityPrompt;
-  }
-
-  private personalityPrompt: string = '';
 
   /**
    * Generate raw LLM response for creating a plan for the given inquiry.
@@ -85,9 +90,10 @@ export class Planner {
   async createResponsePlan(inquiry: string): Promise<string> {
     let prompt = `
     INSTRUCTIONS:
-    Your task is to create a concise 3-step JSON plan of how you will address the inquiry.
-    Make sure your 3 step JSON plan is concise and focused on the inquiry.
-    Should you decide the inquiry warrants use of a tool, you may include that tool in step 1.
+    Your task is to create a concise multi-step plan of how you will address the inquiry.
+    Keep your plan focused and efficient - aim for 3-8 steps maximum, never exceed 15 steps.
+    The output of each step will be fed into the next step.
+    If any of the steps require using a tool, you must specify the tool name and arguments in that step.
     The tool name must match the name of the one of the tools you have access to.
     You can provide one or more arguments to the tool in the "args" array.
     Here are the tools you have access to:
@@ -95,7 +101,7 @@ export class Planner {
     
     Below are examples of different inquiries and how your plan should look:
     
-    INQUIRY: "Suggest a meal for dinner"`;
+    INQUIRY: "What should I make for dinner that is simple and healthy?"`;
 
     // Each Magi will have different tools available to them, so we will tailor the example accordingly
     switch(this.magiName){
@@ -104,20 +110,23 @@ export class Planner {
         \`\`\`json
         {
           "Step1": {
-            "description": "Search the web for dinner related option",
+            "instruction": "Search the web for dinner related option from reputable sources",
             "tool": {
               "name": "web-search",
               "args": [
                 "dinner suggestions",
-                "easy dinners to prepare"
+                "easy meals to prepare"
               ]
             }
           },
           "Step2": {
-            "description": "extract the most relevant meal suggestions."
+            "instruction": "extract the most relevant meal suggestions from the search results."
           },
           "Step3": {
-            "description": "summarize the best suggestions from the web and share with the other Magi for input"
+            "instruction": "filter out meal suggestions that are complex or unhealthy"
+          },
+          "Step4": {
+            "instruction": "summarize the remaining meal suggestions and include a justification based on popularity from the web"
           }
         }
        \`\`\``;
@@ -128,7 +137,7 @@ export class Planner {
         \`\`\`json
         {
           "Step1": {
-            "description": "scan personal data for food-related information",
+            "instruction": "Determine if the user has any food-related information on file",
             "tool": {
               "name": "personal-data",
               "args": [
@@ -139,10 +148,10 @@ export class Planner {
             }
           },
           "Step2": {
-            "description": "scan the results for food preferences, dietary restrictions, and food allergy info"
+            "instruction": "Propose a list of popular simple and healthy meal options that fit food preferences, allergies, and dietary restrictions",
           },
           "Step3": {
-            "description": "summarize relevant findings for the other Magi while minimizing sharing any personal user data"
+            "instruction": "Summarize the remaining meal options and include a justification based on the user's preferences, allergies, and dietary restrictions if any."
           }
         }
         \`\`\``;
@@ -153,7 +162,7 @@ export class Planner {
         \`\`\`json
         {
           "Step1": {
-            "description": "access smart home devices to gather kitchen and food information",
+            "instruction": "access smart home devices to gather kitchen and food information",
             "tool": {
               "name": "smart-home-devices",
               "args": [
@@ -164,10 +173,16 @@ export class Planner {
             }
           },
           "Step2": {
-            "description": "catalog the available kitchen appliances and food inventory"
+            "instruction": "If food inventory is available, identify what ingredients are on hand to inform meal suggestions",
           },
           "Step3": {
-            "description": "summarize the available appliances and food inventory for the other Magi to consider"
+            "instruction": "If kitchen appliances are available, identify what cooking equipment can be used to prepare meals"
+          },
+          "Step4": {
+            "instruction": "If kitchen camera is available, identify any visible food items that could be used for meal suggestions",
+          },
+          "Step5": {
+            "instruction": "summarize the available appliances and food inventory for the other Magi to consider"
           }
         }
         \`\`\``;
@@ -185,18 +200,20 @@ export class Planner {
 
     INQUIRY: "${inquiry}"`;
     
-    const planResponse = await this.conduitClient.contact(prompt, this.personalityPrompt, this.model, { temperature: this.temperature });
+    const planResponse = await this.conduitClient.contact(prompt, (this.conduitClient as any).getPersonality(), this.model, { temperature: this.temperature });
     
     return planResponse;
   }
 
   /**
-   * Review the maybeJSON plan and format it properly
-   * @param maybeJSON - The text that might be JSON
-   * @returns A promise that resolves to an well formatted JSON string.
+   * Review the plan response and format it as proper JSON
+   * NOTE: Currently unused - Magi produce good JSON directly, but kept for potential future enhancements
+   * @param originalInquiry - The original inquiry (currently unused, reserved for future review logic)
+   * @param maybeJSON - The text that might contain JSON
+   * @returns A promise that resolves to a well-formatted JSON string.
    */
-  async reviewPlan(maybeJSON: string): Promise<string> {
-    // Helper function to safely check if JSON is valid without using try-catch for control flow
+  /* async reviewPlan(originalInquiry: string, maybeJSON: string): Promise<string> {
+    logger.debug(`After review:\n${maybeJSON}`);
     const isValidJSON = (str: string): boolean => {
       try {
         JSON.parse(str);
@@ -223,141 +240,137 @@ export class Planner {
       jsonString = jsonMatch[0];
     }
 
-    // Make it valid
+    const reviewerPersonality = 'You are an expert planner and JSON afficiando';
+
+    const reviewPlanPrompt = `
+    Consider the following JSON plan, and pay special attention to the instructions:
+    ${jsonString}
+
+    Your task is to ensure that the plan, if followed step by step will properly address the inquiry: "${originalInquiry}"
+    You may only make modification to the instruction text or overall JSON formatting.
+    It is absolutolutely essential that you make sure the JSON formatting is correct.
+    Only respond with the final JSON from your review, do not include any other text.`;
+    
+    jsonString = await this.conduitClient.contact(reviewPlanPrompt, reviewerPersonality, this.model, { temperature: 1 });
+
+    // Make sure its valid 
     if (!isValidJSON(jsonString)) {
-      logger.debug(`JSON:\n${jsonString}\nis invalid, using LLM to reformat it`);
-      const ensureJSONPrompt = `
-      Format the following text to ensure it is valid JSON.
-      Do not change the content, just ensure it is valid JSON.
-      Only respond with the JSON:
-      ${maybeJSON}`;
-      jsonString = await this.conduitClient.contact(ensureJSONPrompt, 'You are a JSON expert', this.model, { temperature: 1 });
+      return DEFAULT_PLAN_JSON
     }
-    logger.debug(`${jsonString}`);
+    logger.debug(`After review:\n${jsonString}`);
 
     return jsonString;
-  }
+  } */
 
   /**
    * Parse the plan response into individual steps with tool information.
-   * New format: JSON with Step1, Step2, Step3 keys
-   * @param prompt - The original prompt used to generate the plan.
+   * Expects JSON with Step1, Step2, StepN... keys (variable number of steps)
    * @param planJSON - The raw plan response from the AI.
    * @returns A promise that resolves to an array of parsed plan steps.
    */
   async parsePlanSteps(planJSON: string): Promise<PlanStep[]> {
-    let steps: PlanStep[] = [];
-    
     try {
       const planData = JSON.parse(planJSON);
 
-      // Process each step
-      for (let i = 1; i <= 3; i++) {
-        const stepData = planData[`Step${i}`];
-        
-        if (!stepData) {
-          steps.push({
-            description: `Step ${i}: [Not provided - skipped]`,
-            requiresTool: false,
-            skipped: true
-          });
-          continue;
-        }
-        
-        let description = stepData.description || '';
-        let requiresTool = false;
-        let toolName: string | undefined;
-        let toolArguments: string[] | undefined;
-        let skipped = false;
-        
-        // Check if step is marked as skipped
-        if (description.includes('[SKIP]')) {
-          skipped = true;
-          description = description.replace(/\[SKIP\]\s*/, '').trim();
-        }
-        
-        // Check if step 1 has tool configuration
-        if (i === 1 && stepData.tool) {
-          requiresTool = true;
-          toolName = stepData.tool.name;
-          if (stepData.tool.args && Array.isArray(stepData.tool.args)) {
-            toolArguments = stepData.tool.args;
-          }
-        }
-        
-        steps.push({
-          description,
-          requiresTool,
-          toolName,
-          toolArguments,
-          skipped
+      // Convert planData to array of steps using functional approach
+      const allStepEntries = Object.entries(planData)
+        .filter(([key, stepData]) => 
+          key.match(/^Step\d+$/) && stepData && (stepData as any).instruction
+        )
+        .sort(([keyA], [keyB]) => {
+          const numA = parseInt(keyA.replace('Step', ''));
+          const numB = parseInt(keyB.replace('Step', ''));
+          return numA - numB;
         });
+
+      // Check if plan exceeds maximum steps and log warning if so
+      if (allStepEntries.length > MAX_PLAN_STEPS) {
+        logger.warn(`Plan exceeded ${MAX_PLAN_STEPS} steps (found ${allStepEntries.length}), truncating to first ${MAX_PLAN_STEPS} steps`);
       }
+
+      // Truncate to maximum steps and convert to PlanStep objects
+      const steps = allStepEntries
+        .slice(0, MAX_PLAN_STEPS)
+        .map(([, stepData]) => {
+          const data = stepData as any;
+          const step: PlanStep = {
+            instruction: data.instruction,
+            type: StepType.PLAN_EXECUTION
+          };
+          
+          // Add tool information if present
+          if (data.tool) {
+            step.toolName = data.tool.name;
+            if (data.tool.args && Array.isArray(data.tool.args)) {
+              step.toolArguments = data.tool.args;
+            }
+          }
+          
+          return step;
+        });
+
+      return steps;
       
     } catch (error) {
-      logger.warn('Failed to parse JSON plan response:', error);
+      const parseError = new PlanParsingError('Failed to parse JSON plan response', planJSON);
+      logger.warn('Failed to parse JSON plan response:', parseError);
       return [
-        { description: 'Step1: [Not provided - skipped]', requiresTool: false, skipped: true },
+        { instruction: 'Respond to the inquiry directly', type: StepType.PLAN_EXECUTION }
       ];
     }
-    
-    return steps;
   }
 
   /**
    * Execute the analysis plan step by step.
-   * @param steps - The plan steps to execute.
-   * @param originalinquiry - The original inquiry inquiry.
+   * @param steps - The plan steps to execute (may be modified by plan expansion).
+   * @param originalInquiry - The original inquiry.
    * @returns A promise that resolves to the cumulative output.
    */
-  async executePlan(steps: PlanStep[], originalinquiry: string): Promise<string> {
+  async executePlan(steps: PlanStep[], originalInquiry: string): Promise<string> {
     let cumulativeOutput = '';
     let rawPlanResponse = '';
-    let formattedJSON = '';
     
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       const stepNumber = i + 1;
       logger.debug(`${this.magiName} performing ${stepNumber}`);
       try {
-        // Check if this step should be skipped
-        if (step.skipped) {
-          logger.debug(`${this.magiName} skipping step ${stepNumber}`);
-          cumulativeOutput += `\n\nStep ${stepNumber} Result:\n[Step skipped - not required for this analysis]`;
-        } else {
-          let stepResult = '';
-          
-          // Handle special initial plan steps
-          if (stepNumber === 1 && step.description.includes('Create response plan')) {
-            // Step 1: Create response plan
-            stepResult = await this.createResponsePlan(originalinquiry);
+        let stepResult = '';
+        
+        switch (step.type) {
+          // The Magi is creating the plan based on the inquiry
+          case StepType.PLAN_CREATION:
+            stepResult = await this.createResponsePlan(originalInquiry);
             rawPlanResponse = stepResult;
-          } else if (stepNumber === 2 && step.description.includes('Review plan')) {
-            // Step 2: Format JSON
-            stepResult = await this.reviewPlan(rawPlanResponse);
-            formattedJSON = stepResult;
-          } else if (stepNumber === 3 && step.description.includes('Create custom plan')) {
-            // Step 3: Parse plan steps and expand current plan
-            const parsedSteps = await this.parsePlanSteps(formattedJSON);
-            stepResult = `Parsed ${parsedSteps.length} plan steps`;
-            
-            // Append non-skipped steps to the current plan
-            const nonSkippedSteps = parsedSteps.filter(s => !s.skipped);
-            if (nonSkippedSteps.length > 0) {
-              steps.push(...nonSkippedSteps);
-              logger.debug(`${this.magiName} expanded plan with ${nonSkippedSteps.length} additional steps`);
-            }
-          } else {
-            // Regular step execution
-            stepResult = await this.executeStep(step, stepNumber, cumulativeOutput, originalinquiry);
-          }
+            break;
           
-          cumulativeOutput += `\n\nStep ${stepNumber} Result:\n${stepResult}`;
+          case StepType.PLAN_EXPANSION:
+            // Here we append to the current plan with the Magi's generated plan
+            const parsedSteps = await this.parsePlanSteps(rawPlanResponse);
+            stepResult = `Parsed ${parsedSteps.length} plan step(s)`;
+            
+            if (parsedSteps.length > 0) {
+              steps.push(...parsedSteps);
+              logger.debug(`${this.magiName} expanded plan with ${parsedSteps.length} additional steps`);
+            }
+            break;
+          
+          case StepType.PLAN_EXECUTION:
+          default:
+            stepResult = await this.executeStep(step, stepNumber, cumulativeOutput, originalInquiry, steps);
+            break;
         }
+        
+        cumulativeOutput += `\n\nStep ${stepNumber} Result:\n${stepResult}`;
         
         logger.debug(`${this.magiName} completed step ${stepNumber}`);
       } catch (error) {
-        logger.error(`${this.magiName} failed at step ${stepNumber}:`, error);
+        const stepError = new StepExecutionError(
+          `Step ${stepNumber} failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          stepNumber,
+          step.type
+        );
+        logger.error(`${this.magiName} failed at step ${stepNumber}:`, stepError);
         // Continue with a fallback approach
         cumulativeOutput += `\n\nStep ${stepNumber} Result:\n[Step failed - continuing with available information]`;
       }
@@ -367,74 +380,55 @@ export class Planner {
   }
 
   /**
-   * Execute a single step of the analysis plan.
+   * Execute a single regular step of the analysis plan with full context.
    * @param step - The step to execute.
    * @param stepNumber - The step number.
    * @param previousOutput - The cumulative output from previous steps.
-   * @param originalinquiry - The original inquiry inquiry.
+   * @param originalInquiry - The original inquiry.
+   * @param fullPlan - The complete plan for context.
    * @returns A promise that resolves to the step result.
    */
   private async executeStep(
     step: PlanStep, 
     stepNumber: number, 
     previousOutput: string, 
-    originalinquiry: string
+    originalInquiry: string,
+    fullPlan: PlanStep[]
   ): Promise<string> {
     // Check if this step requires tool usage
-    if (step.requiresTool && step.toolName && step.toolArguments) {
-      // Check if we have multiple arguments that require multiple tool calls
-      if (step.toolArguments.length > 1) {
-        const results: string[] = [];
-        
-        // Execute tool call for each argument
-        for (const argument of step.toolArguments) {
-          const toolResult = await this.toolUser.executeWithTool(
-            step.toolName, 
-            { query: argument }, 
-            step.description
-          );
-          results.push(`Result for "${argument}": ${toolResult}`);
-        }
-        
-        return results.join('\n\n');
-      } else {
-        // Single tool call with first argument
+    if (step.toolName && step.toolArguments) {
+      // Execute tool call for each argument (handles single or multiple)
+      const results: string[] = [];
+      
+      for (const argument of step.toolArguments) {
         const toolResult = await this.toolUser.executeWithTool(
           step.toolName, 
-          { query: step.toolArguments[0] }, 
-          step.description
+          { query: argument }, 
+          step.instruction
         );
-        return toolResult;
+        results.push(step.toolArguments.length > 1 ? `Result for "${argument}": ${toolResult}` : toolResult);
       }
+      
+      return results.join('\n\n');
     } else {
       // Execute with simple reasoning (bypass mechanism)
-      const reasoningPrompt = `${this.magiName}, you are executing step ${stepNumber} of your plan:\n"${step.description}"
+      const planContext = fullPlan.map((planStep, index) => 
+        `Step ${index + 1}${index + 1 === stepNumber ? ' (CURRENT)' : ''}: ${planStep.instruction}${planStep.toolName ? ` [Tool: ${planStep.toolName}]` : ''}`
+      ).join('\n');
       
-      Original inquiry:\n"${originalinquiry}"
-      Relevant information from previous steps:\n${previousOutput || 'None'}
+      const stepExecutionPrompt = `${this.magiName}, you are executing step ${stepNumber} of your plan:\n"${step.instruction}"
       
-      Please complete this step and remember to be concise.`;
+      FULL PLAN CONTEXT:
+      ${planContext}
       
-      return await this.conduitClient.contact(reasoningPrompt, this.personalityPrompt, this.model, { temperature: this.temperature });
+      This is ultimately to address the inquiry: "${originalInquiry}"
+      Here is the relevant information from previous steps: ${previousOutput || 'None'}
+      
+      Execute this step with the full plan context in mind.
+      The output of this step will feed into the next step.
+      If this is the last step, the results will be shared with the other Magi.`;
+      
+      return await this.conduitClient.contact(stepExecutionPrompt, (this.conduitClient as any).getPersonality(), this.model, { temperature: this.temperature });
     }
-  }
-
-  /**
-   * Synthesize the final response from analysis results.
-   * @param analysisResult - The cumulative analysis results.
-   * @param originalinquiry - The original inquiry inquiry.
-   * @returns A promise that resolves to the synthesized response.
-   */
-  async synthesizeResponse(analysisResult: string, originalinquiry: string): Promise<string> {
-    const synthesisPrompt = `${this.magiName}, you have completed your independent analysis of the inquiry: "${originalinquiry}"
-    
-    Your analysis results:
-    ${analysisResult}
-    
-    Please synthesize a concise, well-reasoned response that directly addresses the original inquiry. 
-    Focus on the results from your plan and present them clearly. Be concise yet thorough.
-    If it is a simple answer, provide it directly.`;
-    
-    return await this.conduitClient.contact(synthesisPrompt, this.personalityPrompt, this.model, { temperature: this.temperature });
   }
 }

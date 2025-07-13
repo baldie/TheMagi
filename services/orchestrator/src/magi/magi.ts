@@ -3,7 +3,7 @@ import { Model } from '../config';
 import { logger } from '../logger';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
-import { Planner, PlanStep } from './planner';
+import { Planner } from './planner';
 
 export enum MagiName {
   Balthazar = 'Balthazar',
@@ -71,7 +71,6 @@ export class Magi extends ConduitClient {
    */
   setPersonality(prompt: string): void {
     this.personalityPrompt = prompt;
-    this.planner.setPersonality(prompt);
     logger.debug(`... Prompt for ${this.name} cached in memory.`);
   }
 
@@ -92,32 +91,23 @@ export class Magi extends ConduitClient {
     return this.status;
   }
 
-  async performIndependentAnalysis(inquiry: string): Promise<string> {
+  async performIndependentAssessment(inquiry: string): Promise<string> {
     try {
-      logger.info(`${this.name} beginning independent analysis for: ${inquiry}`);
+      logger.info(`${this.name} beginning independent assessment for: ${inquiry}`);
       
-      // Step 1: Execute the plan step by step
-      const analysisResult = await this.planner.executePlan(this.planner.getInitialPlan(), inquiry);
+      // Every assessment starts with a seed plan
+      const initialPlan = Planner.getSeedPlan();
+      const assessmentResult = await this.planner.executePlan(initialPlan, inquiry);
       logger.debug(`${this.name} completed plan execution`);
       
-      // Step 2: Synthesize final response
-      const finalResponse = await this.planner.synthesizeResponse(analysisResult, inquiry);
-      logger.info(`${this.name} completed independent analysis`);
-      
-      return finalResponse;
+      return assessmentResult;
     } catch (error) {
-      logger.error(`${this.name} failed during independent analysis:`, error);
+      logger.error(`${this.name} failed during independent assessment:`, error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new Error(`Independent analysis failed for ${this.name}: ${errorMessage}`);
+      throw new Error(`Independent assessment failed for ${this.name}: ${errorMessage}`);
     }
   }
 
-  /**
-   * Expose parsePlanSteps for testing - delegates to Planner
-   */
-  public async parsePlanSteps(planResponse: string): Promise<PlanStep[]> {
-    return await this.planner.parsePlanSteps(planResponse);
-  }
 
   /**
    * Contacts the Magi persona through the Magi Conduit to get a response.
@@ -125,37 +115,27 @@ export class Magi extends ConduitClient {
    * @returns The AI's response text.
    */
   async contact(userPrompt: string): Promise<string> {
-    this.status = 'busy';
-    
-    try {
-      const response = await super.contact(
-        userPrompt,
-        this.getPersonality(),
-        this.config.model,
-        this.config.options
-      );
-      
-      this.status = 'available';
-      return response;
-    } catch (error) {
-      this.status = 'available';
-      throw error;
-    }
+    return this.executeWithStatusManagement(() => 
+      super.contact(userPrompt, this.getPersonality(), this.config.model, this.config.options)
+    );
   }
 
   async contactWithoutPersonality(userPrompt: string): Promise<string> {
+    return this.executeWithStatusManagement(() => 
+      super.contact(userPrompt, '', this.config.model, this.config.options)
+    );
+  }
+
+  /**
+   * Executes a contact operation with proper status management
+   */
+  private async executeWithStatusManagement<T>(operation: () => Promise<T>): Promise<T> {
     this.status = 'busy';
-      
+    
     try {
-      const response = await super.contact(
-        userPrompt,
-        '',
-        this.config.model,
-        this.config.options
-      );
-      
+      const result = await operation();
       this.status = 'available';
-      return response;
+      return result;
     } catch (error) {
       this.status = 'available';
       throw error;
