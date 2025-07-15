@@ -4,9 +4,12 @@ import os from 'os';
 import path from 'path';
 import { logger } from './logger';
 import { MAGI_CONDUIT_API_BASE_URL, TTS_API_BASE_URL, REQUIRED_MODELS } from './config';
+
 import { PERSONAS_CONFIG } from './magi/magi';
 import { promises as fs } from 'fs';
 import { exec } from 'child_process';
+import { mcpClientManager } from './mcp';
+import { MagiName } from './magi/magi';
 
 /**
  * Checks if a service is ready, attempts to start it if not, and polls for it to become available.
@@ -196,22 +199,61 @@ async function ensureMagiConduitReady(): Promise<void> {
 }
 
 /**
+ * Generic function to ensure a Python service is running
+ */
+async function ensurePythonServiceReady(
+  serviceName: string,
+  serviceDir: string,
+  healthUrl: string,
+  scriptName: string,
+  maxRetries: number = 5,
+  initialDelay: number = 2000
+): Promise<void> {
+  const serviceFullDir = path.resolve(__dirname, serviceDir);
+  
+  // Use the virtual environment python if available, fallback to system python
+  const isWindows = process.platform === 'win32';
+  const venvPython = isWindows 
+    ? path.join(serviceFullDir, 'venv', 'Scripts', 'python.exe')
+    : path.join(serviceFullDir, 'venv', 'bin', 'python');
+    
+  // Check if virtual environment exists, otherwise use system python
+  let pythonCmd = 'python3';
+  try {
+    await fs.access(venvPython, fs.constants.F_OK);
+    pythonCmd = venvPython;
+  } catch (error) {
+    logger.warn(`${serviceName} virtual environment not found, using system python. Run install-magi.sh to set up properly.`);
+  }
+  
+  await ensureServiceReady(
+    serviceName,
+    healthUrl,
+    {
+      cmd: pythonCmd,
+      args: [scriptName],
+      options: { 
+        cwd: serviceFullDir,
+        shell: true
+      },
+    },
+    maxRetries,
+    initialDelay
+  );
+}
+
+/**
  * Ensures the Text-to-Speech (TTS) service is running.
  */
 async function ensureTTSReady(): Promise<void> {
-  const ttsServiceDir = path.resolve(__dirname, '../../services/tts');
-  await ensureServiceReady(
+  await ensurePythonServiceReady(
     'TTS',
+    '../../tts',
     `${TTS_API_BASE_URL}/health`,
-    {
-      // Use the 'start' command to launch the batch script in a new, independent window.
-      // This prevents the process from exiting prematurely.
-      cmd: 'cmd.exe',
-      args: ['/c', 'start', '"Magi TTS Service"', 'start_service.bat'],
-      options: { cwd: ttsServiceDir, shell: true },
-    },
+    'tts_server.py'
   );
 }
+
 
 async function checkPersonaFiles(): Promise<void> {
   logger.info('Verifying access to persona files...');
@@ -248,6 +290,101 @@ async function verifySufficientRam(): Promise<void> {
 }
 
 /**
+ * Verifies MCP server connections and tool availability
+ */
+async function verifyMcpServers(): Promise<void> {
+  logger.info('Verifying MCP server connections...');
+  
+  try {
+    // Initialize MCP client manager
+    await mcpClientManager.initialize();
+    logger.info('... MCP client manager initialized successfully');
+    
+    // Verify each Magi's MCP server and tools
+    const magiToCheck = [MagiName.Balthazar, MagiName.Caspar, MagiName.Melchior];
+    
+    for (const magiName of magiToCheck) {
+      try {
+        const tools = await mcpClientManager.getAvailableTools(magiName);
+        
+        if (tools.length > 0) {
+          logger.info(`... ${magiName}: Found ${tools.length} available tool(s)`);
+          
+          // Log available tools for debugging
+          for (const tool of tools) {
+            logger.debug(`  - ${tool.name}: ${tool.description || 'No description'}`);
+          }
+          
+          // Test web_search tool mapping specifically for Balthazar (without using API key)
+          if (magiName === MagiName.Balthazar) {
+            logger.info(`... ${magiName}: Testing web_search tool mapping...`);
+            
+            // Check if the expected mapped tool exists
+            const toolMapping = { 'web_search': 'search', 'web_extract': 'extract' };
+            const expectedTool = toolMapping['web_search'];
+            const hasMappedTool = tools.some(tool => tool.name === expectedTool);
+            
+            if (hasMappedTool) {
+              logger.info(`... ${magiName}: ✅ web_search mapping FOUND - maps to '${expectedTool}'`);
+              
+              // Check API key without making actual calls
+              const tavilyApiKey = process.env.TAVILY_API_KEY;
+              if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
+                logger.info(`... ${magiName}: ✅ Tavily API key is properly configured`);
+                logger.info(`... ${magiName}: 🟢 Web search should work correctly!`);
+              } else {
+                logger.error(`... ${magiName}: ❌ Tavily API key missing or invalid - web search will fail`);
+              }
+            } else {
+              logger.error(`... ${magiName}: ❌ web_search mapping FAILED - expected '${expectedTool}' not found`);
+              logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
+              logger.error(`... ${magiName}: 🔴 This will prevent Balthazar from performing web searches!`);
+            }
+          }
+
+          // Check for Tavily tools and API key availability
+          if (tools.some(tool => tool.name === 'search' || tool.name === 'extract' || tool.name === 'searchContext' || tool.name === 'searchQNA')) {
+            const tavilyApiKey = process.env.TAVILY_API_KEY;
+            if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
+              logger.info(`... ${magiName}: Tavily web search tools available with valid API key`);
+            } else if (tavilyApiKey) {
+              logger.warn(`... ${magiName}: Tavily tools available but API key format appears invalid (should start with 'tvly-')`);
+            } else {
+              logger.warn(`... ${magiName}: Tavily tools available but TAVILY_API_KEY not set in environment`);
+            }
+          } else if (magiName === MagiName.Balthazar) {
+            logger.error(`... ${magiName}: NO Tavily tools found! Expected: search, extract, searchContext, or searchQNA`);
+            logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
+          }
+        } else {
+          logger.info(`... ${magiName}: No MCP tools configured (this is expected for Caspar and Melchior)`);
+        }
+      } catch (error) {
+        logger.error(`... ${magiName}: MCP server verification failed:`, error);
+        // Bright yellow warning for missing MCP services
+        if (magiName === MagiName.Balthazar) {
+          logger.warn('');
+          logger.warn('⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️');
+          logger.warn(`⚠️  WARNING: ${magiName} MCP TOOLS NOT AVAILABLE!`);
+          logger.warn('⚠️  Balthazar will not have access to web search capabilities');
+          logger.warn('⚠️  This may significantly impact system functionality');
+          logger.warn('⚠️  Check MCP server configuration and dependencies');
+          logger.warn('⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️');
+          logger.warn('');
+        } else {
+          logger.warn(`... ${magiName}: MCP server not required, continuing...`);
+        }
+      }
+    }
+    
+    logger.info('... MCP server verification completed');
+  } catch (error) {
+    logger.error('MCP server verification failed:', error);
+    throw new Error(`MCP server verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
  * Runs all system diagnostics to ensure the application can start successfully.
  */
 export async function runDiagnostics(): Promise<void> {
@@ -258,6 +395,7 @@ export async function runDiagnostics(): Promise<void> {
     await checkPersonaFiles();
     await ensureMagiConduitReady();
     await ensureTTSReady();
+    await verifyMcpServers();
     logger.info('--- System Diagnostics Passed ---');
   } catch (error) {
     logger.error('System diagnostics failed.', error);

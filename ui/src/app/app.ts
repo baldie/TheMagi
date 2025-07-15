@@ -100,6 +100,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.balthasarStatus = 'offline';
     this.casperStatus = 'offline';
     this.melchiorStatus = 'offline';
+    this.websocketService.disconnect();
     console.error('Orchestrator health check failed:', error);
     this.serverLogs.push(`[CLIENT] Orchestrator health check failed: ${error.message || 'Unknown error'}`);
   }

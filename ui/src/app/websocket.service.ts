@@ -1,6 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
-import { Subject, Observable } from 'rxjs';
+import { Subject, Observable, BehaviorSubject } from 'rxjs';
 import { retryWhen, delay, take } from 'rxjs/operators';
 
 export interface WebSocketMessage {
@@ -23,6 +23,8 @@ interface WebSocketReadyState {
   providedIn: 'root'
 })
 export class WebsocketService implements OnDestroy {
+  private connectionStatusSubject = new BehaviorSubject<boolean>(false);
+  public connectionStatus$ = this.connectionStatusSubject.asObservable();
   private socket$: WebSocketSubject<WebSocketMessage> | null = null;
   private logSubject = new Subject<string>();
   private processStatusSubject = new Subject<boolean>();
@@ -57,7 +59,8 @@ export class WebsocketService implements OnDestroy {
         url: this.WS_ENDPOINT,
         openObserver: {
           next: (event) => {
-            this.connectionAttempts = 0; // Reset on successful connection
+            this.connectionAttempts = 0;
+            this.connectionStatusSubject.next(true);
             this.logSubject.next('[CLIENT] WebSocket connection established');
             if (shouldStartMagi) {
               this.logSubject.next('[CLIENT] Starting Magi as requested...');
@@ -67,6 +70,7 @@ export class WebsocketService implements OnDestroy {
         },
         closeObserver: {
           next: (event) => {
+            this.connectionStatusSubject.next(false);
             this.logSubject.next(`[CLIENT] WebSocket connection closed (${event.code}: ${event.reason || 'No reason'})`);
             this.processStatusSubject.next(false);
             // This will be handled by the retryWhen operator's completion
@@ -175,6 +179,6 @@ export class WebsocketService implements OnDestroy {
   }
 
   public isConnected(): boolean {
-    return !!this.socket$ && !this.socket$.closed;
+    return this.connectionStatusSubject.value;
   }
 }

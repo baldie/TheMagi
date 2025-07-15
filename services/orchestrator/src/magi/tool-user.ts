@@ -1,5 +1,5 @@
 import { logger } from '../logger';
-import { mcpToolRegistry, McpToolInfo, McpToolExecutionResponse, McpToolContentItem } from '../mcp';
+import { mcpClientManager, McpToolInfo, McpToolExecutionResponse } from '../mcp';
 import { MagiName } from './magi';
 
 /**
@@ -12,42 +12,13 @@ export class ToolUser {
    * Gets all the tools that are available for the current Magi persona.   
    * @returns The tool's MCP information
    */
-  getAvailableTools(): McpToolInfo [] {
-    // Tool identification based on step content and Magi specialization
-    // Using more specific keyword matching to avoid conflicts
-    switch (this.magiName) {
-      case MagiName.Balthazar:
-        return [{
-          name: "web-search",
-          description: "Search the web for information",
-          inputSchema: {
-            parameterName: "query",
-            "ARGS": ["Argument1", "Argument2", "..."]
-          }
-      }];
-        
-      case MagiName.Melchior:
-        return [{
-          name: "personal-data",
-          description: "Access the user's personal information",
-          inputSchema: {
-            parameterName: "data",
-            "ARGS": ["Argument1", "Argument2", "..."]
-          }
-      }];
-        
-      case MagiName.Caspar:
-       return [{
-          name: "smart-home-devices",
-          description: "Manage smart home devices",
-          inputSchema: {
-            parameterName: "device",
-            "ARGS": ["Argument1", "Argument2", "..."]
-          }
-      }];
-        
-      default:
-        return [];
+  async getAvailableTools(): Promise<McpToolInfo[]> {
+    try {
+      // Dynamically get tools from MCP servers
+      return await mcpClientManager.getAvailableTools(this.magiName);
+    } catch (error) {
+      logger.error(`Failed to get available tools for ${this.magiName}:`, error);
+      return [];
     }
   }
 
@@ -64,11 +35,11 @@ export class ToolUser {
     stepDescription: string
   ): Promise<string> {
     try {
-      // Initialize MCP registry if needed
-      await mcpToolRegistry.initialize();
+      // Initialize MCP client manager if needed
+      await mcpClientManager.initialize();
       
       // Execute the tool with Magi-determined arguments
-      const toolResult = await mcpToolRegistry.executeTool(this.magiName, toolName, toolArguments);
+      const toolResult = await mcpClientManager.executeTool(this.magiName, toolName, toolArguments);
       
       // Process tool output
       const processedOutput = this.processToolOutput(toolResult);
@@ -93,8 +64,8 @@ export class ToolUser {
     
     // Extract text content from MCP tool result
     const textContent = toolResult.content
-      .filter((item: McpToolContentItem) => item.type === 'text')
-      .map((item: McpToolContentItem) => item.text)
+      .filter((item) => item.type === 'text')
+      .map((item) => item.text)
       .filter((text): text is string => text !== undefined)
       .join('\n');
     

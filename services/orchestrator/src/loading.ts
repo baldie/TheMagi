@@ -49,8 +49,9 @@ export async function loadMagi(): Promise<void> {
     const personaConfig = PERSONAS_CONFIG[name];
     const prompt = await fs.readFile(personaConfig.personalitySource, 'utf-8');
     
-    // 2. Store it in the manager
+    // 2. Store it in the manager and initialize tools
     magi.setPersonality(prompt);
+    await magi.initialize();
     logger.info(`... ${magi.name}'s personality has been loaded from file.`);
 
     // V0 placeholders for data access checks from PRD

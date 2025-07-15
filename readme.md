@@ -26,6 +26,29 @@ A personal, omnipresent Artificial Intelligence system, built to serve a human a
 * Melchior - gemma3:4b
 * Balthazar - llama3.2:3b-instruct-q8_0
 
+## Setup
+
+### API Key Configuration
+
+The Magi uses Tavily for web search functionality. To enable this feature:
+
+1. **Get a Tavily API Key:**
+   - Visit [https://app.tavily.com/home](https://app.tavily.com/home)
+   - Sign up for a free account
+   - Copy your API key (it will start with "tvly-")
+
+2. **Configure the API Key:**
+   - Copy `.env.template` to `.env` in the project root
+   - Edit `.env` and add your Tavily API key:
+     ```
+     TAVILY_API_KEY=tvly-your-actual-api-key-here
+     ```
+   - Save the file
+
+The `.env` file is automatically excluded from version control to keep your API key secure.
+
+## Installation and Running
+
 To run, clone the repo, launch a terminal and run:
 
 ```

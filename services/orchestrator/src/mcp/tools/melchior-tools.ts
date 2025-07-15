@@ -1,13 +1,21 @@
 import { logger } from '../../logger';
-import { McpToolResult } from '../index';
+import { McpToolExecutionResponse } from '../index';
 
 /**
  * Melchior's intuitive tools - focused on personal data about the user
- * This is a placeholder implementation for the mock MCP registry
+ * This is a placeholder implementation - needs to be updated with real tools
  */
 
-export function registerMelchiorTools(): void {
-  // This function is kept for compatibility with the mock implementation
-  // The actual tool registration is handled in the mock registry
-  logger.debug('Melchior tools registered (mock)');
+type ToolImplementation = (args: Record<string, any>) => Promise<McpToolExecutionResponse>;
+
+export async function registerMelchiorTools(): Promise<Record<string, ToolImplementation>> {
+  logger.debug('Registering Melchior tools...');
+  
+  const tools: Record<string, ToolImplementation> = {
+    // Add Melchior's tools here when needed
+    // 'personal-data': personalDataTool
+  };
+  
+  logger.debug('Melchior tools registered:', Object.keys(tools));
+  return tools;
 }
