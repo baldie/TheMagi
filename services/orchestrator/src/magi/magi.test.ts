@@ -32,7 +32,7 @@ describe('Magi parsePlanSteps', () => {
     magi.setPersonality("You are Balthazar, a logical and analytical AI assistant.");
   });
 
-  it('should parse correctly formatted 3-step plan with tools', async () => {
+  it('should parse correctly formatted 3-step plan with MCP tools', async () => {
     const planResponse = `
 Here is my analysis plan:
 
@@ -41,7 +41,11 @@ Here is my analysis plan:
     "instruction": "perform web search to gather relevant data",
     "tool": {
       "name": "web_search",
-      "args": ["topic research", "data collection"]
+      "args": {
+        "query": "climate change research data",
+        "limit": 5,
+        "include_content": true
+      }
     }
   },
   "Step2": {
@@ -62,20 +66,22 @@ I will execute these steps systematically.
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('perform web search to gather relevant data');
-    expect(result[0].toolName).toBeDefined();
     expect(result[0].toolName).toBe('web_search');
-    expect(result[0].toolArguments).toEqual(["topic research", "data collection"]);
+    expect(result[0].toolParameters).toEqual({
+      query: "climate change research data",
+      limit: 5,
+      include_content: true
+    });
     
     expect(result[1].instruction).toBe('analyze the search results to identify key points');
     expect(result[1].toolName).toBeUndefined();
-    expect(result[1].toolName).toBeUndefined();
-    expect(result[1].toolArguments).toBeUndefined();
+    expect(result[1].toolParameters).toBeUndefined();
     
     expect(result[2].instruction).toBe('develop argument based on the data points found');
     expect(result[2].toolName).toBeUndefined();
-    expect(result[2].toolName).toBeUndefined();
-    expect(result[2].toolArguments).toBeUndefined();
+    expect(result[2].toolParameters).toBeUndefined();
   });
+
 
   it('should parse plan with tool bypass', async () => {
     const planResponse = `
@@ -108,7 +114,7 @@ My approach:
     expect(result[2].toolName).toBeUndefined();
   });
 
-  it('should handle mixed formatting and incomplete tool info', async () => {
+  it('should handle mixed formatting with MCP tool parameters', async () => {
     const planResponse = `
 I will approach this systematically:
 
@@ -117,7 +123,11 @@ I will approach this systematically:
     "instruction": "gather relevant information",
     "tool": {
       "name": "web_search",
-      "args": ["relevant information"]
+      "args": {
+        "query": "relevant information about the topic",
+        "limit": 3,
+        "include_content": false
+      }
     }
   },
   "Step2": {
@@ -138,13 +148,18 @@ This is my complete plan.
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe("gather relevant information");
-    expect(result[0].toolName).toBeDefined();
     expect(result[0].toolName).toBe("web_search");
-    expect(result[0].toolArguments).toEqual(["relevant information"]);
+    expect(result[0].toolParameters).toEqual({
+      query: "relevant information about the topic",
+      limit: 3,
+      include_content: false
+    });
     expect(result[1].instruction).toBe("analyze the data carefully");
     expect(result[1].toolName).toBeUndefined();
+    expect(result[1].toolParameters).toBeUndefined();
     expect(result[2].instruction).toBe("develop my response");
     expect(result[2].toolName).toBeUndefined();
+    expect(result[2].toolParameters).toBeUndefined();
   });
 
   it('should return default plan when no JSON is found', async () => {
@@ -240,14 +255,18 @@ Finally, we should make a decision.
     expect(result[4].toolName).toBeUndefined();
   });
 
-  it('should handle invalid JSON gracefully', async () => {
+  it('should handle MCP format with multiple parameters', async () => {
     const planResponse = `
 {
   "Step1": {
     "instruction": "Search for information",
     "tool": {
       "name": "web_search",
-      "args": ["invalid", "malformed args"]
+      "args": {
+        "query": "comprehensive information search",
+        "limit": 10,
+        "include_content": true
+      }
     }
   },
   "Step2": {
@@ -266,19 +285,25 @@ Finally, we should make a decision.
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('Search for information');
-    expect(result[0].toolName).toBeDefined();
     expect(result[0].toolName).toBe('web_search');
-    expect(result[0].toolArguments).toEqual(["invalid", "malformed args"]);
+    expect(result[0].toolParameters).toEqual({
+      query: "comprehensive information search",
+      limit: 10,
+      include_content: true
+    });
   });
 
-  it('should handle mixed case tool names and arguments', async () => {
+  it('should handle mixed case tool names with MCP parameters', async () => {
     const planResponse = `
 {
   "Step1": {
     "instruction": "Search for information",
     "tool": {
       "name": "WEB_SEARCH",
-      "args": ["test", "10"]
+      "args": {
+        "query": "test search query",
+        "limit": 10
+      }
     }
   },
   "Step2": {
@@ -296,21 +321,28 @@ Finally, we should make a decision.
     const result = await magi.planner.parsePlanSteps(jsonString);
     
     expect(result).toHaveLength(3);
-    expect(result[0].toolName).toBeDefined();
     expect(result[0].toolName).toBe('WEB_SEARCH');
-    expect(result[0].toolArguments).toEqual(["test", "10"]);
+    expect(result[0].toolParameters).toEqual({
+      query: "test search query",
+      limit: 10
+    });
     expect(result[1].toolName).toBeUndefined();
+    expect(result[1].toolParameters).toBeUndefined();
     expect(result[2].toolName).toBeUndefined();
+    expect(result[2].toolParameters).toBeUndefined();
   });
 
-  it('should handle tool calls on any step', async () => {
+  it('should handle tool calls on any step with MCP format', async () => {
     const planResponse = `
 {
   "Step1": {
     "instruction": "gather information",
     "tool": {
       "name": "web_search",
-      "args": ["topic info"]
+      "args": {
+        "query": "topic information",
+        "limit": 5
+      }
     }
   },
   "Step2": {
@@ -320,7 +352,10 @@ Finally, we should make a decision.
     "instruction": "synthesize the final response",
     "tool": {
       "name": "synthesis_tool",
-      "args": ["final_analysis"]
+      "args": {
+        "mode": "final_analysis",
+        "format": "comprehensive"
+      }
     }
   }
 }
@@ -333,25 +368,35 @@ Finally, we should make a decision.
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('gather information');
-    expect(result[0].toolName).toBeDefined();
     expect(result[0].toolName).toBe('web_search');
+    expect(result[0].toolParameters).toEqual({
+      query: "topic information",
+      limit: 5
+    });
     
     expect(result[1].instruction).toBe('analyze the gathered data');
     expect(result[1].toolName).toBeUndefined();
+    expect(result[1].toolParameters).toBeUndefined();
     
     expect(result[2].instruction).toBe('synthesize the final response');
-    expect(result[2].toolName).toBeDefined();
     expect(result[2].toolName).toBe('synthesis_tool');
+    expect(result[2].toolParameters).toEqual({
+      mode: "final_analysis",
+      format: "comprehensive"
+    });
   });
 
-  it('should handle multi-step plans with tools on different steps', async () => {
+  it('should handle multi-step plans with tools on different steps using MCP format', async () => {
     const planResponse = `
 {
   "Step1": {
     "instruction": "analyze the provided data",
     "tool": {
       "name": "analysis",
-      "args": ["data"]
+      "args": {
+        "dataset": "user_provided_data",
+        "type": "statistical"
+      }
     }
   },
   "Step2": {
@@ -361,7 +406,10 @@ Finally, we should make a decision.
     "instruction": "verify results with validation tool",
     "tool": {
       "name": "validation",
-      "args": ["results"]
+      "args": {
+        "results": "analysis_output",
+        "confidence_level": 0.95
+      }
     }
   }
 }
@@ -373,19 +421,26 @@ Finally, we should make a decision.
     const result = await magi.planner.parsePlanSteps(jsonString);
     
     expect(result).toHaveLength(3);
-    expect(result[0].toolName).toBeDefined();
     expect(result[0].toolName).toBe('analysis');
     expect(result[0].instruction).toBe('analyze the provided data');
+    expect(result[0].toolParameters).toEqual({
+      dataset: "user_provided_data",
+      type: "statistical"
+    });
     
     expect(result[1].toolName).toBeUndefined();
+    expect(result[1].toolParameters).toBeUndefined();
     expect(result[1].instruction).toBe('perform additional analysis if needed');
     
-    expect(result[2].toolName).toBeDefined();
     expect(result[2].toolName).toBe('validation');
     expect(result[2].instruction).toBe('verify results with validation tool');
+    expect(result[2].toolParameters).toEqual({
+      results: "analysis_output",
+      confidence_level: 0.95
+    });
   });
 
-  it('should handle JSON wrapped in markdown code blocks', async () => {
+  it('should handle JSON wrapped in markdown code blocks with MCP format', async () => {
     const planResponse = `
 Here is my analysis plan:
 
@@ -394,8 +449,12 @@ Here is my analysis plan:
   "Step1": {
     "instruction": "search for information about the topic",
     "tool": {
-      "name": "web-search",
-      "args": ["topic information", "research data"]
+      "name": "web_search",
+      "args": {
+        "query": "comprehensive topic information and research data",
+        "limit": 7,
+        "include_content": true
+      }
     }
   },
   "Step2": {
@@ -417,14 +476,19 @@ This plan will help me address the inquiry systematically.
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('search for information about the topic');
-    expect(result[0].toolName).toBeDefined();
-    expect(result[0].toolName).toBe('web-search');
-    expect(result[0].toolArguments).toEqual(["topic information", "research data"]);
+    expect(result[0].toolName).toBe('web_search');
+    expect(result[0].toolParameters).toEqual({
+      query: "comprehensive topic information and research data",
+      limit: 7,
+      include_content: true
+    });
     
     expect(result[1].instruction).toBe('analyze the search results');
     expect(result[1].toolName).toBeUndefined();
+    expect(result[1].toolParameters).toBeUndefined();
     
     expect(result[2].instruction).toBe('synthesize findings into a response');
     expect(result[2].toolName).toBeUndefined();
+    expect(result[2].toolParameters).toBeUndefined();
   });
 });

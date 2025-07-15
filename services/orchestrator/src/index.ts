@@ -5,19 +5,54 @@ import { beginDeliberation } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics } from './diagnostics';
 import { balthazar, caspar, melchior } from './magi/magi';
-import { mcpToolRegistry } from './mcp';
+import { mcpClientManager } from './mcp';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 
 // Track initialization state
 let isInitialized = false;
+
+/**
+ * Load environment variables from .env file
+ */
+function loadEnvironmentVariables() {
+  try {
+    const envPath = path.resolve(__dirname, '../../../.env');
+    if (fs.existsSync(envPath)) {
+      const envContent = fs.readFileSync(envPath, 'utf8');
+      const envLines = envContent.split('\n');
+      
+      for (const line of envLines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine && !trimmedLine.startsWith('#')) {
+          const [key, ...valueParts] = trimmedLine.split('=');
+          if (key && valueParts.length > 0) {
+            const value = valueParts.join('=').trim();
+            process.env[key.trim()] = value;
+          }
+        }
+      }
+      
+      logger.info('Environment variables loaded from .env file');
+      logger.debug(`TAVILY_API_KEY loaded: ${process.env.TAVILY_API_KEY ? 'Yes' : 'No'}`);
+    } else {
+      logger.warn('No .env file found at ' + envPath);
+    }
+  } catch (error) {
+    logger.error('Failed to load .env file:', error);
+  }
+}
 
 /**
  * Main application entry point.
  * Initializes services, runs diagnostics, and starts the server.
  */
 async function main() {
+  // Load environment variables first
+  loadEnvironmentVariables();
   logger.info('Magi Orchestrator is starting up...');
 
   // Start the services
@@ -33,13 +68,8 @@ async function main() {
 
   // Perform startup initialization
   try {
-    await runDiagnostics();
+    await runDiagnostics(); // This now includes MCP server verification and initialization
     await loadMagi();
-    
-    // Initialize MCP tool registry for agentic capabilities
-    logger.info('Initializing MCP tool registry...');
-    await mcpToolRegistry.initialize();
-    logger.info('MCP tool registry initialized successfully.');
     
     isInitialized = true; 
     logger.info('The Magi are ready.');
@@ -53,6 +83,23 @@ main().catch(error => {
   logger.error('Unhandled promise rejection in main.', error);
   process.exit(1);
 });
+
+// Graceful shutdown handling
+async function gracefulShutdown(signal: string) {
+  logger.info(`Received ${signal}. Performing graceful shutdown...`);
+  
+  try {
+    await mcpClientManager.cleanup();
+    logger.info('MCP client manager cleanup completed.');
+  } catch (error) {
+    logger.error('Error during MCP cleanup:', error);
+  }
+  
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // This service provides the orchestrator'shealth route and a websocket server for the UI to connect to.
 function startHttpOrchestratorService() {

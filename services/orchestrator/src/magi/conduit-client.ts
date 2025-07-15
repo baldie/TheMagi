@@ -68,6 +68,96 @@ export class ConduitClient {
   }
 
   /**
+   * Contacts the Magi Conduit to get a JSON response from the AI model with retry logic for malformed JSON.
+   * @param userPrompt - The user's question or the content of a debate turn.
+   * @param systemPrompt - The system prompt including manifesto and personality.
+   * @param model - The AI model to use for the request.
+   * @param options - The request options (temperature, etc.).
+   * @returns Parsed JSON object.
+   */
+  async contactForJSON(
+    userPrompt: string,
+    systemPrompt: string,
+    model: Model,
+    options: ConduitRequestOptions
+  ): Promise<any> {
+    // First attempt: Get response from LLM
+    const originalResponse = await this.contact(userPrompt, systemPrompt, model, options);
+    
+    // Try to parse the JSON response
+    try {
+      return this.parseJsonResponse(originalResponse);
+    } catch (parseError) {
+      // JSON parsing failed, attempt to fix it
+      logger.debug(`${this.magiName} original malformed response:`, originalResponse);
+    }
+    
+    // Second attempt: Ask LLM to fix the JSON
+    const fixPrompt = `The following JSON response contains syntax errors. Fix it to be valid JSON while preserving all the original data and structure:
+
+${originalResponse}
+
+Respond with ONLY the corrected JSON, no additional text or explanation.`;
+
+    const fixedResponse = await this.contact(
+      fixPrompt,
+      '', // No personality for JSON fixing
+      model,
+      { temperature: 0.1 } // Low temperature for precise correction
+    );
+    
+    // Try parsing the fixed response
+    try {
+      return this.parseJsonResponse(fixedResponse);
+    } catch (correctionError) {
+      // JSON correction also failed, log both attempts and throw
+      logger.error(`${this.magiName} contactForJSON failed after correction attempt`);
+      logger.error(`${this.magiName} original response:`, originalResponse);
+      logger.error(`${this.magiName} corrected response:`, fixedResponse);
+      throw new Error(`JSON parsing failed after correction attempt`);
+    }
+  }
+
+  /**
+   * Parse JSON response with error handling and markdown extraction
+   * @param jsonResponse - The raw JSON response from the AI
+   * @returns Parsed JSON object
+   */
+  private parseJsonResponse(jsonResponse: string): any {
+    try {
+      logger.debug(`${this.magiName} attempting to parse JSON:`, jsonResponse);
+      
+      // Try to extract JSON from the response if it's wrapped in markdown or other text
+      let cleanedJSON = jsonResponse.trim();
+      
+      // Remove markdown code blocks if present
+      const jsonBlockMatch = cleanedJSON.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonBlockMatch) {
+        cleanedJSON = jsonBlockMatch[1].trim();
+        logger.debug(`${this.magiName} extracted JSON from code block:`, cleanedJSON);
+      }
+
+      const parsedData = JSON.parse(cleanedJSON);
+      logger.debug(`${this.magiName} successfully parsed JSON data:`, parsedData);
+      return parsedData;
+      
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`${this.magiName} failed to parse JSON response. Error: ${errorMessage}`);
+      
+      // Provide specific guidance for common JSON errors
+      if (errorMessage.includes('Expected double-quoted property name') || errorMessage.includes('trailing comma')) {
+        logger.error(`${this.magiName} JSON parsing failed - likely due to trailing commas. Remove commas after final properties in each object.`);
+      } else if (errorMessage.includes('Unexpected token')) {
+        logger.error(`${this.magiName} JSON parsing failed - check for syntax errors, missing quotes, or invalid characters.`);
+      }
+      
+      logger.error(`${this.magiName} raw response:`, jsonResponse);
+      throw error;
+    }
+  }
+
+  /**
    * Builds the request data for the Conduit API.
    */
   private buildRequestData(

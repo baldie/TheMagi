@@ -1,13 +1,21 @@
 import { logger } from '../../logger';
-import { McpToolResult } from '../index';
+import { McpToolExecutionResponse } from '../index';
 
 /**
  * Caspar's practical tools - focused on smart home devices, system status, and integration data
- * This is a placeholder implementation for the mock MCP registry
+ * This is a placeholder implementation - needs to be updated with real tools
  */
 
-export function registerCasparTools(): void {
-  // This function is kept for compatibility with the mock implementation
-  // The actual tool registration is handled in the mock registry
-  logger.debug('Caspar tools registered (mock)');
+type ToolImplementation = (args: Record<string, any>) => Promise<McpToolExecutionResponse>;
+
+export async function registerCasparTools(): Promise<Record<string, ToolImplementation>> {
+  logger.debug('Registering Caspar tools...');
+  
+  const tools: Record<string, ToolImplementation> = {
+    // Add Caspar's tools here when needed
+    // 'smart-home-devices': smartHomeDevicesTool
+  };
+  
+  logger.debug('Caspar tools registered:', Object.keys(tools));
+  return tools;
 }
