@@ -5,6 +5,43 @@ import { ToolUser } from './tool-user';
 import { Model } from '../config';
 
 /**
+ * JSON Schema type definitions
+ */
+interface JsonSchemaProperty {
+  type?: string;
+  description?: string;
+  enum?: unknown[];
+  items?: JsonSchemaProperty;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+  default?: unknown;
+}
+
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+}
+
+/**
+ * Raw step data from JSON parsing
+ */
+interface RawStepData {
+  instruction: string;
+  tool?: {
+    name: string;
+    args?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Raw plan data containing multiple steps
+ */
+interface RawPlanData {
+  [key: string]: RawStepData | unknown;
+}
+
+/**
  * Custom error types for better error handling
  */
 export class PlanParsingError extends Error {
@@ -48,7 +85,7 @@ export enum StepType {
 export interface PlanStep {
   instruction: string;
   toolName?: string;
-  toolParameters?: Record<string, any>;
+  toolParameters?: Record<string, unknown>;
   type?: StepType;
 }
 
@@ -89,7 +126,7 @@ export class Planner {
   /**
    * Extract parameter details from JSON Schema for MCP format
    */
-  private extractParameterDetails(inputSchema: Record<string, any> | undefined): Record<string, string> {
+  private extractParameterDetails(inputSchema: JsonSchema | undefined): Record<string, string> {
     if (!inputSchema?.properties) {
       return { query: 'string (required)' };
     }
@@ -99,7 +136,7 @@ export class Planner {
     
     const parameters: Record<string, string> = {};
     
-    Object.entries(properties).forEach(([name, schema]: [string, any]) => {
+    Object.entries(properties).forEach(([name, schema]: [string, JsonSchemaProperty]) => {
       const type = schema.type || 'any';
       const isRequired = required.includes(name);
       const defaultValue = schema.default !== undefined ? `, default: ${JSON.stringify(schema.default)}` : '';
@@ -267,7 +304,7 @@ export class Planner {
     INQUIRY: "${inquiry}"`;
     
     //logger.debug(prompt);
-    const planData = await this.conduitClient.contactForJSON(prompt, (this.conduitClient as any).getPersonality(), this.model, { temperature: this.temperature });
+    const planData = await this.conduitClient.contactForJSON(prompt, '', this.model, { temperature: this.temperature });
     
     return JSON.stringify(planData);
   }
@@ -278,7 +315,7 @@ export class Planner {
    * @param stepData - Raw step data from JSON
    * @returns PlanStep object
    */
-  private convertStepDataToPlanStep(stepData: any): PlanStep {
+  private convertStepDataToPlanStep(stepData: RawStepData): PlanStep {
     const step: PlanStep = {
       instruction: stepData.instruction,
       type: StepType.PLAN_EXECUTION
@@ -301,13 +338,15 @@ export class Planner {
    * @param planData - The parsed plan data from the AI.
    * @returns A promise that resolves to an array of parsed plan steps.
    */
-  async parsePlanSteps(planData: any): Promise<PlanStep[]> {
+  async parsePlanSteps(planData: RawPlanData): Promise<PlanStep[]> {
     try {
 
       // Convert planData to array of steps using functional approach
       const allStepEntries = Object.entries(planData)
         .filter(([key, stepData]) => 
-          key.match(/^Step\d+$/) && stepData && (stepData as any).instruction
+          key.match(/^Step\d+$/) && stepData && 
+          typeof stepData === 'object' && stepData !== null &&
+          'instruction' in stepData
         )
         .sort(([keyA], [keyB]) => {
           const numA = parseInt(keyA.replace('Step', ''));
@@ -325,7 +364,7 @@ export class Planner {
       // Truncate to maximum steps and convert to PlanStep objects
       const steps = allStepEntries
         .slice(0, MAX_PLAN_STEPS)
-        .map(([, stepData]) => this.convertStepDataToPlanStep(stepData as any));
+        .map(([, stepData]) => this.convertStepDataToPlanStep(stepData as RawStepData));
 
       logger.debug(`${this.magiName} created ${steps.length} plan steps`);
       return steps;
@@ -346,7 +385,7 @@ export class Planner {
    */
   async executePlan(steps: PlanStep[], originalInquiry: string): Promise<string> {
     let cumulativeOutput = '';
-    let rawPlanResponse = '';
+    let rawPlanResponse: RawPlanData | null = null;
     
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
@@ -359,12 +398,12 @@ export class Planner {
           // The Magi is creating the plan based on the inquiry
           case StepType.PLAN_CREATION:
             stepResult = await this.createResponsePlan(originalInquiry);
-            rawPlanResponse = JSON.parse(stepResult);
+            rawPlanResponse = JSON.parse(stepResult) as RawPlanData;
             break;
           
           case StepType.PLAN_EXPANSION: {
             // Here we append the Magi's generated plan to the currently executing plan
-            const parsedSteps = await this.parsePlanSteps(rawPlanResponse);
+            const parsedSteps = rawPlanResponse ? await this.parsePlanSteps(rawPlanResponse) : [];
             stepResult = `Updated ${this.magiName}'s plan with ${parsedSteps.length} additional step(s)`;
             
             if (parsedSteps.length > 0) {
@@ -374,7 +413,7 @@ export class Planner {
           }
           
           case StepType.PLAN_EXECUTION:
-          default:
+          default: {
             // Clear previous result if this is the first execution step after plan creation
             const firstMagiCreatedStep = (i > 0 && steps[i - 1].type === StepType.PLAN_EXPANSION);
             stepResult = firstMagiCreatedStep ? '' : stepResult;
@@ -382,6 +421,7 @@ export class Planner {
             // Execute the Magi provided step that they created
             stepResult = await this.executeStep(step, stepNumber, stepResult, originalInquiry, steps);
             break;
+          }
         }
         
         cumulativeOutput += `\n\nStep ${stepNumber} Result:\n${stepResult}`;
@@ -524,7 +564,7 @@ Respond with ONLY the properly formatted JSON`;
       The output of this step will feed into the next step.
       If this is the last step, the results will be shared with the other Magi.`;
       
-      return await this.conduitClient.contact(stepExecutionPrompt, (this.conduitClient as any).getPersonality(), this.model, { temperature: this.temperature });
+      return await this.conduitClient.contact(stepExecutionPrompt, '', this.model, { temperature: this.temperature });
     }
   }
 }
