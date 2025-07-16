@@ -105,7 +105,7 @@ describe('Planner', () => {
         toolParameters: { updated: 'parameter', url: 'https://example.com' }
       });
       expect(mockConduitClient.contactForJSON).toHaveBeenCalledWith(
-        expect.stringContaining('update a tool step'),
+        expect.stringContaining('Identify any parameters in the original tool step to be populated or refined'),
         '',
         Model.Qwen,
         { temperature: 0.1 }

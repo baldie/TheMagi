@@ -142,10 +142,16 @@ export class Planner {
       const defaultValue = schema.default !== undefined ? `, default: ${JSON.stringify(schema.default)}` : '';
       const status = isRequired ? 'required' : 'optional';
       
+      // Include enum constraints if present
+      const enumConstraint = schema.enum ? ` [options: ${schema.enum.map(v => `"${v}"`).join('|')}]` : '';
+      
       // Special handling for common parameter patterns
       let description = '';
       if (name === 'options' && type === 'object') {
-        description = ' - Configure search depth, topic, max results, etc.';
+        // Check for nested topic enum in options object
+        const topicProperty = schema.properties?.topic;
+        const topicEnum = topicProperty?.enum ? `topic must be one of: ${topicProperty.enum.map(v => `"${v}"`).join('|')}. ` : '';
+        description = ` - Configure search depth, topic, max results, etc. ${topicEnum}`;
       } else if (name === 'urls' && type === 'array') {
         description = ' - List of URLs to process (up to 20)';
       } else if (name === 'query') {
@@ -156,7 +162,7 @@ export class Planner {
         description = ' - Whether to include full content';
       }
       
-      parameters[name] = `${type} (${status}${defaultValue})${description}`;
+      parameters[name] = `${type} (${status}${defaultValue})${enumConstraint}${description}`;
     });
 
     return parameters;
@@ -186,6 +192,8 @@ export class Planner {
     Keep your plan focused and efficient - aim for 3-8 steps maximum.
     Never exceed ${MAX_PLAN_STEPS} steps and always start on Step3 (Step1 and Step2 are reserved).
     The output of each step will be fed into the next step.
+    Therefore if a later step requires the output of a previous step, be sure to put <PLACEHOLDER> instead of guessing.
+    The <PLACEHOLDER> will be populated during execution.
     If any of the steps require using a tool, you must specify the tool name and arguments in that step.
     The tool name must match the name of the one of the tools you have access to.
     You can provide one or more arguments to the tool in the "args" array. Each argument will be executed as a separate tool call.
@@ -219,14 +227,14 @@ export class Planner {
             }
           },
           "Step4": {
-            "instruction": "Evaluate the search results and respond with the most promising recipe, and respond the URL",
+            "instruction": "Evaluate the search results and respond with the URL for he most promising recipe. The next step needs URLs",
           },
           "Step5": {
             "instruction": "Use crawl_url to get detailed content from the URL found in previous step",
             "tool": {
               "name": "crawl_url",
               "args": {
-                "url": "<INSERT_URL_FROM_PREVIOUS_STEP_HERE>",
+                "url": "<PLACEHOLDER>",
                 "include_content": true
               }
             }
@@ -386,6 +394,7 @@ export class Planner {
   async executePlan(steps: PlanStep[], originalInquiry: string): Promise<string> {
     let cumulativeOutput = '';
     let rawPlanResponse: RawPlanData | null = null;
+    let previousStepOutput = ''; // Track output from previous step to pass to next step
     
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
@@ -416,17 +425,23 @@ export class Planner {
           default: {
             // Clear previous result if this is the first execution step after plan creation
             const firstMagiCreatedStep = (i > 0 && steps[i - 1].type === StepType.PLAN_EXPANSION);
-            stepResult = firstMagiCreatedStep ? '' : stepResult;
+            previousStepOutput = firstMagiCreatedStep ? '' : previousStepOutput;
 
-            // Execute the Magi provided step that they created
-            stepResult = await this.executeStep(step, stepNumber, stepResult, originalInquiry, steps);
+            // Execute the step with output from the previous step
+            stepResult = await this.executeStep(step, stepNumber, previousStepOutput, originalInquiry, steps);
             break;
           }
         }
         
+        // Update previousStepOutput for the next step
+        previousStepOutput = stepResult;
+        
+        // Keep cumulative output for Balthazar's logging purposes
         cumulativeOutput += `\n\nStep ${stepNumber} Result:\n${stepResult}`;
         
-        logger.debug(`${this.magiName} completed step ${stepNumber}`);
+        if (this.magiName === MagiName.Balthazar) {
+          logger.debug(`${this.magiName} completed step ${stepNumber} with result:\n${stepResult}`);
+        }
       } catch (error) {
         const stepError = new StepExecutionError(
           `Step ${stepNumber} failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -435,11 +450,40 @@ export class Planner {
         );
         logger.error(`${this.magiName} failed at step ${stepNumber}:`, stepError);
         // Continue with a fallback approach
-        cumulativeOutput += `\n\nStep ${stepNumber} Result:\n[Step failed - continuing with available information]`;
+        const fallbackMessage = '[Step failed - continuing with available information]';
+        previousStepOutput = fallbackMessage;
+        cumulativeOutput += `\n\nStep ${stepNumber} Result:\n${fallbackMessage}`;
       }
     }
     
     return cumulativeOutput;
+  }
+
+  /**
+   * Validate and correct tool parameters to ensure they meet schema requirements
+   * @param toolName - The name of the tool being executed
+   * @param parameters - The parameters to validate
+   * @returns Corrected parameters
+   */
+  private validateToolParameters(toolName: string, parameters: Record<string, unknown>): Record<string, unknown> {
+    // Clone parameters to avoid mutating original
+    const validatedParams = JSON.parse(JSON.stringify(parameters));
+    
+    // Special validation for searchContext tool
+    if (toolName === 'searchContext' && validatedParams.options && typeof validatedParams.options === 'object') {
+      const options = validatedParams.options as Record<string, unknown>;
+      
+      // Validate topic parameter - must be 'general', 'news', or 'finance'
+      if (options.topic && typeof options.topic === 'string') {
+        const validTopics = ['general', 'news', 'finance'];
+        if (!validTopics.includes(options.topic)) {
+          logger.warn(`${this.magiName} correcting invalid topic "${options.topic}" to "general" for searchContext tool`);
+          options.topic = 'general'; // Default to 'general' for invalid topics
+        }
+      }
+    }
+    
+    return validatedParams;
   }
 
   /**
@@ -468,9 +512,8 @@ export class Planner {
         }
       };
       
-      const hydrationPrompt = `You need to update a tool step based on previous step output.
-
-ORIGINAL INQUIRY: "${originalInquiry}"
+      const hydrationPrompt = `
+ORIGINAL INQUIRY:\n"${originalInquiry}"
 
 ORIGINAL TOOL STEP JSON:\n
 \`\`\`json
@@ -482,11 +525,12 @@ PREVIOUS STEP OUTPUT:\n
 ${previousOutput}\n
 ------------------------------------------------------
 
-Your task: Update the original tool step JSON by incorporating relevant information into the arguments from the previous step output.
-- Keep parameters that don't need to be modified unchanged
-- Update parameters that should use data from previous step output (see step instructions)
+Your task:
+- Consider the previous step output and the original inquiry.
+- Identify any parameters in the original tool step to be populated or refined using information from the previous step output
+- Provide the updated tool step JSON and maintain the same structure as the original
+- Keep parameters unchanged if they don't need to be modified
 - Ensure all required parameters are present and properly formatted
-- Maintain the exact same JSON structure and format
 
 Respond with ONLY the properly formatted JSON`;
 
@@ -505,7 +549,6 @@ Respond with ONLY the properly formatted JSON`;
         : hydratedStepData;
       
       const hydratedStep = this.convertStepDataToPlanStep(stepData);
-      logger.debug(`${this.magiName} successfully hydrated tool step:`, hydratedStep);
       return hydratedStep;
       
     } catch (error) {
@@ -537,12 +580,17 @@ Respond with ONLY the properly formatted JSON`;
       let updatedStep = step;
       if (previousOutput?.trim()) {
         updatedStep = await this.hydrateToolParameters(step, previousOutput, originalInquiry);
+      } else {
+        logger.debug(`${this.magiName} skipping hydration for step ${stepNumber} due to no previous output`);
       }
       
-      // Execute tool call with hydrated MCP parameters
+      // Validate and correct tool parameters before execution
+      const validatedParameters = this.validateToolParameters(updatedStep.toolName!, updatedStep.toolParameters!);
+      
+      // Execute tool call with validated MCP parameters
       const toolResult = await this.toolUser.executeWithTool(
         updatedStep.toolName!, 
-        updatedStep.toolParameters!, 
+        validatedParameters, 
         updatedStep.instruction
       );
       
