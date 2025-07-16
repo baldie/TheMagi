@@ -62,7 +62,7 @@ I will execute these steps systematically.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('perform web search to gather relevant data');
@@ -103,7 +103,7 @@ My approach:
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('Research the topic thoroughly');
@@ -144,7 +144,7 @@ This is my complete plan.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe("gather relevant information");
@@ -172,7 +172,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing - no JSON, so use fallback
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : `{ "Step1": { "instruction": "respond with the answer to the simple question" } }`;
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(1);
     expect(result[0].instruction).toBe('respond with the answer to the simple question');
@@ -194,7 +194,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(2);
     expect(result[0].instruction).toBe('Do some research');
@@ -209,7 +209,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing - no JSON, so use fallback
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : `{ "Step1": { "instruction": "respond with the answer to the simple question" } }`;
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(1);
     expect(result[0].instruction).toBe('respond with the answer to the simple question');
@@ -240,7 +240,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(5);
     expect(result[0].instruction).toBe('First step');
@@ -281,7 +281,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('Search for information');
@@ -318,7 +318,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].toolName).toBe('WEB_SEARCH');
@@ -364,7 +364,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('gather information');
@@ -418,7 +418,7 @@ Finally, we should make a decision.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].toolName).toBe('analysis');
@@ -472,7 +472,7 @@ This plan will help me address the inquiry systematically.
     // Extract JSON from the plan response for testing
     const jsonMatch = planResponse.match(/\{[\s\S]*\}/);
     const jsonString = jsonMatch ? jsonMatch[0] : '{}';
-    const result = await magi.planner.parsePlanSteps(jsonString);
+    const result = await magi.planner.parsePlanSteps(JSON.parse(jsonString));
     
     expect(result).toHaveLength(3);
     expect(result[0].instruction).toBe('search for information about the topic');
