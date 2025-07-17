@@ -79,12 +79,9 @@ describe('ToolUser', () => {
 
     it('should execute tool successfully', async () => {
       const mockResult = {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Search results for test query'
-          }
-        ],
+        data: {
+          text: 'Search results for test query'
+        },
         isError: false
       };
 
@@ -121,7 +118,9 @@ describe('ToolUser', () => {
 
     it('should handle empty tool results', async () => {
       const mockResult = {
-        content: [],
+        data: {
+          text: 'Tool executed successfully but returned no text content'
+        },
         isError: false
       };
 
@@ -138,12 +137,9 @@ describe('ToolUser', () => {
 
     it('should handle error responses from tools', async () => {
       const mockResult = {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Tool error occurred'
-          }
-        ],
+        data: {
+          text: 'Tool error occurred'
+        },
         isError: true
       };
 
@@ -158,63 +154,45 @@ describe('ToolUser', () => {
       expect(result).toContain('Tool error occurred');
     });
 
-    it('should process multiple content items', async () => {
+    it('should process web search results', async () => {
       const mockResult = {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'First result'
-          },
-          {
-            type: 'text' as const,
-            text: 'Second result'
-          }
-        ],
+        data: {
+          text: 'Search query: test query\n\nFound 2 results:\n\n1. First Result\n   URL: https://example.com/1\n   Content: First result content\n\n2. Second Result\n   URL: https://example.com/2\n   Content: Second result content'
+        },
         isError: false
-      };
+      } as any;
 
       mockMcpClientManager.executeTool.mockResolvedValue(mockResult);
 
       const result = await toolUser.executeWithTool(
-        'multi_result_tool',
-        {},
-        'Test multiple results'
+        'search',
+        { query: 'test query' },
+        'Test search results'
       );
 
-      expect(result).toContain('First result');
-      expect(result).toContain('Second result');
+      expect(result).toContain('First Result');
+      expect(result).toContain('Second Result');
+      expect(result).toContain('test query');
     });
 
-    it('should filter out non-text content', async () => {
+    it('should handle text response', async () => {
       const mockResult = {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Text content'
-          },
-          {
-            type: 'image' as const,
-            data: 'base64data'
-          },
-          {
-            type: 'resource' as const,
-            uri: 'file://test.txt'
-          }
-        ],
+        data: {
+          text: 'Simple text content'
+        },
         isError: false
       };
 
       mockMcpClientManager.executeTool.mockResolvedValue(mockResult);
 
       const result = await toolUser.executeWithTool(
-        'mixed_content_tool',
+        'text_tool',
         {},
-        'Test mixed content'
+        'Test text content'
       );
 
-      expect(result).toContain('Text content');
-      expect(result).not.toContain('base64data');
-      expect(result).not.toContain('file://test.txt');
+      expect(result).toContain('Simple text content');
+      expect(result).toContain('Tool used: text_tool');
     });
   });
 
@@ -231,7 +209,7 @@ describe('ToolUser', () => {
       expect(result).toContain('No output from tool');
     });
 
-    it('should handle results without content', async () => {
+    it('should handle results without data', async () => {
       mockMcpClientManager.executeTool.mockResolvedValue({
         isError: false
       } as any);
@@ -245,26 +223,23 @@ describe('ToolUser', () => {
       expect(result).toContain('No output from tool');
     });
 
-    it('should handle text content with undefined text', async () => {
+    it('should handle text response with empty text', async () => {
       const mockResult = {
-        content: [
-          {
-            type: 'text' as const,
-            text: undefined
-          }
-        ],
+        data: {
+          text: ''
+        },
         isError: false
       };
 
       mockMcpClientManager.executeTool.mockResolvedValue(mockResult);
 
       const result = await toolUser.executeWithTool(
-        'undefined_text_tool',
+        'empty_text_tool',
         {},
-        'Test undefined text'
+        'Test empty text'
       );
 
-      expect(result).toContain('Tool executed successfully but returned no text content');
+      expect(result).toContain('Tool used: empty_text_tool');
     });
   });
 });

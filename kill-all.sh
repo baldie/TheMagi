@@ -4,8 +4,6 @@ echo "stopping orchestrator"
 pkill -f orchestrator
 echo "stopping conduit"
 pkill -f ollama
-echo "stopping MCP web-search server"
-pkill -f mcp_web_search.py
 
 # Replace 'PORT_NUMBER' with the actual port number you want to target.
 PORT_NUMBER=4200

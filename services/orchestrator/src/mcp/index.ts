@@ -3,24 +3,9 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { MagiName } from '../magi/magi';
 import { logger } from '../logger';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import path from 'path';
+import { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
+import { getBalthazarTools } from './tools/balthazar-tools';
 
-/**
- * MCP Server response for tool execution
- */
-export interface McpToolExecutionResponse {
-  content: Array<{
-    type: 'text' | 'image' | 'resource';
-    text?: string;
-    data?: string;
-    mimeType?: string;
-    uri?: string;
-    name?: string;
-    description?: string;
-  }>;
-  isError?: boolean;
-  _meta?: Record<string, any>;
-}
 
 /**
  * Information about a single MCP tool
@@ -34,7 +19,7 @@ export interface McpToolInfo {
 /**
  * Configuration for MCP servers for each Magi
  */
-interface McpServerConfig {
+export interface McpServerConfig {
   name: string; // Unique identifier for this server
   command: string;
   args?: string[];
@@ -55,29 +40,7 @@ export class McpClientManager {
   private getServerConfigs(): Record<MagiName, McpServerConfig[]> {
     if (!this.serverConfigs) {
       this.serverConfigs = {
-        [MagiName.Balthazar]: [
-          {
-            name: 'tavily',
-            command: 'npx',
-            args: ['-y', '@mcptools/mcp-tavily@latest'],
-            env: { 
-              ...process.env,
-              TAVILY_API_KEY: process.env.TAVILY_API_KEY || ''
-            } as Record<string, string>
-          },
-          {
-            name: 'web-crawl',
-            command: path.resolve(__dirname, '../../../web-search/venv/bin/python'),
-            args: ['mcp_web_search.py'],
-            env: { 
-              ...process.env,
-              VIRTUAL_ENV: path.resolve(__dirname, '../../../web-search/venv'),
-              PATH: `${path.resolve(__dirname, '../../../web-search/venv/bin')}:${process.env.PATH}`,
-              PYTHONPATH: path.resolve(__dirname, '../../../web-search/venv/lib/python3.12/site-packages')
-            } as Record<string, string>,
-            cwd: path.resolve(__dirname, '../../../web-search')
-          }
-        ],
+        [MagiName.Balthazar]: getBalthazarTools(),
         [MagiName.Caspar]: [],
         [MagiName.Melchior]: []
       };
@@ -223,19 +186,18 @@ export class McpClientManager {
    */
   private getToolNameMapping(): Record<string, string> {
     return {
-      'web_search': 'search',
-      'web_extract': 'extract'
+      'searchContext': 'search'
     };
   }
 
   /**
    * Execute a tool for a specific Magi
    */
-  async executeTool(
+  async executeTool<T extends string = string>(
     magiName: MagiName,
-    toolName: string,
+    toolName: T,
     toolArguments: Record<string, any>
-  ): Promise<McpToolExecutionResponse> {
+  ): Promise<GetToolResponse<T>> {
     if (!this.initialized) {
       throw new Error('MCP client manager not initialized');
     }
@@ -278,19 +240,7 @@ export class McpClientManager {
           
           logger.debug(`Tool ${toolName} completed for ${magiName} via ${config.name} server`);
           
-          return {
-            content: Array.isArray(result.content) ? result.content.map(item => ({
-              type: item.type as 'text' | 'image' | 'resource',
-              text: item.type === 'text' ? (item as any).text : undefined,
-              data: item.type === 'image' ? (item as any).data : undefined,
-              mimeType: item.type === 'image' ? (item as any).mimeType : undefined,
-              uri: item.type === 'resource' ? (item as any).uri : undefined,
-              name: item.type === 'resource' ? (item as any).name : undefined,
-              description: item.type === 'resource' ? (item as any).description : undefined
-            })) : [],
-            isError: Boolean(result.isError),
-            _meta: result._meta
-          };
+          return this.transformMcpResultToTypedResponse(toolName, result) as GetToolResponse<T>;
         }
       } catch (error) {
         logger.error(`Failed to check tools or execute ${toolName} on ${config.name} server for ${magiName}:`);
@@ -304,17 +254,158 @@ export class McpClientManager {
     }
 
     logger.warn(`Tool ${toolName} (mapped to ${actualToolName}) not found in any MCP server for ${magiName}`);
-    return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`);
+    return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;
+  }
+
+  /**
+   * Transform MCP result to typed response based on tool name
+   */
+  private transformMcpResultToTypedResponse(toolName: string, result: any): GetToolResponse<string> {
+    // Extract text content from MCP response
+    const textContent = Array.isArray(result.content) 
+      ? result.content
+          .filter((item: any) => item.type === 'text')
+          .map((item: any) => item.text)
+          .filter((text: any): text is string => text !== undefined)
+          .join('\n')
+      : '';
+
+    // Parse the response based on tool type
+    if (this.isWebSearchTool(toolName)) {
+      return {
+        data: this.parseWebSearchResponse(textContent),
+        isError: Boolean(result.isError),
+        _meta: result._meta
+      } as any;
+    } else if (this.isWebExtractTool(toolName)) {
+      return {
+        data: this.parseWebExtractResponse(textContent),
+        isError: Boolean(result.isError),
+        _meta: result._meta
+      } as any;
+    } else {
+      // Fallback to generic text response
+      return {
+        data: { text: textContent || 'Tool executed successfully but returned no text content' },
+        isError: Boolean(result.isError),
+        _meta: result._meta
+      } as any;
+    }
+  }
+
+  /**
+   * Check if tool is a web search tool
+   */
+  private isWebSearchTool(toolName: string): boolean {
+    return ['search', 'searchContext'].includes(toolName);
+  }
+
+  /**
+   * Check if tool is a web extract tool
+   */
+  private isWebExtractTool(toolName: string): boolean {
+    return ['extract', 'crawl_url'].includes(toolName);
+  }
+
+  /**
+   * Parse web search response from text content (Tavily search API format)
+   */
+  private parseWebSearchResponse(textContent: string): WebSearchResponse {
+    try {
+      // Try to parse as JSON first
+      const parsed = JSON.parse(textContent);
+      if (parsed.results && Array.isArray(parsed.results)) {
+        return {
+          query: parsed.query || '',
+          answer: parsed.answer,
+          images: parsed.images || [],
+          results: parsed.results.map((r: any) => ({
+            title: r.title || '',
+            url: r.url || '',
+            content: r.content || r.snippet || '',
+            score: r.score || 0,
+            raw_content: r.raw_content,
+            favicon: r.favicon
+          })),
+          auto_parameters: parsed.auto_parameters,
+          response_time: parsed.response_time || 0
+        };
+      }
+    } catch {
+      // If parsing fails, treat as plain text response
+    }
+    
+    return {
+      query: '',
+      answer: undefined,
+      images: [],
+      results: [{
+        title: 'Search Result',
+        url: '',
+        content: textContent,
+        score: 0
+      }],
+      response_time: 0
+    };
+  }
+
+  /**
+   * Parse web extract response from text content (Tavily extract API format)
+   */
+  private parseWebExtractResponse(textContent: string): WebExtractResponse {
+    try {
+      // Try to parse as JSON first
+      const parsed = JSON.parse(textContent);
+      if (parsed.results && Array.isArray(parsed.results)) {
+        return {
+          results: parsed.results.map((r: any) => ({
+            url: r.url || '',
+            raw_content: r.raw_content || r.content || '',
+            images: r.images || [],
+            favicon: r.favicon
+          })),
+          failed_results: parsed.failed_results || [],
+          response_time: parsed.response_time || 0
+        };
+      }
+      // Handle legacy format or simple response
+      if (parsed.content || parsed.url) {
+        return {
+          results: [{
+            url: parsed.url || '',
+            raw_content: parsed.content || textContent,
+            images: parsed.images || [],
+            favicon: parsed.favicon
+          }],
+          failed_results: [],
+          response_time: 0
+        };
+      }
+    } catch {
+      // If parsing fails, treat as plain text response
+    }
+    
+    // Fallback for plain text responses
+    return {
+      results: [{
+        url: '',
+        raw_content: textContent,
+        images: [],
+        favicon: undefined
+      }],
+      failed_results: [],
+      response_time: 0
+    };
   }
 
   /**
    * Create a standardized error response
    */
-  private createErrorResponse(message: string): McpToolExecutionResponse {
+  private createErrorResponse<T extends string>(message: string): GetToolResponse<T> {
     return {
-      content: [{ type: 'text', text: message }],
+      data: { text: message } as any,
       isError: true
-    };
+    } as GetToolResponse<T>;
   }
 
   /**

@@ -1,7 +1,7 @@
 import { logger } from '../logger';
 import { MagiName } from './magi';
 import { ConduitClient } from './conduit-client';
-import { ToolUser } from './tool-user';
+import { ToolUser, TAVILY_SEARCH_INSTRUCTIONS_PROMPT, TAVILY_EXTRACT_INSTRUCTIONS_PROMPT } from './tool-user';
 import { Model } from '../config';
 
 /**
@@ -124,6 +124,26 @@ export class Planner {
   }
 
   /**
+   * Get tool-specific instructions based on available tools for this Magi
+   */
+  private getToolInstructions(): string {
+    const hasSearchTools = this.toolsList.includes('search') || this.toolsList.includes('searchContext');
+    const hasExtractTools = this.toolsList.includes('extract') || this.toolsList.includes('crawl_url');
+    
+    let instructions = '';
+    
+    if (hasSearchTools) {
+      instructions += `\nSEARCH TOOL PARAMETERS:\n${TAVILY_SEARCH_INSTRUCTIONS_PROMPT}`;
+    }
+    
+    if (hasExtractTools) {
+      instructions += `\nEXTRACT TOOL PARAMETERS:\n${TAVILY_EXTRACT_INSTRUCTIONS_PROMPT}`;
+    }
+    
+    return instructions;
+  }
+
+  /**
    * Extract parameter details from JSON Schema for MCP format
    */
   private extractParameterDetails(inputSchema: JsonSchema | undefined): Record<string, string> {
@@ -201,6 +221,8 @@ export class Planner {
     Here are the tools you have access to:
     ${this.toolsList}
     
+    ${this.getToolInstructions()}
+    
     Below are examples of different inquiries and how your plan should look:
     
     INQUIRY: "What should I make for dinner that is simple and healthy?"`;
@@ -214,15 +236,12 @@ export class Planner {
           "Step3": {
             "instruction": "Search the web for dinner options from reputable sources",
             "tool": {
-              "name": "web_search",
+              "name": "search",
               "args": {
                 "query": "healthy simple dinner options",
-                "options": {
-                  "search_depth": "advanced",
-                  "max_results": 5,
-                  "include_answer": true,
-                  "include_images": false
-                }
+                "search_depth": "advanced",
+                "max_results": 5,
+                "include_answer": true
               }
             }
           },
@@ -362,8 +381,6 @@ export class Planner {
           return numA - numB;
         });
 
-      logger.debug(`${this.magiName} found ${allStepEntries.length} valid step entries`);
-
       // Check if plan exceeds maximum steps and log warning if so
       if (allStepEntries.length > MAX_PLAN_STEPS) {
         logger.warn(`Plan exceeded ${MAX_PLAN_STEPS} steps (found ${allStepEntries.length}), truncating to first ${MAX_PLAN_STEPS} steps`);
@@ -469,17 +486,14 @@ export class Planner {
     // Clone parameters to avoid mutating original
     const validatedParams = JSON.parse(JSON.stringify(parameters));
     
-    // Special validation for searchContext tool
-    if (toolName === 'searchContext' && validatedParams.options && typeof validatedParams.options === 'object') {
-      const options = validatedParams.options as Record<string, unknown>;
-      
-      // Validate topic parameter - must be 'general', 'news', or 'finance'
-      if (options.topic && typeof options.topic === 'string') {
-        const validTopics = ['general', 'news', 'finance'];
-        if (!validTopics.includes(options.topic)) {
-          logger.warn(`${this.magiName} correcting invalid topic "${options.topic}" to "general" for searchContext tool`);
-          options.topic = 'general'; // Default to 'general' for invalid topics
-        }
+    // Special validation for search tools (searchContext, search)
+    const isSearchTool = ['searchContext', 'search'].includes(toolName);
+    if (isSearchTool && validatedParams.topic && typeof validatedParams.topic === 'string') {
+      // Validate topic parameter - must be 'general' or 'news'
+      const validTopics = ['general', 'news'];
+      if (!validTopics.includes(validatedParams.topic)) {
+        logger.warn(`${this.magiName} correcting invalid topic "${validatedParams.topic}" to "general" for ${toolName} tool`);
+        validatedParams.topic = 'general'; // Default to 'general' for invalid topics
       }
     }
     
@@ -588,13 +602,11 @@ Respond with ONLY the properly formatted JSON`;
       const validatedParameters = this.validateToolParameters(updatedStep.toolName!, updatedStep.toolParameters!);
       
       // Execute tool call with validated MCP parameters
-      const toolResult = await this.toolUser.executeWithTool(
+      return await this.toolUser.executeWithTool(
         updatedStep.toolName!, 
         validatedParameters, 
         updatedStep.instruction
       );
-      
-      return `In completing instructions "${updatedStep.instruction}":\n\n${toolResult}`;
     } else {
       // Summarzie plan
       const planContext = fullPlan.map((planStep, index) => 

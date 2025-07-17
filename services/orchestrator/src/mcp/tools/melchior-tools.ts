@@ -1,12 +1,12 @@
 import { logger } from '../../logger';
-import { McpToolExecutionResponse } from '../index';
+import { GetToolResponse } from '../tool-response-types';
 
 /**
  * Melchior's intuitive tools - focused on personal data about the user
  * This is a placeholder implementation - needs to be updated with real tools
  */
 
-type ToolImplementation = (args: Record<string, any>) => Promise<McpToolExecutionResponse>;
+type ToolImplementation = (args: Record<string, any>) => Promise<GetToolResponse<string>>;
 
 export async function registerMelchiorTools(): Promise<Record<string, ToolImplementation>> {
   logger.debug('Registering Melchior tools...');

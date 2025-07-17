@@ -315,17 +315,15 @@ async function verifyMcpServers(): Promise<void> {
             logger.debug(`  - ${tool.name}: ${tool.description || 'No description'}`);
           }
           
-          // Test web_search tool mapping specifically for Balthazar (without using API key)
+          // Test search tool for Balthazar (without using API key)
           if (magiName === MagiName.Balthazar) {
-            logger.info(`... ${magiName}: Testing web_search tool mapping...`);
+            logger.info(`... ${magiName}: Testing search tool availability...`);
             
-            // Check if the expected mapped tool exists
-            const toolMapping = { 'web_search': 'search', 'web_extract': 'extract' };
-            const expectedTool = toolMapping['web_search'];
-            const hasMappedTool = tools.some(tool => tool.name === expectedTool);
+            // Check if search tool exists
+            const hasSearchTool = tools.some(tool => tool.name === 'search');
             
-            if (hasMappedTool) {
-              logger.info(`... ${magiName}: ✅ web_search mapping FOUND - maps to '${expectedTool}'`);
+            if (hasSearchTool) {
+              logger.info(`... ${magiName}: ✅ search tool FOUND`);
               
               // Check API key without making actual calls
               const tavilyApiKey = process.env.TAVILY_API_KEY;
@@ -336,7 +334,7 @@ async function verifyMcpServers(): Promise<void> {
                 logger.error(`... ${magiName}: ❌ Tavily API key missing or invalid - web search will fail`);
               }
             } else {
-              logger.error(`... ${magiName}: ❌ web_search mapping FAILED - expected '${expectedTool}' not found`);
+              logger.error(`... ${magiName}: ❌ search tool not found`);
               logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
               logger.error(`... ${magiName}: 🔴 This will prevent Balthazar from performing web searches!`);
             }
@@ -346,7 +344,7 @@ async function verifyMcpServers(): Promise<void> {
           if (tools.some(tool => tool.name === 'search' || tool.name === 'extract' || tool.name === 'searchContext' || tool.name === 'searchQNA')) {
             const tavilyApiKey = process.env.TAVILY_API_KEY;
             if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
-              logger.info(`... ${magiName}: Tavily web search tools available with valid API key`);
+              logger.info(`... ${magiName}: Tavily search tools available with valid API key`);
             } else if (tavilyApiKey) {
               logger.warn(`... ${magiName}: Tavily tools available but API key format appears invalid (should start with 'tvly-')`);
             } else {
@@ -366,7 +364,7 @@ async function verifyMcpServers(): Promise<void> {
           logger.warn('');
           logger.warn('⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️');
           logger.warn(`⚠️  WARNING: ${magiName} MCP TOOLS NOT AVAILABLE!`);
-          logger.warn('⚠️  Balthazar will not have access to web search capabilities');
+          logger.warn('⚠️  Balthazar will not have access to search capabilities');
           logger.warn('⚠️  This may significantly impact system functionality');
           logger.warn('⚠️  Check MCP server configuration and dependencies');
           logger.warn('⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️  ⚠️');

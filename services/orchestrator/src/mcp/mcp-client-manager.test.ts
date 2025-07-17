@@ -20,7 +20,7 @@ jest.mock('../logger', () => ({
 
 // Mock path module
 jest.mock('path', () => ({
-  resolve: jest.fn().mockReturnValue('/mocked/path/web-search'),
+  resolve: jest.fn().mockReturnValue('/mocked/path/tavily'),
   join: jest.fn().mockReturnValue('/mocked/path')
 }));
 
@@ -58,7 +58,7 @@ describe('McpClientManager', () => {
       mockClient.connect.mockResolvedValue(undefined);
 
       await expect(mcpClientManager.initialize()).resolves.not.toThrow();
-      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers
+      expect(mockClient.connect).toHaveBeenCalledTimes(1); // Updated to reflect one server
     });
 
     it('should not initialize twice', async () => {
@@ -67,14 +67,14 @@ describe('McpClientManager', () => {
       await mcpClientManager.initialize();
       await mcpClientManager.initialize(); // Second call
 
-      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers
+      expect(mockClient.connect).toHaveBeenCalledTimes(1); // Updated to reflect one server
     });
 
     it('should handle connection failures gracefully', async () => {
       mockClient.connect.mockRejectedValue(new Error('Connection failed'));
 
       await expect(mcpClientManager.initialize()).resolves.not.toThrow();
-      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers
+      expect(mockClient.connect).toHaveBeenCalledTimes(1); // Updated to reflect one server
     });
 
     it('should configure Client with correct parameters', async () => {
@@ -93,31 +93,20 @@ describe('McpClientManager', () => {
           }
         }
       );
-      expect(Client).toHaveBeenCalledWith(
-        {
-          name: 'the-magi-balthazar-web-crawl',
-          version: '1.0.0'
-        },
-        {
-          capabilities: {
-            tools: {}
-          }
-        }
-      );
     });
   });
 
   describe('getAvailableTools', () => {
     beforeEach(async () => {
       mockClient.connect.mockResolvedValue(undefined);
-      // Initialize() calls listTools once per server for testing (2 calls)
-      // Then getAvailableTools() calls listTools again for each server (2 more calls)
-      // So we need to mock 4 calls total
+      // Initialize() calls listTools once per server for testing (1 call)
+      // Then getAvailableTools() calls listTools again for each server (1 more call)
+      // So we need to mock 2 calls total
       mockClient.listTools
         .mockResolvedValueOnce({
           tools: [
             {
-              name: 'web_search',
+              name: 'search',
               inputSchema: {
                 type: 'object',
                 properties: {
@@ -130,37 +119,11 @@ describe('McpClientManager', () => {
         .mockResolvedValueOnce({
           tools: [
             {
-              name: 'web_extract',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  url: { type: 'string' }
-                }
-              }
-            }
-          ]
-        })
-        .mockResolvedValueOnce({
-          tools: [
-            {
-              name: 'web_search',
+              name: 'search',
               inputSchema: {
                 type: 'object',
                 properties: {
                   query: { type: 'string' }
-                }
-              }
-            }
-          ]
-        })
-        .mockResolvedValueOnce({
-          tools: [
-            {
-              name: 'web_extract',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  url: { type: 'string' }
                 }
               }
             }
@@ -172,25 +135,15 @@ describe('McpClientManager', () => {
     it('should return tools from MCP servers for Balthazar', async () => {
       const tools = await mcpClientManager.getAvailableTools(MagiName.Balthazar);
 
-      expect(tools).toHaveLength(2); // One tool from each server
+      expect(tools).toHaveLength(1); // One tool from the server
       expect(tools).toEqual([
         {
-          name: 'web_search',
+          name: 'search',
           description: undefined,
           inputSchema: {
             type: 'object',
             properties: {
               query: { type: 'string' }
-            }
-          }
-        },
-        {
-          name: 'web_extract',
-          description: undefined,
-          inputSchema: {
-            type: 'object',
-            properties: {
-              url: { type: 'string' }
             }
           }
         }
@@ -220,7 +173,7 @@ describe('McpClientManager', () => {
       
       mockClient.connect.mockResolvedValue(undefined);
       // Mock listTools for initialization (2 calls) and then for tool execution lookups
-      // Note: The actual MCP tools are named 'search' and 'extract', which get mapped to 'web_search' and 'web_extract'
+      // Note: The actual MCP tools are named 'search' and 'extract'
       mockClient.listTools.mockResolvedValue({
         tools: [
           {
@@ -243,6 +196,13 @@ describe('McpClientManager', () => {
           },
           {
             name: 'multi_content_tool',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+          {
+            name: 'text_tool',
             inputSchema: {
               type: 'object',
               properties: {}
@@ -275,6 +235,13 @@ describe('McpClientManager', () => {
             ],
             isError: false
           });
+        } else if (name === 'text_tool') {
+          return Promise.resolve({
+            content: [
+              { type: 'text', text: 'Text content from tool' }
+            ],
+            isError: false
+          });
         } else {
           return Promise.reject(new Error(`Tool '${name}' not found`));
         }
@@ -285,13 +252,13 @@ describe('McpClientManager', () => {
     it('should execute tool successfully', async () => {
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'web_search',
+        'search',
         { query: 'test query' }
       );
 
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toBe('Search results for test query');
+      expect(result.data).toBeDefined();
+      expect(result.data.results).toBeDefined();
+      expect(result.data.results[0].content).toBe('Search results for test query');
       expect(result.isError).toBe(false);
     });
 
@@ -300,12 +267,12 @@ describe('McpClientManager', () => {
 
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'web_search',
+        'search',
         { query: 'test query' }
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('not found in any connected MCP server');
+      expect((result.data as any).text).toContain('not found in any connected MCP server');
     });
 
     it('should return error for Magi without MCP client', async () => {
@@ -316,23 +283,21 @@ describe('McpClientManager', () => {
       );
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('not found in any connected MCP server for Caspar');
+      expect(result.data.text).toContain('not found in any connected MCP server for Caspar');
     });
 
     it('should throw error if not initialized', async () => {
       const uninitializedManager = new McpClientManager();
 
       await expect(
-        uninitializedManager.executeTool(MagiName.Balthazar, 'web_search', {})
+        uninitializedManager.executeTool(MagiName.Balthazar, 'search', {})
       ).rejects.toThrow('MCP client manager not initialized');
     });
 
-    it('should handle different content types', async () => {
+    it('should handle text content', async () => {
       const mockResult = {
         content: [
-          { type: 'text', text: 'Text content' },
-          { type: 'image', data: 'base64data', mimeType: 'image/png' },
-          { type: 'resource', uri: 'file://test.txt', name: 'test.txt' }
+          { type: 'text', text: 'Text content from tool' }
         ],
         isError: false
       };
@@ -341,16 +306,13 @@ describe('McpClientManager', () => {
 
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'multi_content_tool',
+        'text_tool',
         {}
       );
 
-      expect(result.content).toHaveLength(3);
-      expect(result.content[0].text).toBe('Text content');
-      expect(result.content[1].data).toBe('base64data');
-      expect(result.content[1].mimeType).toBe('image/png');
-      expect(result.content[2].uri).toBe('file://test.txt');
-      expect(result.content[2].name).toBe('test.txt');
+      expect(result.data).toBeDefined();
+      expect(result.data.text).toBe('Text content from tool');
+      expect(result.isError).toBe(false);
     });
   });
 
@@ -370,14 +332,14 @@ describe('McpClientManager', () => {
       mockTransport.close.mockResolvedValue(undefined);
 
       await mcpClientManager.cleanup();
-      expect(mockTransport.close).toHaveBeenCalledTimes(2); // Two servers
+      expect(mockTransport.close).toHaveBeenCalledTimes(1); // One server
     });
 
     it('should handle transport close errors gracefully', async () => {
       mockTransport.close.mockRejectedValue(new Error('Close failed'));
 
       await expect(mcpClientManager.cleanup()).resolves.not.toThrow();
-      expect(mockTransport.close).toHaveBeenCalledTimes(2); // Two servers, both will be attempted
+      expect(mockTransport.close).toHaveBeenCalledTimes(1); // One server will be attempted
     });
 
     it('should reset initialization state after cleanup', async () => {
