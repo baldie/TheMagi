@@ -429,72 +429,9 @@ echo "[Magi Installer] Ollama setup complete."
 echo
 
 # ---------------------------------------------------------------------------------
-# Step 4: Python Web Search Service Setup
+# Step 4: Python TTS Service Setup
 # ---------------------------------------------------------------------------------
-echo "[Magi Installer] Step 4: Setting up Python environment for Web Search service..."
-
-WEB_SEARCH_DIR="$(pwd)/services/web-search"
-if [ ! -d "$WEB_SEARCH_DIR" ]; then
-    echo "[ERROR] Web Search service directory not found at: $WEB_SEARCH_DIR"
-    exit 1
-fi
-
-echo "  - Checking for Python virtual environment for Web Search..."
-if [ -d "$WEB_SEARCH_DIR/venv" ] && [ -f "$WEB_SEARCH_DIR/venv/bin/activate" ]; then
-    echo "    Virtual environment already exists. Skipping creation."
-else
-    if [ -d "$WEB_SEARCH_DIR/venv" ]; then
-        echo "    Virtual environment exists but is corrupted. Recreating..."
-        rm -rf "$WEB_SEARCH_DIR/venv"
-    else
-        echo "    Virtual environment not found. Creating it now..."
-    fi
-    $PYTHON_CMD -m venv "$WEB_SEARCH_DIR/venv"
-    if [ $? -ne 0 ]; then
-        echo "[ERROR] Failed to create Python virtual environment for Web Search."
-        echo "        Please ensure Python and the 'venv' module are working correctly."
-        exit 1
-    fi
-    echo "    [OK] Virtual environment created successfully."
-fi
-
-echo "  - Installing Web Search Python dependencies..."
-source "$WEB_SEARCH_DIR/venv/bin/activate"
-
-# Upgrade pip first
-pip install --upgrade pip
-
-# Install dependencies
-echo "    Installing Web Search dependencies..."
-pip install --timeout 1000 --retries 5 -r "$WEB_SEARCH_DIR/requirements.txt"
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Failed to install Web Search dependencies from requirements.txt."
-    echo "        Please check your internet connection and the contents of the requirements file."
-    exit 1
-fi
-
-# Run Crawl4AI setup
-echo "    Running Crawl4AI setup..."
-cd "$WEB_SEARCH_DIR"
-python setup.py
-if [ $? -ne 0 ]; then
-    echo "[ERROR] Failed to setup Crawl4AI. Check logs for details."
-    exit 1
-fi
-
-echo "    [OK] Web Search dependencies installed and Crawl4AI setup completed."
-deactivate
-
-echo "[Magi Installer] Web Search Service setup complete."
-echo
-
-# Return to project root before TTS setup
-cd "$SCRIPT_DIR"
-
-# ---------------------------------------------------------------------------------
-# Step 5: Python TTS Service Setup
-# ---------------------------------------------------------------------------------
-echo "[Magi Installer] Step 5: Setting up Python environment for TTS service..."
+echo "[Magi Installer] Step 4: Setting up Python environment for TTS service..."
 
 TTS_DIR="$SCRIPT_DIR/services/tts"
 if [ ! -d "$TTS_DIR" ]; then
@@ -585,9 +522,9 @@ echo "[Magi Installer] TTS Service setup complete."
 echo
 
 # ---------------------------------------------------------------------------------
-# Step 6: Service Integration Testing
+# Step 5: Service Integration Testing
 # ---------------------------------------------------------------------------------
-echo "[Magi Installer] Step 6: Testing service integration and connectivity..."
+echo "[Magi Installer] Step 5: Testing service integration and connectivity..."
 
 # Test Ollama connectivity
 echo "  - Testing Ollama service connectivity..."
@@ -664,21 +601,6 @@ else
     echo "    [WARNING] No Chrome browser available. UI tests will be skipped."
 fi
 popd > /dev/null
-
-# Test Web Search Python environment
-echo "  - Testing Web Search Python environment..."
-cd "$WEB_SEARCH_DIR"
-source venv/bin/activate
-python3 -c "
-import sys
-try:
-    import crawl4ai, fastapi, uvicorn
-    print('    [OK] Web Search dependencies available.')
-except ImportError as e:
-    print(f'[WARNING] Missing Web Search dependency: {e}')
-    sys.exit(1)
-" 2>/dev/null
-deactivate
 
 # Test Python TTS environment
 echo "  - Testing Python TTS environment..."
