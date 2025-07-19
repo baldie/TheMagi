@@ -320,7 +320,7 @@ async function verifyMcpServers(): Promise<void> {
             logger.info(`... ${magiName}: Testing search tool availability...`);
             
             // Check if search tool exists
-            const hasSearchTool = tools.some(tool => tool.name === 'search');
+            const hasSearchTool = tools.some(tool => tool.name === 'tavily-search');
             
             if (hasSearchTool) {
               logger.info(`... ${magiName}: ✅ search tool FOUND`);
@@ -341,7 +341,7 @@ async function verifyMcpServers(): Promise<void> {
           }
 
           // Check for Tavily tools and API key availability
-          if (tools.some(tool => tool.name === 'search' || tool.name === 'extract' || tool.name === 'searchContext' || tool.name === 'searchQNA')) {
+          if (tools.some(tool => tool.name === 'tavily-search' || tool.name === 'tavily-extract' || tool.name === 'tavily-crawl' || tool.name === 'tavily-map')) {
             const tavilyApiKey = process.env.TAVILY_API_KEY;
             if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
               logger.info(`... ${magiName}: Tavily search tools available with valid API key`);
@@ -351,7 +351,7 @@ async function verifyMcpServers(): Promise<void> {
               logger.warn(`... ${magiName}: Tavily tools available but TAVILY_API_KEY not set in environment`);
             }
           } else if (magiName === MagiName.Balthazar) {
-            logger.error(`... ${magiName}: NO Tavily tools found! Expected: search, extract, searchContext, or searchQNA`);
+            logger.error(`... ${magiName}: NO Tavily tools found! Expected: tavily-search, tavily-extract, tavily-crawl, tavily-map`);
             logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
           }
         } else {

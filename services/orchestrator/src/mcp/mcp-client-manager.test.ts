@@ -1,5 +1,5 @@
 import { McpClientManager } from './index';
-import { MagiName } from '../magi/magi';
+import { MagiName } from '../types/magi-types';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
@@ -99,51 +99,56 @@ describe('McpClientManager', () => {
   describe('getAvailableTools', () => {
     beforeEach(async () => {
       mockClient.connect.mockResolvedValue(undefined);
-      // Initialize() calls listTools once per server for testing (1 call)
+      // Initialize() calls listTools once per server during validation (1 call)
       // Then getAvailableTools() calls listTools again for each server (1 more call)
-      // So we need to mock 2 calls total
-      mockClient.listTools
-        .mockResolvedValueOnce({
-          tools: [
-            {
-              name: 'search',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  query: { type: 'string' }
-                }
+      // So we need to mock 2 calls total for Balthazar's server
+      mockClient.listTools.mockResolvedValue({
+        tools: [
+          {
+            name: 'tavily-search',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: { type: 'string' }
               }
             }
-          ]
-        })
-        .mockResolvedValueOnce({
-          tools: [
-            {
-              name: 'search',
-              inputSchema: {
-                type: 'object',
-                properties: {
-                  query: { type: 'string' }
-                }
+          },
+          {
+            name: 'tavily-extract',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                urls: { type: 'array' }
               }
             }
-          ]
-        });
+          }
+        ]
+      });
       await mcpClientManager.initialize();
     });
 
     it('should return tools from MCP servers for Balthazar', async () => {
       const tools = await mcpClientManager.getAvailableTools(MagiName.Balthazar);
 
-      expect(tools).toHaveLength(1); // One tool from the server
+      expect(tools).toHaveLength(2); // Two tools from the server
       expect(tools).toEqual([
         {
-          name: 'search',
+          name: 'tavily-search',
           description: undefined,
           inputSchema: {
             type: 'object',
             properties: {
               query: { type: 'string' }
+            }
+          }
+        },
+        {
+          name: 'tavily-extract',
+          description: undefined,
+          inputSchema: {
+            type: 'object',
+            properties: {
+              urls: { type: 'array' }
             }
           }
         }
@@ -173,11 +178,11 @@ describe('McpClientManager', () => {
       
       mockClient.connect.mockResolvedValue(undefined);
       // Mock listTools for initialization (2 calls) and then for tool execution lookups
-      // Note: The actual MCP tools are named 'search' and 'extract'
+      // Note: The actual MCP tools are named 'tavily-search' and 'tavily-extract'
       mockClient.listTools.mockResolvedValue({
         tools: [
           {
-            name: 'search',
+            name: 'tavily-search',
             inputSchema: {
               type: 'object',
               properties: {
@@ -186,11 +191,11 @@ describe('McpClientManager', () => {
             }
           },
           {
-            name: 'extract',
+            name: 'tavily-extract',
             inputSchema: {
               type: 'object',
               properties: {
-                url: { type: 'string' }
+                urls: { type: 'array' }
               }
             }
           },
@@ -212,14 +217,14 @@ describe('McpClientManager', () => {
       });
       
       mockClient.callTool.mockImplementation(({ name }) => {
-        if (name === 'search') {
+        if (name === 'tavily-search') {
           return Promise.resolve({
             content: [
               { type: 'text', text: 'Search results for test query' }
             ],
             isError: false
           });
-        } else if (name === 'extract') {
+        } else if (name === 'tavily-extract') {
           return Promise.resolve({
             content: [
               { type: 'text', text: 'Extracted data from web page' }
@@ -252,7 +257,7 @@ describe('McpClientManager', () => {
     it('should execute tool successfully', async () => {
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'search',
+        'tavily-search',
         { query: 'test query' }
       );
 
@@ -267,7 +272,7 @@ describe('McpClientManager', () => {
 
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'search',
+        'tavily-search',
         { query: 'test query' }
       );
 

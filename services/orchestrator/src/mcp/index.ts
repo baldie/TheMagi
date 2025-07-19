@@ -5,6 +5,9 @@ import { logger } from '../logger';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
 import { getBalthazarTools } from './tools/balthazar-tools';
+import { getCasparTools } from './tools/caspar-tools';
+import { getMelchiorTools } from './tools/melchior-tools';
+import { ToolRegistry, MAGI_TOOL_ASSIGNMENTS } from './tools/tool-registry';
 
 
 /**
@@ -41,8 +44,8 @@ export class McpClientManager {
     if (!this.serverConfigs) {
       this.serverConfigs = {
         [MagiName.Balthazar]: getBalthazarTools(),
-        [MagiName.Caspar]: [],
-        [MagiName.Melchior]: []
+        [MagiName.Caspar]: getCasparTools(),
+        [MagiName.Melchior]: getMelchiorTools()
       };
     }
     return this.serverConfigs;
@@ -58,6 +61,9 @@ export class McpClientManager {
 
     logger.info('Initializing MCP client manager...');
     
+    // Validate tool assignments against registry
+    this.validateToolAssignments();
+    
     const serverConfigs = this.getServerConfigs();
     for (const [magiName, configs] of Object.entries(serverConfigs)) {
       for (const config of configs) {
@@ -65,8 +71,54 @@ export class McpClientManager {
       }
     }
     
+    // Validate that assigned tools are actually available after connection
+    await this.validateToolAvailability();
+    
     this.initialized = true;
     logger.info('MCP client manager initialization complete');
+  }
+
+  /**
+   * Validate tool assignments against registry
+   */
+  private validateToolAssignments(): void {
+    logger.debug('Validating tool assignments against registry...');
+    
+    for (const [magiName, assignedTools] of Object.entries(MAGI_TOOL_ASSIGNMENTS)) {
+      for (const toolName of assignedTools) {
+        const toolDef = ToolRegistry.getToolDefinition(toolName);
+        if (!toolDef) {
+          logger.error(`${magiName} is assigned unknown tool: ${toolName}`);
+          throw new Error(`Unknown tool assignment: ${magiName} -> ${toolName}`);
+        }
+        logger.debug(`✓ ${magiName}: ${toolName} (${toolDef.description})`);
+      }
+    }
+    
+    logger.info('Tool assignments validated successfully');
+  }
+
+  /**
+   * Validate that assigned tools are available after MCP connections
+   */
+  private async validateToolAvailability(): Promise<void> {
+    logger.debug('Validating tool availability after MCP connections...');
+    
+    for (const [magiName, assignedTools] of Object.entries(MAGI_TOOL_ASSIGNMENTS)) {
+      const availableTools = await this.getAvailableTools(magiName as MagiName);
+      const availableToolNames = availableTools.map(t => t.name);
+      
+      for (const toolName of assignedTools) {
+        const canonicalName = ToolRegistry.getCanonicalName(toolName);
+        if (!availableToolNames.includes(canonicalName || toolName)) {
+          logger.warn(`${magiName} assigned tool '${toolName}' not available from MCP servers`);
+        } else {
+          logger.debug(`✓ ${magiName}: ${toolName} available`);
+        }
+      }
+    }
+    
+    logger.info('Tool availability validation complete');
   }
 
   /**
@@ -185,9 +237,7 @@ export class McpClientManager {
    * Get tool name mapping for logical names to actual MCP tool names
    */
   private getToolNameMapping(): Record<string, string> {
-    return {
-      'searchContext': 'search'
-    };
+    return ToolRegistry.getToolNameMapping();
   }
 
   /**
@@ -297,14 +347,14 @@ export class McpClientManager {
    * Check if tool is a web search tool
    */
   private isWebSearchTool(toolName: string): boolean {
-    return ['search', 'searchContext'].includes(toolName);
+    return ToolRegistry.isWebSearchTool(toolName);
   }
 
   /**
    * Check if tool is a web extract tool
    */
   private isWebExtractTool(toolName: string): boolean {
-    return ['extract', 'crawl_url'].includes(toolName);
+    return ToolRegistry.isWebExtractTool(toolName);
   }
 
   /**

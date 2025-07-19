@@ -1,28 +1,33 @@
+import { MagiName } from '../../types/magi-types';
+import { ToolRegistry, MAGI_TOOL_ASSIGNMENTS } from './tool-registry';
 import { McpServerConfig } from '../index';
 
 /**
  * Balthazar's analytical tools - focused on data gathering, analysis, and fact-checking
  * 
- * Note: Web search functionality is now handled by Tavily MCP server integration.
- * Tools are automatically available through the MCP client manager.
+ * Tools assigned: tavily-search, tavily-extract
+ * - Web search for current information and fact-checking
+ * - Content extraction from URLs for detailed analysis
  */
-
-type ToolImplementation = (args: Record<string, any>) => Promise<any>;
 
 /**
- * Register Balthazar's tools and return the implementation map
+ * Get Balthazar's tool assignments from the registry
+ */
+export function getBalthazarToolAssignments(): string[] {
+  return MAGI_TOOL_ASSIGNMENTS[MagiName.Balthazar];
+}
+
+/**
+ * Get MCP server configurations needed for Balthazar's tools
  */
 export function getBalthazarTools(): McpServerConfig[] {
-
-  return [
-            {
-              name: 'tavily',
-              command: 'npx',
-              args: ['-y', '@mcptools/mcp-tavily@latest'],
-              env: { 
-                ...process.env,
-                TAVILY_API_KEY: process.env.TAVILY_API_KEY || ''
-              } as Record<string, string>
-            }
-          ]
+  return ToolRegistry.getServersForMagi(MagiName.Balthazar).map(server => ({
+    name: server.name,
+    command: server.command,
+    args: server.args,
+    env: {
+      ...process.env,
+      ...server.env
+    } as Record<string, string>
+  }));
 }

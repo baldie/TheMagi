@@ -1,7 +1,8 @@
 import { logger } from '../logger';
 import { MagiName } from './magi';
 import { ConduitClient } from './conduit-client';
-import { ToolUser, TAVILY_SEARCH_INSTRUCTIONS_PROMPT, TAVILY_EXTRACT_INSTRUCTIONS_PROMPT } from './tool-user';
+import { getCleanExtractPrompt, ToolUser } from './tool-user';
+import { ToolRegistry } from '../mcp/tools/tool-registry';
 import { Model } from '../config';
 
 /**
@@ -127,17 +128,13 @@ export class Planner {
    * Get tool-specific instructions based on available tools for this Magi
    */
   private getToolInstructions(): string {
-    const hasSearchTools = this.toolsList.includes('search') || this.toolsList.includes('searchContext');
-    const hasExtractTools = this.toolsList.includes('extract') || this.toolsList.includes('crawl_url');
-    
+    const availableTools = ToolRegistry.getToolsForMagi(this.magiName);
     let instructions = '';
     
-    if (hasSearchTools) {
-      instructions += `\nSEARCH TOOL PARAMETERS:\n${TAVILY_SEARCH_INSTRUCTIONS_PROMPT}`;
-    }
-    
-    if (hasExtractTools) {
-      instructions += `\nEXTRACT TOOL PARAMETERS:\n${TAVILY_EXTRACT_INSTRUCTIONS_PROMPT}`;
+    for (const tool of availableTools) {
+      if (tool.instructions) {
+        instructions += `\n${tool.name.toUpperCase()} TOOL PARAMETERS:\n${tool.instructions}\n`;
+      }
     }
     
     return instructions;
@@ -236,10 +233,9 @@ export class Planner {
           "Step3": {
             "instruction": "Search the web for dinner options from reputable sources",
             "tool": {
-              "name": "search",
+              "name": "tavily-search",
               "args": {
                 "query": "healthy simple dinner options",
-                "search_depth": "advanced",
                 "max_results": 5,
                 "include_answer": true
               }
@@ -249,12 +245,11 @@ export class Planner {
             "instruction": "Evaluate the search results and respond with the URL for he most promising recipe. The next step needs URLs",
           },
           "Step5": {
-            "instruction": "Use crawl_url to get detailed content from the URL found in previous step",
+            "instruction": "Use extract to get detailed content from the URL found in previous step",
             "tool": {
-              "name": "crawl_url",
+              "name": "tavily-extract",
               "args": {
-                "url": "<PLACEHOLDER>",
-                "include_content": true
+                "urls": "<PLACEHOLDER>"
               }
             }
           },
@@ -483,18 +478,25 @@ export class Planner {
    * @returns Corrected parameters
    */
   private validateToolParameters(toolName: string, parameters: Record<string, unknown>): Record<string, unknown> {
-    // Clone parameters to avoid mutating original
-    const validatedParams = JSON.parse(JSON.stringify(parameters));
+    // Apply registry defaults first
+    const validatedParams = ToolRegistry.validateAndApplyDefaults(toolName, parameters);
     
-    // Special validation for search tools (searchContext, search)
-    const isSearchTool = ['searchContext', 'search'].includes(toolName);
-    if (isSearchTool && validatedParams.topic && typeof validatedParams.topic === 'string') {
+    // Special validation for search tools
+    if (ToolRegistry.isWebSearchTool(toolName)) {
       // Validate topic parameter - must be 'general' or 'news'
-      const validTopics = ['general', 'news'];
-      if (!validTopics.includes(validatedParams.topic)) {
-        logger.warn(`${this.magiName} correcting invalid topic "${validatedParams.topic}" to "general" for ${toolName} tool`);
-        validatedParams.topic = 'general'; // Default to 'general' for invalid topics
+      if (validatedParams.topic && typeof validatedParams.topic === 'string') {
+        const validTopics = ['general', 'news'];
+        if (!validTopics.includes(validatedParams.topic)) {
+          logger.warn(`${this.magiName} correcting invalid topic "${validatedParams.topic}" to "general" for ${toolName} tool`);
+          validatedParams.topic = 'general'; // Default to 'general' for invalid topics
+        }
       }
+      
+      logger.debug(`${this.magiName} validated search tool parameters for ${toolName}:`, validatedParams);
+    }
+    
+    if (ToolRegistry.isWebExtractTool(toolName)) {
+      logger.debug(`${this.magiName} validated extract tool parameters for ${toolName}:`, validatedParams);
     }
     
     return validatedParams;
@@ -602,11 +604,19 @@ Respond with ONLY the properly formatted JSON`;
       const validatedParameters = this.validateToolParameters(updatedStep.toolName!, updatedStep.toolParameters!);
       
       // Execute tool call with validated MCP parameters
-      return await this.toolUser.executeWithTool(
+      let toolResponse = await this.toolUser.executeWithTool(
         updatedStep.toolName!, 
         validatedParameters, 
         updatedStep.instruction
       );
+
+      // Web pages can have a lot of noise that throw off the magi, so lets clean it
+      if (updatedStep.toolName == 'extract'){
+        const cleanExtractPrompt = getCleanExtractPrompt(originalInquiry, toolResponse);
+        toolResponse = await this.conduitClient.contact(cleanExtractPrompt, '', this.model, { temperature: this.temperature })
+      }
+
+      return toolResponse;
     } else {
       // Summarzie plan
       const planContext = fullPlan.map((planStep, index) => 

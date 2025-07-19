@@ -144,15 +144,8 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error(`${this.magiName} failed to parse JSON response. Error: ${errorMessage}`);
-      
-      // Provide specific guidance for common JSON errors
-      if (errorMessage.includes('Expected double-quoted property name') || errorMessage.includes('trailing comma')) {
-        logger.error(`${this.magiName} JSON parsing failed - likely due to trailing commas. Remove commas after final properties in each object.`);
-      } else if (errorMessage.includes('Unexpected token')) {
-        logger.error(`${this.magiName} JSON parsing failed - check for syntax errors, missing quotes, or invalid characters.`);
-      }
-      
-      logger.error(`${this.magiName} raw response:`, jsonResponse);
+      logger.error(`\n\n${jsonResponse}\n\n`);
+
       throw error;
     }
   }
