@@ -4,12 +4,9 @@ import { logger } from '../logger';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { Planner } from './planner';
+import { MagiName } from '../types/magi-types';
 
-export enum MagiName {
-  Balthazar = 'Balthazar',
-  Melchior = 'Melchior',
-  Caspar = 'Caspar',
-}
+export { MagiName };
 
 /**
  * Interface for the configuration of a single Magi persona.

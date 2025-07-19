@@ -76,7 +76,11 @@
       "WebFetch(domain:docs.tavily.com)",
       "Bash(npx tavily-mcp:*)",
       "Bash(npx:*)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(TAVILY_API_KEY=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 npm test -- --testPathPattern=diagnostics)",
+      "Bash(npm install:*)",
+      "Bash(TAVILY_API_KEY=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 npx -y tavily-mcp@latest --help)",
+      "Bash(TAVILY_API_KEY=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 npx -y tavily-mcp@latest --list-tools)"
     ],
     "deny": []
   },

@@ -1,21 +1,33 @@
-import { logger } from '../../logger';
-import { GetToolResponse } from '../tool-response-types';
+import { MagiName } from '../../types/magi-types';
+import { ToolRegistry, MAGI_TOOL_ASSIGNMENTS } from './tool-registry';
+import { McpServerConfig } from '../index';
 
 /**
  * Caspar's practical tools - focused on smart home devices, system status, and integration data
- * This is a placeholder implementation - needs to be updated with real tools
+ * 
+ * Tools assigned: smart-home-devices
+ * - Query and control smart home devices
+ * - System status and environmental monitoring
  */
 
-type ToolImplementation = (args: Record<string, any>) => Promise<GetToolResponse<string>>;
+/**
+ * Get Caspar's tool assignments from the registry
+ */
+export function getCasparToolAssignments(): string[] {
+  return MAGI_TOOL_ASSIGNMENTS[MagiName.Caspar];
+}
 
-export async function registerCasparTools(): Promise<Record<string, ToolImplementation>> {
-  logger.debug('Registering Caspar tools...');
-  
-  const tools: Record<string, ToolImplementation> = {
-    // Add Caspar's tools here when needed
-    // 'smart-home-devices': smartHomeDevicesTool
-  };
-  
-  logger.debug('Caspar tools registered:', Object.keys(tools));
-  return tools;
+/**
+ * Get MCP server configurations needed for Caspar's tools
+ */
+export function getCasparTools(): McpServerConfig[] {
+  return ToolRegistry.getServersForMagi(MagiName.Caspar).map(server => ({
+    name: server.name,
+    command: server.command,
+    args: server.args,
+    env: {
+      ...process.env,
+      ...server.env
+    } as Record<string, string>
+  }));
 }

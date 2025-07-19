@@ -9,7 +9,7 @@ import { mcpClientManager } from './mcp';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
-import fs from 'fs';
+import dotenv from 'dotenv';
 import path from 'path';
 
 // Track initialization state
@@ -21,25 +21,16 @@ let isInitialized = false;
 function loadEnvironmentVariables() {
   try {
     const envPath = path.resolve(__dirname, '../../../.env');
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, 'utf8');
-      const envLines = envContent.split('\n');
-      
-      for (const line of envLines) {
-        const trimmedLine = line.trim();
-        if (trimmedLine && !trimmedLine.startsWith('#')) {
-          const [key, ...valueParts] = trimmedLine.split('=');
-          if (key && valueParts.length > 0) {
-            const value = valueParts.join('=').trim();
-            process.env[key.trim()] = value;
-          }
-        }
-      }
-      
+    const result = dotenv.config({ path: envPath });
+    logger.info(envPath);
+    if (result.error) {
+      logger.warn('No .env file found at ' + envPath);
+    } else {
       logger.info('Environment variables loaded from .env file');
       logger.debug(`TAVILY_API_KEY loaded: ${process.env.TAVILY_API_KEY ? 'Yes' : 'No'}`);
-    } else {
-      logger.warn('No .env file found at ' + envPath);
+      if (process.env.TAVILY_API_KEY) {
+        logger.debug(`TAVILY_API_KEY format valid: ${process.env.TAVILY_API_KEY.startsWith('tvly-') ? 'Yes' : 'No'}`);
+      }
     }
   } catch (error) {
     logger.error('Failed to load .env file:', error);

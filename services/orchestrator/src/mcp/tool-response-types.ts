@@ -72,13 +72,23 @@ export interface TextResponse {
 
 /**
  * Mapping of tool names to their specific response types
+ * This is auto-generated from the tool registry
  */
 export type ToolResponseMap = {
+  // Web search tools
   'search': WebSearchResponse;
   'searchContext': WebSearchResponse;
+  'tavily-search': WebSearchResponse;
+  
+  // Web extract tools
   'extract': WebExtractResponse;
   'crawl_url': WebExtractResponse;
+  'tavily-extract': WebExtractResponse;
+  
+  // Smart home tools
   'smart-home-devices': SmartHomeResponse;
+  
+  // Personal data tools
   'personal-data': PersonalDataResponse;
 };
 
