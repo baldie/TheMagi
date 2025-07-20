@@ -4,11 +4,10 @@ import { MagiName } from '../magi/magi';
 import { logger } from '../logger';
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
-import { getBalthazarTools } from './tools/balthazar-tools';
-import { getCasparTools } from './tools/caspar-tools';
-import { getMelchiorTools } from './tools/melchior-tools';
-import { ToolRegistry, MAGI_TOOL_ASSIGNMENTS } from './tools/tool-registry';
-
+import { getBalthazarToolAssignments, getBalthazarToolServers } from './tools/balthazar-tools';
+import { getCasparToolAssignments,getCasparTools } from './tools/caspar-tools';
+import { getMelchiorToolAssignments, getMelchiorTools } from './tools/melchior-tools';
+import { TOOL_REGISTRY, ToolRegistry } from './tools/tool-registry';
 
 /**
  * Information about a single MCP tool
@@ -17,6 +16,7 @@ export interface McpToolInfo {
   name: string;
   description?: string;
   inputSchema?: Record<string, any>;
+  instructions?: string;
 }
 
 /**
@@ -28,6 +28,14 @@ export interface McpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
+}
+
+function getToolAssigmentsForAllMagi(): Record<MagiName, string[]> {
+  return {
+    [MagiName.Balthazar]: getBalthazarToolAssignments(),
+    [MagiName.Caspar]: getCasparToolAssignments(),
+    [MagiName.Melchior]: getMelchiorToolAssignments()
+  };
 }
 
 /**
@@ -43,7 +51,7 @@ export class McpClientManager {
   private getServerConfigs(): Record<MagiName, McpServerConfig[]> {
     if (!this.serverConfigs) {
       this.serverConfigs = {
-        [MagiName.Balthazar]: getBalthazarTools(),
+        [MagiName.Balthazar]: getBalthazarToolServers(),
         [MagiName.Caspar]: getCasparTools(),
         [MagiName.Melchior]: getMelchiorTools()
       };
@@ -79,12 +87,12 @@ export class McpClientManager {
   }
 
   /**
-   * Validate tool assignments against registry
+   * If a Magi is assigned a tool, make sure the tool exists
    */
   private validateToolAssignments(): void {
     logger.debug('Validating tool assignments against registry...');
-    
-    for (const [magiName, assignedTools] of Object.entries(MAGI_TOOL_ASSIGNMENTS)) {
+    const toolAssignments = getToolAssigmentsForAllMagi();
+    for (const [magiName, assignedTools] of Object.entries(toolAssignments)) {
       for (const toolName of assignedTools) {
         const toolDef = ToolRegistry.getToolDefinition(toolName);
         if (!toolDef) {
@@ -95,7 +103,7 @@ export class McpClientManager {
       }
     }
     
-    logger.info('Tool assignments validated successfully');
+    logger.info('Tool assignments validated');
   }
 
   /**
@@ -103,14 +111,13 @@ export class McpClientManager {
    */
   private async validateToolAvailability(): Promise<void> {
     logger.debug('Validating tool availability after MCP connections...');
-    
-    for (const [magiName, assignedTools] of Object.entries(MAGI_TOOL_ASSIGNMENTS)) {
-      const availableTools = await this.getAvailableTools(magiName as MagiName);
+    const toolAssignments = getToolAssigmentsForAllMagi();
+    for (const [magiName, assignedTools] of Object.entries(toolAssignments)) {
+      const availableTools = await this.getMCPToolInfoForMagi(magiName as MagiName);
       const availableToolNames = availableTools.map(t => t.name);
       
       for (const toolName of assignedTools) {
-        const canonicalName = ToolRegistry.getCanonicalName(toolName);
-        if (!availableToolNames.includes(canonicalName || toolName)) {
+        if (!availableToolNames.includes(toolName)) {
           logger.warn(`${magiName} assigned tool '${toolName}' not available from MCP servers`);
         } else {
           logger.debug(`✓ ${magiName}: ${toolName} available`);
@@ -201,7 +208,7 @@ export class McpClientManager {
   /**
    * Get available tools for a specific Magi
    */
-  async getAvailableTools(magiName: MagiName): Promise<McpToolInfo[]> {
+  async getMCPToolInfoForMagi(magiName: MagiName): Promise<McpToolInfo[]> {
     const allTools: McpToolInfo[] = [];
     
     // Find all clients for this Magi
@@ -219,10 +226,14 @@ export class McpClientManager {
 
       try {
         const response = await client.listTools();
-        const tools = response.tools.map((tool: Tool) => ({
+        const myTools = getToolAssigmentsForAllMagi()[magiName];
+        const tools = response.tools
+        .filter((tool: Tool) => myTools.includes(tool.name))
+        .map((tool: Tool) => ({
           name: tool.name,
           description: tool.description,
-          inputSchema: tool.inputSchema
+          inputSchema: tool.inputSchema,
+          instructions: TOOL_REGISTRY[tool.name]?.instructions
         }));
         allTools.push(...tools);
       } catch (error) {
@@ -231,13 +242,6 @@ export class McpClientManager {
     }
     
     return allTools;
-  }
-
-  /**
-   * Get tool name mapping for logical names to actual MCP tool names
-   */
-  private getToolNameMapping(): Record<string, string> {
-    return ToolRegistry.getToolNameMapping();
   }
 
   /**
@@ -251,12 +255,6 @@ export class McpClientManager {
     if (!this.initialized) {
       throw new Error('MCP client manager not initialized');
     }
-
-    // Map logical tool names to actual MCP tool names
-    const toolMapping = this.getToolNameMapping();
-    const actualToolName = toolMapping[toolName] || toolName;
-    
-    logger.debug(`Executing tool: ${toolName} (mapped to: ${actualToolName}) for ${magiName}`);
 
     // Find which server provides this tool
     const serverConfigs = this.getServerConfigs();
@@ -276,17 +274,14 @@ export class McpClientManager {
         // Check if this server provides the requested tool
         const response = await client.listTools();
         const availableTools = response.tools.map((tool: Tool) => tool.name);
-        logger.debug(`${config.name} server has tools: [${availableTools.join(', ')}], looking for: ${actualToolName}`);
+        logger.debug(`${config.name} server has tools: [${availableTools.join(', ')}], looking for: ${toolName}`);
         
-        const hasTool = response.tools.some((tool: Tool) => tool.name === actualToolName);
+        const hasTool = response.tools.some((tool: Tool) => tool.name === toolName);
         
         if (hasTool) {
-          logger.debug(`Executing tool ${toolName} (mapped to ${actualToolName}) for ${magiName} via ${config.name} server`);
+          logger.debug(`Executing tool ${toolName} (mapped to ${toolName}) for ${magiName} via ${config.name} server`);
           
-          const result = await client.callTool({
-            name: actualToolName,
-            arguments: toolArguments
-          });
+          const result = await client.callTool({ name: toolName, arguments: toolArguments });
           
           logger.debug(`Tool ${toolName} completed for ${magiName} via ${config.name} server`);
           
@@ -303,7 +298,7 @@ export class McpClientManager {
       }
     }
 
-    logger.warn(`Tool ${toolName} (mapped to ${actualToolName}) not found in any MCP server for ${magiName}`);
+    logger.warn(`Tool ${toolName} (mapped to ${toolName}) not found in any MCP server for ${magiName}`);
     return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;
   }
 

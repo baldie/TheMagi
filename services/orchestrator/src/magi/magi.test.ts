@@ -27,9 +27,9 @@ describe('Magi Configuration', () => {
 describe('Magi parsePlanSteps', () => {
   let magi: Magi;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     magi = new Magi(MagiName.Balthazar, PERSONAS_CONFIG[MagiName.Balthazar]);
-    magi.setPersonality("You are Balthazar, a logical and analytical AI assistant.");
+    await magi.initialize("You are Balthazar, a logical and analytical AI assistant.");
   });
 
   it('should parse correctly formatted 3-step plan with MCP tools', async () => {

@@ -23,7 +23,6 @@ const DO_NOT_START_MAGI = false;
 export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('logsContainer') logsContainer!: ElementRef<HTMLDivElement>;
   
-  protected title = 'ui';
   balthasarStatus: MagiStatus = 'offline';
   casperStatus: MagiStatus = 'offline';
   melchiorStatus: MagiStatus = 'offline';
@@ -35,11 +34,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   userInquiry = '';
   isOrchestratorAvailable = false;
   orchestratorStatus: 'available' | 'busy' | 'error' = 'error';
-  isConnected = false;
-  isPlaying = false;
-  isRecording = false;
-  currentText = '';
-  isProcessing = false;
 
   private subscriptions = new Subscription();
   private readonly ORCHESTRATOR_HEALTH_URL = 'http://localhost:8080/health';
@@ -49,27 +43,11 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   private http = inject(HttpClient);
 
   ngOnInit(): void {
-    this.subscriptions.add(
-      this.websocketService.isProcessRunning$.subscribe(isRunning => {
-        this.isMagiStarting = isRunning;
-      })
-    );
-
-    this.subscriptions.add(
-      this.websocketService.logs$.subscribe(log => {
-        this.serverLogs.push(log);
-      })
-    );
-
-    this.subscriptions.add(
-      this.websocketService.audio$.subscribe(audioMessage => {
-        this.audioService.playAudioMessage(audioMessage);
-      })
-    );
-
-    this.subscriptions.add(
-      timer(0, 5000).subscribe(() => this.performHealthCheck())
-    );
+    // Subscribe to all WebSocket service observables
+    this.subscriptions.add(this.websocketService.isProcessRunning$.subscribe(isRunning => this.isMagiStarting = isRunning));
+    this.subscriptions.add(this.websocketService.logs$.subscribe(log => this.serverLogs.push(log)));
+    this.subscriptions.add(this.websocketService.audio$.subscribe(audioMessage => this.audioService.playAudioMessage(audioMessage)));
+    this.subscriptions.add(timer(0, 5000).subscribe(() => this.performHealthCheck()));
   }
 
   private connectWebSocket(): void {
@@ -79,29 +57,27 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   private updateHealthStatus(response: MagiHealth): void {
     this.isOrchestratorAvailable = response.status === 'available';
+    this.orchestratorStatus = response.status;
+    
     const {balthazar, caspar, melchior} = response.magi;
     this.balthasarStatus = balthazar.status;
     this.casperStatus = caspar.status;
     this.melchiorStatus = melchior.status;
-    this.orchestratorStatus = response.status === 'available' ? 'available' : response.status === 'busy' ? 'busy' : 'error';
 
-    if (this.isOrchestratorAvailable &&
-       this.balthasarStatus === 'available' &&
-       this.casperStatus === 'available' &&
-       this.melchiorStatus === 'available' &&
-       this.orchestratorStatus === 'available') {
-        this.isMagiStarting = false;
-      }
+    // Stop showing "starting" when all Magi are available
+    const allMagiAvailable = [balthazar.status, caspar.status, melchior.status].every(status => status === 'available');
+    if (this.isOrchestratorAvailable && allMagiAvailable) {
+      this.isMagiStarting = false;
+    }
   }
 
   private updateHealthStatusOnError(error: any): void {
+    // Set everything to offline/error state
     this.isOrchestratorAvailable = false;
     this.orchestratorStatus = 'error';
-    this.balthasarStatus = 'offline';
-    this.casperStatus = 'offline';
-    this.melchiorStatus = 'offline';
+    this.balthasarStatus = this.casperStatus = this.melchiorStatus = 'offline';
+    
     this.websocketService.disconnect();
-    console.error('Orchestrator health check failed:', error);
     this.serverLogs.push(`[CLIENT] Orchestrator health check failed: ${error.message || 'Unknown error'}`);
   }
 
@@ -109,6 +85,9 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
     const isWebSocketConnected = this.websocketService.isConnected();
     
     if (this.isOrchestratorAvailable && !isWebSocketConnected) {
+      // Reset connection state when orchestrator becomes available again
+      // This allows fresh reconnection attempts after server recovery
+      this.websocketService.resetConnection();
       this.connectWebSocket();
     }
   }
@@ -119,10 +98,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.updateHealthStatus(response);
         this.handleWebSocketConnection();
       },
-      error: (error) => {
-        this.updateHealthStatusOnError(error);
-        console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      }
+      error: (error) => this.updateHealthStatusOnError(error)
     });
   }
 
@@ -132,10 +108,6 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   async startMagi(): Promise<void> {
-    await this.startMagiWithInquiry();
-  }
-
-  async startMagiWithInquiry(): Promise<void> {
     // Check if orchestrator is available
     if (!this.isOrchestratorAvailable) {
       this.serverLogs.push('[CLIENT] Cannot start Magi: Orchestrator is not available');
@@ -162,7 +134,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   submitQuestion(): void {
-    this.startMagiWithInquiry(); 
+    this.startMagi(); 
   }
 
   toggleDisplayLogs() {

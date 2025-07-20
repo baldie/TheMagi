@@ -1,5 +1,5 @@
 import { MagiName } from '../../types/magi-types';
-import { ToolRegistry, MAGI_TOOL_ASSIGNMENTS } from './tool-registry';
+import { ToolRegistry } from './tool-registry';
 import { McpServerConfig } from '../index';
 
 /**
@@ -14,7 +14,7 @@ import { McpServerConfig } from '../index';
  * Get Melchior's tool assignments from the registry
  */
 export function getMelchiorToolAssignments(): string[] {
-  return MAGI_TOOL_ASSIGNMENTS[MagiName.Melchior];
+  return [];
 }
 
 /**

@@ -1,5 +1,8 @@
 import { MagiName } from '../../types/magi-types';
 import { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse } from '../tool-response-types';
+import { getBalthazarToolAssignments } from './balthazar-tools';
+import { getCasparToolAssignments } from './caspar-tools';
+import { getMelchiorToolAssignments } from './melchior-tools';
 
 /**
  * Tool categories for organizational purposes
@@ -22,8 +25,6 @@ export interface ToolDefinition {
   description: string;
   /** Tool category for organization */
   category: ToolCategory;
-  /** Legacy aliases that should map to this tool */
-  aliases: string[];
   /** Default parameters to apply if not specified */
   defaults: Record<string, any>;
   /** Expected response type */
@@ -48,6 +49,8 @@ export interface ToolServerConfig {
   provides: string[];
 }
 
+export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_raw_content', 'include_favicon']);
+
 /**
  * Central registry of all available tools
  */
@@ -56,7 +59,6 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     name: 'tavily-search',
     description: 'Search the web using Tavily API for current information',
     category: ToolCategory.WEB_SEARCH,
-    aliases: ['search', 'searchContext'],
     defaults: {
       search_depth: 'basic',
       include_raw_content: false
@@ -65,7 +67,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     instructions: `query (required): The search query string
 auto_parameters: Auto-configure search parameters (boolean, default: false)
 topic: Search category "general" or "news" (string, default: "general")
-max_results: Maximum results to return 0-20 (number, default: 5)
+max_results: Maximum results to return 0-10 (number, default: 5)
 include_answer: Include LLM-generated answer (boolean, default: false)`
   },
 
@@ -73,13 +75,12 @@ include_answer: Include LLM-generated answer (boolean, default: false)`
     name: 'tavily-extract',
     description: 'Extract content from web pages using Tavily API',
     category: ToolCategory.WEB_EXTRACT,
-    aliases: ['extract', 'crawl_url'],
     defaults: {
       extract_depth: 'basic',
       raw_content_format: 'markdown'
     },
     responseType: 'WebExtractResponse',
-    instructions: `urls (required): URL or array of URLs to extract content from
+    instructions: `urls (required): URL or array of URLs to extract content from (3 max). Ensure that any step requiring URL extraction explicitly outputs the URLs for the next step.
 include_images: Include extracted images (boolean, default: false)
 timeout: Request timeout in seconds (number, default: 60)`
   },
@@ -88,7 +89,6 @@ timeout: Request timeout in seconds (number, default: 60)`
     name: 'smart-home-devices', 
     description: 'Query and control smart home devices',
     category: ToolCategory.SMART_HOME,
-    aliases: [],
     defaults: {},
     responseType: 'SmartHomeResponse',
     instructions: `device_types: Array of device types to query
@@ -99,7 +99,6 @@ query_purpose: Purpose of the query for context`
     name: 'personal-data',
     description: 'Access user personal data and preferences',
     category: ToolCategory.PERSONAL_DATA,
-    aliases: [],
     defaults: {},
     responseType: 'PersonalDataResponse',
     instructions: `categories: Array of data categories to retrieve
@@ -126,68 +125,41 @@ export function getToolServers(): Record<string, ToolServerConfig> {
 }
 
 /**
- * Magi tool assignments - which tools each Magi has access to
- * Note: Only tools with configured MCP servers should be assigned
- */
-export const MAGI_TOOL_ASSIGNMENTS: Record<MagiName, string[]> = {
-  [MagiName.Balthazar]: ['tavily-search', 'tavily-extract'],
-  [MagiName.Caspar]: [], // smart-home-devices not yet configured with MCP server
-  [MagiName.Melchior]: [] // personal-data not yet configured with MCP server
-};
-
-/**
  * Registry utilities
  */
 export class ToolRegistry {
   /**
-   * Get tool definition by name or alias
+   * Get tool definition by name
    */
-  static getToolDefinition(nameOrAlias: string): ToolDefinition | undefined {
+  static getToolDefinition(name: string): ToolDefinition | undefined {
     // Check direct name match first
-    if (TOOL_REGISTRY[nameOrAlias]) {
-      return TOOL_REGISTRY[nameOrAlias];
-    }
-    
-    // Check aliases
-    for (const [toolName, definition] of Object.entries(TOOL_REGISTRY)) {
-      if (definition.aliases.includes(nameOrAlias)) {
-        return definition;
-      }
+    if (TOOL_REGISTRY[name]) {
+      return TOOL_REGISTRY[name];
     }
     
     return undefined;
   }
 
   /**
-   * Get canonical tool name for any alias
-   */
-  static getCanonicalName(nameOrAlias: string): string | undefined {
-    const definition = this.getToolDefinition(nameOrAlias);
-    return definition?.name;
-  }
-
-  /**
-   * Get all tools assigned to a Magi
-   */
-  static getToolsForMagi(magi: MagiName): ToolDefinition[] {
-    const toolNames = MAGI_TOOL_ASSIGNMENTS[magi] || [];
-    return toolNames.map(name => TOOL_REGISTRY[name]).filter(Boolean);
-  }
-
-  /**
-   * Get tools by category
-   */
-  static getToolsByCategory(category: ToolCategory): ToolDefinition[] {
-    return Object.values(TOOL_REGISTRY).filter(tool => tool.category === category);
-  }
-
-  /**
    * Get server configs needed for a Magi
    */
   static getServersForMagi(magi: MagiName): ToolServerConfig[] {
-    const toolNames = MAGI_TOOL_ASSIGNMENTS[magi] || [];
+    const toolNames = [];
+    switch(magi) {
+       case MagiName.Balthazar:
+          toolNames.push(...getBalthazarToolAssignments());
+          break;
+      case MagiName.Caspar:
+          toolNames.push(...getCasparToolAssignments());
+          break;
+       case MagiName.Melchior:
+        toolNames.push(...getMelchiorToolAssignments());
+        break;
+        default:
+          break;
+    }
     const serverNames = new Set<string>();
-    const toolServers = getToolServers(); // Get dynamic server configs
+    const toolServers = getToolServers();
     
     // Find which servers provide the tools this Magi needs
     for (const toolName of toolNames) {
@@ -204,39 +176,24 @@ export class ToolRegistry {
   /**
    * Check if a tool is a web search tool
    */
-  static isWebSearchTool(nameOrAlias: string): boolean {
-    const definition = this.getToolDefinition(nameOrAlias);
+  static isWebSearchTool(name: string): boolean {
+    const definition = this.getToolDefinition(name);
     return definition?.category === ToolCategory.WEB_SEARCH;
   }
 
   /**
    * Check if a tool is a web extract tool  
    */
-  static isWebExtractTool(nameOrAlias: string): boolean {
-    const definition = this.getToolDefinition(nameOrAlias);
+  static isWebExtractTool(name: string): boolean {
+    const definition = this.getToolDefinition(name);
     return definition?.category === ToolCategory.WEB_EXTRACT;
-  }
-
-  /**
-   * Get tool name mapping (legacy name -> canonical name)
-   */
-  static getToolNameMapping(): Record<string, string> {
-    const mapping: Record<string, string> = {};
-    
-    for (const [toolName, definition] of Object.entries(TOOL_REGISTRY)) {
-      for (const alias of definition.aliases) {
-        mapping[alias] = toolName;
-      }
-    }
-    
-    return mapping;
   }
 
   /**
    * Validate tool parameters with defaults
    */
-  static validateAndApplyDefaults(nameOrAlias: string, parameters: Record<string, any>): Record<string, any> {
-    const definition = this.getToolDefinition(nameOrAlias);
+  static validateAndApplyDefaults(name: string, parameters: Record<string, any>): Record<string, any> {
+    const definition = this.getToolDefinition(name);
     if (!definition) {
       return parameters;
     }
