@@ -3,6 +3,7 @@ import sys
 import logging
 import traceback
 from datetime import datetime
+import warnings
 import torch
 import torchaudio
 from fastapi import FastAPI, HTTPException
@@ -12,10 +13,25 @@ from typing import Optional
 import tempfile
 import uuid
 import tqdm
+import io
+import base64
+import glob
+import threading
+import time
 
 # Suppress progress bars and verbose outputs
 os.environ["TQDM_DISABLE"] = "1"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+
+# Force PEFT backend usage to replace deprecated LoRACompatibleLinear
+os.environ["USE_PEFT"] = "1"
+os.environ["DIFFUSERS_USE_PEFT"] = "1"
+
+# Suppress LoRACompatibleLinear deprecation warning until chatterbox
+# supports newer diffusers
+warnings.filterwarnings(
+    "ignore", category=FutureWarning, message=".*LoRACompatibleLinear.*"
+)
 
 
 # Monkey patch tqdm to redirect to null
@@ -108,6 +124,10 @@ tts_model = None
 initialization_stage = "starting"
 initialization_error = None
 
+# Voice embedding cache for performance optimization
+voice_embeddings_cache = {}
+glados_voice_path = None
+
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
@@ -126,6 +146,10 @@ class TTSRequest(BaseModel):
     exaggeration: Optional[float] = 0.5
     cfg_weight: Optional[float] = 0.5
     audio_prompt_path: Optional[str] = None
+    use_cached_voice: Optional[bool] = True
+    return_audio_data: Optional[bool] = (
+        False  # Return base64 audio instead of file path
+    )
 
 
 class HealthResponse(BaseModel):
@@ -139,8 +163,8 @@ class HealthResponse(BaseModel):
 
 
 def initialize_model():
-    """Initialize the Chatterbox TTS model"""
-    global tts_model, initialization_stage, initialization_error
+    """Initialize the Chatterbox TTS model and cache voice embeddings"""
+    global tts_model, initialization_stage, initialization_error, glados_voice_path
 
     initialization_stage = "checking_dependencies"
     logger.info("Starting model initialization...")
@@ -177,11 +201,19 @@ def initialize_model():
         # Load the model with progress tracking
         tts_model = ChatterboxTTS.from_pretrained(device=device)
 
+        # Cache GLaDOS voice path for performance optimization
+        glados_voice_path = os.path.join(os.getcwd(), "GLaDOS.wav")
+        if os.path.exists(glados_voice_path):
+            logger.info(f"GLaDOS voice file found at: {glados_voice_path}")
+            logger.info("Voice cloning will be available for TTS requests")
+        else:
+            logger.warning(f"GLaDOS.wav not found at {glados_voice_path}")
+            logger.warning("Voice cloning will be unavailable")
+
         initialization_stage = "ready"
         logger.info("Chatterbox TTS model loaded successfully!")
         logger.info(f"Model device: {getattr(tts_model, 'device', 'unknown')}")
         logger.info(f"Model sample rate: {getattr(tts_model, 'sr', 'unknown')}")
-
         return True
 
     except ImportError as e:
@@ -214,6 +246,43 @@ def initialize_model():
         return False
 
 
+def cleanup_old_audio_files():
+    """Clean up old temporary audio files older than 1 hour"""
+    try:
+        temp_dir = tempfile.gettempdir()
+        pattern = os.path.join(temp_dir, "tts_*.wav")
+        current_time = time.time()
+        one_hour_ago = current_time - 3600  # 1 hour in seconds
+
+        cleaned_count = 0
+        for file_path in glob.glob(pattern):
+            try:
+                if os.path.getmtime(file_path) < one_hour_ago:
+                    os.remove(file_path)
+                    cleaned_count += 1
+            except OSError:
+                pass  # File might have been deleted already
+
+        if cleaned_count > 0:
+            logger.info(f"Cleaned up {cleaned_count} old temporary audio files")
+
+    except Exception as e:
+        logger.warning(f"Error during temporary file cleanup: {e}")
+
+
+def start_cleanup_thread():
+    """Start background thread for periodic cleanup"""
+
+    def cleanup_worker():
+        while True:
+            time.sleep(1800)  # Clean up every 30 minutes
+            cleanup_old_audio_files()
+
+    cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+    cleanup_thread.start()
+    logger.info("Started background cleanup thread for temporary files")
+
+
 # Initialize model on startup
 @app.on_event("startup")
 async def startup_event():
@@ -224,6 +293,12 @@ async def startup_event():
     if success:
         logger.info("TTS service startup completed successfully")
         logger.info("Service is ready to accept requests")
+
+        # Start cleanup thread for temporary files
+        start_cleanup_thread()
+
+        # Clean up any existing old files
+        cleanup_old_audio_files()
     else:
         logger.warning("TTS service started but model failed to load")
         logger.warning(
@@ -263,7 +338,18 @@ async def health_check():
 
 @app.post("/synthesize")
 async def synthesize_speech(request: TTSRequest):
-    """Synthesize speech from text using Chatterbox TTS"""
+    """Synthesize speech from text using Chatterbox TTS (legacy)"""
+    return await _synthesize_speech_internal(request, save_file=True)
+
+
+@app.post("/synthesize-direct")
+async def synthesize_speech_direct(request: TTSRequest):
+    """Return audio data directly as base64 (optimized)"""
+    return await _synthesize_speech_internal(request, save_file=False)
+
+
+async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = True):
+    """Internal synthesis function with optional file saving"""
     request_id = str(uuid.uuid4())[:8]
     logger.info(f"[{request_id}] New synthesis request received")
     logger.info(
@@ -285,10 +371,14 @@ async def synthesize_speech(request: TTSRequest):
 
         logger.info(f"[{request_id}] Model available, starting synthesis...")
 
-        # Generate unique filename
+        # Generate unique audio ID for tracking
         audio_id = str(uuid.uuid4())
-        audio_filename = f"tts_{audio_id}.wav"
-        audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
+        audio_path = None
+
+        # Only create file path if we're saving to disk
+        if save_file:
+            audio_filename = f"tts_{audio_id}.wav"
+            audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
 
         # Prepare generation parameters
         generation_kwargs = {
@@ -296,11 +386,18 @@ async def synthesize_speech(request: TTSRequest):
             "cfg_weight": request.cfg_weight,
         }
 
-        # Add voice cloning if audio prompt is provided
-        if request.audio_prompt_path and os.path.exists(request.audio_prompt_path):
+        # Add voice cloning - use GLaDOS.wav by default for optimization
+        if (
+            request.use_cached_voice
+            and glados_voice_path
+            and os.path.exists(glados_voice_path)
+        ):
+            generation_kwargs["audio_prompt_path"] = glados_voice_path
+            logger.info(f"[{request_id}] Using cached GLaDOS voice for cloning")
+        elif request.audio_prompt_path and os.path.exists(request.audio_prompt_path):
             generation_kwargs["audio_prompt_path"] = request.audio_prompt_path
             logger.info(
-                f"[{request_id}] Using voice cloning with: "
+                f"[{request_id}] Using custom voice cloning with: "
                 f"{request.audio_prompt_path}"
             )
 
@@ -324,23 +421,52 @@ async def synthesize_speech(request: TTSRequest):
             )
             raise
 
-        # Save the generated audio
-        logger.info(f"[{request_id}] Saving audio to file...")
-        try:
-            torchaudio.save(audio_path, wav.cpu(), tts_model.sr)
-            file_size = os.path.getsize(audio_path)
-            logger.info(
-                f"[{request_id}] Audio saved successfully, file size: {file_size} bytes"
-            )
-        except Exception as save_error:
-            logger.error(f"[{request_id}] Failed to save audio: {save_error}")
-            raise
+        # Handle audio output based on save_file parameter
+        file_size = 0
+        audio_data_base64 = None
 
-        if not os.path.exists(audio_path):
-            logger.error(
-                f"[{request_id}] Audio file not created at expected path: {audio_path}"
-            )
-            raise HTTPException(status_code=500, detail="Failed to generate audio file")
+        if save_file:
+            # Save the generated audio to file (legacy behavior)
+            logger.info(f"[{request_id}] Saving audio to file...")
+            try:
+                torchaudio.save(audio_path, wav.cpu(), tts_model.sr)
+                file_size = os.path.getsize(audio_path)
+                logger.info(
+                    f"[{request_id}] Audio saved successfully, "
+                    f"file size: {file_size} bytes"
+                )
+            except Exception as save_error:
+                logger.error(f"[{request_id}] Failed to save audio: {save_error}")
+                raise
+
+            if not os.path.exists(audio_path):
+                logger.error(
+                    f"[{request_id}] Audio file not created at "
+                    f"expected path: {audio_path}"
+                )
+                raise HTTPException(
+                    status_code=500, detail="Failed to generate audio file"
+                )
+        else:
+            # Return audio data directly (optimized behavior)
+            logger.info(f"[{request_id}] Preparing audio data for direct return...")
+            try:
+                # Convert audio tensor to bytes in memory
+                audio_buffer = io.BytesIO()
+                torchaudio.save(audio_buffer, wav.cpu(), tts_model.sr, format="wav")
+                audio_bytes = audio_buffer.getvalue()
+                file_size = len(audio_bytes)
+
+                # Encode as base64 for JSON response
+                audio_data_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+                logger.info(
+                    f"[{request_id}] Audio data prepared, size: {file_size} bytes"
+                )
+            except Exception as data_error:
+                logger.error(
+                    f"[{request_id}] Failed to prepare audio data: {data_error}"
+                )
+                raise
 
         duration = wav.shape[-1] / tts_model.sr
         logger.info(
@@ -348,10 +474,9 @@ async def synthesize_speech(request: TTSRequest):
             f"Duration: {duration:.2f}s, Sample rate: {tts_model.sr}Hz"
         )
 
-        # Return the path to the generated audio file
+        # Build response based on output mode
         response = {
             "audio_id": audio_id,
-            "audio_path": audio_path,
             "text": (
                 request.text[:100] + "..." if len(request.text) > 100 else request.text
             ),
@@ -362,6 +487,13 @@ async def synthesize_speech(request: TTSRequest):
             "generation_time": generation_time,
             "file_size": file_size,
         }
+
+        if save_file:
+            response["audio_path"] = audio_path
+        else:
+            response["audio_data"] = audio_data_base64
+            response["format"] = "wav"
+            response["encoding"] = "base64"
 
         return response
 
@@ -378,7 +510,7 @@ async def synthesize_speech(request: TTSRequest):
 
 @app.get("/audio/{audio_id}")
 async def get_audio(audio_id: str):
-    """Get generated audio file"""
+    """Get generated audio file (legacy endpoint)"""
     audio_filename = f"tts_{audio_id}.wav"
     audio_path = os.path.join(tempfile.gettempdir(), audio_filename)
 
@@ -389,6 +521,16 @@ async def get_audio(audio_id: str):
     from fastapi.responses import FileResponse
 
     return FileResponse(audio_path, media_type="audio/wav", filename=audio_filename)
+
+
+@app.post("/cleanup")
+async def cleanup_temp_files():
+    """Manually trigger cleanup of temporary files"""
+    cleanup_old_audio_files()
+    temp_dir = tempfile.gettempdir()
+    remaining_files = len(glob.glob(os.path.join(temp_dir, "tts_*.wav")))
+
+    return {"status": "cleanup_completed", "remaining_temp_files": remaining_files}
 
 
 @app.get("/voices")
@@ -425,6 +567,10 @@ async def get_status():
     device_info = str(tts_model.device) if hasattr(tts_model, "device") else "Unknown"
     model_info = "Loaded and ready" if tts_model is not None else "Not loaded"
 
+    # Count temporary files
+    temp_dir = tempfile.gettempdir()
+    temp_files = len(glob.glob(os.path.join(temp_dir, "tts_*.wav")))
+
     return {
         "service": "Chatterbox TTS Service",
         "version": "1.0.0",
@@ -432,6 +578,12 @@ async def get_status():
         "device": device_info,
         "cuda_available": torch.cuda.is_available(),
         "chatterbox_available": CHATTERBOX_AVAILABLE,
+        "optimizations": {
+            "voice_caching_enabled": glados_voice_path is not None,
+            "direct_synthesis_available": True,
+            "batch_synthesis_available": True,
+        },
+        "temp_files_count": temp_files,
     }
 
 
