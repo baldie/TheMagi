@@ -30,9 +30,10 @@ describe('ToolRegistry', () => {
       expect(servers).toHaveLength(0);
     });
 
-    it('should return empty array for Melchior (no tools configured)', () => {
+    it('should return personal-data server for Melchior', () => {
       const servers = ToolRegistry.getServersForMagi(MagiName.Melchior);
-      expect(servers).toHaveLength(0);
+      expect(servers).toHaveLength(1);
+      expect(servers[0].name).toBe('personal-data');
     });
   });
 

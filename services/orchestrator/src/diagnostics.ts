@@ -322,8 +322,66 @@ async function verifyMcpServers(): Promise<void> {
             logger.error(`... ${magiName}: NO Tavily tools found! Expected: tavily-search, tavily-extract, tavily-crawl, tavily-map`);
             logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
           }
+
+          // Test personal-data tool for Melchior
+          if (magiName === MagiName.Melchior) {
+            logger.info(`... ${magiName}: Testing personal-data tool availability...`);
+            
+            // Check if personal-data tool exists
+            const hasPersonalDataTool = tools.some(tool => tool.name === 'personal-data');
+            
+            if (hasPersonalDataTool) {
+              logger.info(`... ${magiName}: ✅ personal-data tool FOUND`);
+              
+              try {
+                // Test write operation
+                const testWriteResult = await mcpClientManager.executeTool(
+                  MagiName.Melchior,
+                  'personal-data',
+                  {
+                    action: 'store',
+                    content: 'System diagnostic test data',
+                    category: 'diagnostics'
+                  }
+                );
+                
+                if (testWriteResult.isError) {
+                  logger.error(`... ${magiName}: ❌ personal-data write test failed: ${JSON.stringify(testWriteResult.data)}`);
+                } else {
+                  logger.info(`... ${magiName}: ✅ personal-data write test PASSED`);
+                  
+                  // Test read operation
+                  const testReadResult = await mcpClientManager.executeTool(
+                    MagiName.Melchior,
+                    'personal-data',
+                    {
+                      action: 'retrieve',
+                      categories: ['diagnostics']
+                    }
+                  );
+                  
+                  if (testReadResult.isError) {
+                    logger.error(`... ${magiName}: ❌ personal-data read test failed: ${JSON.stringify(testReadResult.data)}`);
+                  } else {
+                    logger.info(`... ${magiName}: ✅ personal-data read test PASSED`);
+                    logger.info(`... ${magiName}: 🟢 Personal data storage should work correctly!`);
+                  }
+                }
+              } catch (error) {
+                logger.error(`... ${magiName}: ❌ personal-data tool test failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+              }
+            } else {
+              logger.error(`... ${magiName}: ❌ personal-data tool not found`);
+              logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
+              logger.error(`... ${magiName}: 🔴 This will prevent Melchior from accessing personal data!`);
+            }
+          }
         } else {
-          logger.info(`... ${magiName}: No MCP tools configured (this is expected for Caspar and Melchior)`);
+          if (magiName === MagiName.Caspar) {
+            logger.info(`... ${magiName}: No MCP tools configured (this is expected for Caspar)`);
+          } else {
+            logger.info(`... ${magiName}: No MCP tools configured`);
+          }
         }
       } catch (error) {
         logger.error(`... ${magiName}: MCP server verification failed:`, error);

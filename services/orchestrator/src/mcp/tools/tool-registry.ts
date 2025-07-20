@@ -3,6 +3,7 @@ import { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataR
 import { getBalthazarToolAssignments } from './balthazar-tools';
 import { getCasparToolAssignments } from './caspar-tools';
 import { getMelchiorToolAssignments } from './melchior-tools';
+import path from 'path';
 
 /**
  * Tool categories for organizational purposes
@@ -120,6 +121,13 @@ export function getToolServers(): Record<string, ToolServerConfig> {
         TAVILY_API_KEY: process.env.TAVILY_API_KEY || ''
       },
       provides: ['tavily-search', 'tavily-extract']
+    },
+    'personal-data': {
+      name: 'personal-data',
+      command: 'ts-node',
+      args: [path.join(__dirname, '..', 'servers', 'personal-data-server.ts')],
+      env: {},
+      provides: ['personal-data']
     }
   };
 }
