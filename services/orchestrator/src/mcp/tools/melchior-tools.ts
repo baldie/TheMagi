@@ -14,7 +14,7 @@ import { McpServerConfig } from '../index';
  * Get Melchior's tool assignments from the registry
  */
 export function getMelchiorToolAssignments(): string[] {
-  return [];
+  return ['personal-data'];
 }
 
 /**

@@ -58,7 +58,7 @@ describe('McpClientManager', () => {
       mockClient.connect.mockResolvedValue(undefined);
 
       await expect(mcpClientManager.initialize()).resolves.not.toThrow();
-      expect(mockClient.connect).toHaveBeenCalledTimes(1); // Updated to reflect one server
+      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers (Balthazar + Melchior)
     });
 
     it('should not initialize twice', async () => {
@@ -67,14 +67,14 @@ describe('McpClientManager', () => {
       await mcpClientManager.initialize();
       await mcpClientManager.initialize(); // Second call
 
-      expect(mockClient.connect).toHaveBeenCalledTimes(1); // Updated to reflect one server
+      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers (Balthazar + Melchior)
     });
 
     it('should handle connection failures gracefully', async () => {
       mockClient.connect.mockRejectedValue(new Error('Connection failed'));
 
       await expect(mcpClientManager.initialize()).resolves.not.toThrow();
-      expect(mockClient.connect).toHaveBeenCalledTimes(1); // Updated to reflect one server
+      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers (Balthazar + Melchior)
     });
 
     it('should configure Client with correct parameters', async () => {
@@ -339,14 +339,14 @@ describe('McpClientManager', () => {
       mockTransport.close.mockResolvedValue(undefined);
 
       await mcpClientManager.cleanup();
-      expect(mockTransport.close).toHaveBeenCalledTimes(1); // One server
+      expect(mockTransport.close).toHaveBeenCalledTimes(2); // Two servers (Balthazar + Melchior)
     });
 
     it('should handle transport close errors gracefully', async () => {
       mockTransport.close.mockRejectedValue(new Error('Close failed'));
 
       await expect(mcpClientManager.cleanup()).resolves.not.toThrow();
-      expect(mockTransport.close).toHaveBeenCalledTimes(1); // One server will be attempted
+      expect(mockTransport.close).toHaveBeenCalledTimes(2); // Two servers will be attempted (Balthazar + Melchior)
     });
 
     it('should reset initialization state after cleanup', async () => {

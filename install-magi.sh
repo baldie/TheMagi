@@ -240,6 +240,10 @@ fi
 popd > /dev/null
 echo "    [OK] Orchestrator dependencies installed."
 
+echo "  - Creating data directories for Magi services..."
+mkdir -p .magi-data/personal-data-index
+echo "    [OK] Created .magi-data directory for personal data storage."
+
 echo "  - Installing UI dependencies..."
 pushd ui > /dev/null
 npm install
@@ -404,6 +408,13 @@ if [ $? -ne 0 ]; then
     echo "          Run: $OLLAMA_BIN pull llama3.2:3b"
 fi
 
+echo "    Downloading nomic-embed-text model for embeddings..."
+timeout 600 $OLLAMA_BIN pull nomic-embed-text
+if [ $? -ne 0 ]; then
+    echo "[WARNING] Failed to download nomic-embed-text model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull nomic-embed-text"
+fi
+
 echo "  - Verifying model installations..."
 AVAILABLE_MODELS=$($OLLAMA_BIN list 2>/dev/null)
 echo "$AVAILABLE_MODELS"
@@ -563,6 +574,12 @@ if echo "$MODELS_OUTPUT" | grep -q "llama3.2"; then
     echo "    [OK] Llama3.2 model available."
 else
     echo "[WARNING] Llama3.2 model not found. Download with: $OLLAMA_BIN pull llama3.2:3b"
+fi
+
+if echo "$MODELS_OUTPUT" | grep -q "nomic-embed-text"; then
+    echo "    [OK] nomic-embed-text model available."
+else
+    echo "[WARNING] nomic-embed-text model not found. Download with: $OLLAMA_BIN pull nomic-embed-text"
 fi
 
 # Test TypeScript compilation
