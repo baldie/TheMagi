@@ -491,6 +491,15 @@ if [ $? -ne 0 ]; then
     echo "        Note: Chatterbox TTS installation may take several minutes."
     exit 1
 fi
+
+# Install PEFT to fix LoRACompatibleLinear deprecation warning
+echo "    Installing PEFT to resolve LoRACompatibleLinear deprecation..."
+pip install --timeout 1000 --retries 3 peft
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to install PEFT dependency."
+    echo "        Please check your internet connection."
+    exit 1
+fi
 echo "    [OK] Python dependencies installed successfully."
 
 # Test the TTS service setup

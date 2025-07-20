@@ -3,7 +3,7 @@ import { TTS_API_BASE_URL } from './config';
 import { MagiName } from './magi/magi';
 import { logger } from './logger';
 import { serviceManager } from './service_manager';
-import { Stream } from 'stream';
+// import { Stream } from 'stream'; // No longer needed - using direct Buffer approach
 import { broadcastAudioToClients } from './websocket';
 
 // Constants for TTS service
@@ -16,30 +16,29 @@ const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
  * @param persona - The Magi persona speaking.
  * @param sequenceNumber - The sequence number for this audio chunk.
  */
-async function streamAudioToClients(audioStream: Stream, persona: MagiName, sequenceNumber: number): Promise<void> {
-  // Buffer to collect audio data for WebSocket clients
-  const audioChunks: Buffer[] = [];
+async function streamAudioToClients(audioBuffer: Buffer, persona: MagiName, sequenceNumber: number): Promise<void> {
+  // Stream audio data to WebSocket clients in chunks for better performance
+  const chunkSize = 8192; // 8KB chunks for optimal streaming
+  const totalChunks = Math.ceil(audioBuffer.length / chunkSize);
   
-  return new Promise<void>((resolve, reject) => {
-    // Collect audio chunks and stream to WebSocket clients
-    audioStream.on('data', (chunk: Buffer) => {
-      audioChunks.push(chunk);
-      // Send chunks in real-time to WebSocket clients
-      broadcastAudioToClients(chunk, persona, false, sequenceNumber);
-    });
-
-    audioStream.on('end', () => {
-      // Send final notification to WebSocket clients
-      broadcastAudioToClients(Buffer.alloc(0), persona, true, sequenceNumber);
-      logger.debug(`Audio streaming completed for ${persona}, sent ${audioChunks.length} chunks to clients (sequence: ${sequenceNumber})`);
-      resolve();
-    });
-
-    audioStream.on('error', (err) => {
-      logger.error('Error in audio stream', err);
-      reject(err);
-    });
-  });
+  logger.debug(`Streaming ${audioBuffer.length} bytes of audio data in ${totalChunks} chunks for ${persona} (sequence: ${sequenceNumber})`);
+  
+  // Send audio data in chunks
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * chunkSize;
+    const end = Math.min(start + chunkSize, audioBuffer.length);
+    const chunk = audioBuffer.slice(start, end);
+    
+    const isLastChunk = (i === totalChunks - 1);
+    broadcastAudioToClients(chunk, persona, isLastChunk, sequenceNumber);
+    
+    // Small delay between chunks to prevent overwhelming WebSocket clients
+    if (!isLastChunk) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
+  
+  logger.debug(`Audio streaming completed for ${persona}, sent ${totalChunks} chunks to clients (sequence: ${sequenceNumber})`);
 }
 
 /**
@@ -80,13 +79,13 @@ function getPersonaSettings(persona: MagiName) {
   return settings[persona] || settings[MagiName.Caspar];
 }
 
-async function makeTTSRequest(text: string, persona: MagiName): Promise<Stream> {
+async function makeTTSRequest(text: string, persona: MagiName): Promise<Buffer> {
   // Get persona-specific settings
   const personaSettings = getPersonaSettings(persona);
   
-  // Step 1: Request synthesis with Chatterbox API
+  // Use optimized direct synthesis endpoint (single request, no file I/O)
   const synthesisResponse = await axios.post(
-    `${TTS_API_BASE_URL}/synthesize`,
+    `${TTS_API_BASE_URL}/synthesize-direct`,
     {
       text,
       voice: persona.toLowerCase(),
@@ -94,25 +93,65 @@ async function makeTTSRequest(text: string, persona: MagiName): Promise<Stream> 
       pitch: 1.0,
       exaggeration: personaSettings.exaggeration,
       cfg_weight: personaSettings.cfg_weight,
-      audio_prompt_path: '/home/baldie/David/Project/TheMagi/services/tts/GLaDOS.wav'
+      use_cached_voice: true  // Use cached GLaDOS voice for performance
     },
     {
-      timeout: 60000, // 60-second timeout for a single sentence
+      timeout: 60000, // 60-second timeout for synthesis
     }
   );
 
-  const { audio_id } = synthesisResponse.data;
+  const { audio_data } = synthesisResponse.data;
   
-  // Step 2: Get the audio file stream
-  const audioResponse = await axios.get(
-    `${TTS_API_BASE_URL}/audio/${audio_id}`,
+  if (!audio_data) {
+    throw new Error('No audio data received from TTS service');
+  }
+  
+  // Decode base64 audio data to buffer
+  return Buffer.from(audio_data, 'base64');
+}
+
+/**
+ * Batch synthesis for multiple sentences in a single request
+ * @param texts Array of text sentences to synthesize
+ * @param persona The Magi persona
+ * @returns Array of audio buffers in order
+ */
+async function makeBatchTTSRequest(texts: string[], persona: MagiName): Promise<Buffer[]> {
+  const personaSettings = getPersonaSettings(persona);
+  
+  logger.debug(`Making batch TTS request for ${texts.length} sentences`);
+  
+  const batchResponse = await axios.post(
+    `${TTS_API_BASE_URL}/synthesize-batch`,
     {
-      responseType: 'stream',
-      timeout: 30000, // 30-second timeout for audio download
+      texts,
+      voice: persona.toLowerCase(),
+      speed: 1.0,
+      pitch: 1.0,
+      exaggeration: personaSettings.exaggeration,
+      cfg_weight: personaSettings.cfg_weight,
+      use_cached_voice: true
+    },
+    {
+      timeout: 120000, // 2-minute timeout for batch requests
     }
   );
   
-  return audioResponse.data;
+  const { results } = batchResponse.data;
+  
+  if (!results || !Array.isArray(results)) {
+    throw new Error('Invalid batch response from TTS service');
+  }
+  
+  // Sort results by sequence number and decode audio data
+  return results
+    .sort((a, b) => a.sequence_number - b.sequence_number)
+    .map(result => {
+      if (!result.audio_data) {
+        throw new Error(`No audio data for sequence ${result.sequence_number}`);
+      }
+      return Buffer.from(result.audio_data, 'base64');
+    });
 }
 
 /**
@@ -134,6 +173,9 @@ function splitIntoSentences(text: string): string[] {
  * @param text - The full text to be spoken
  * @param persona - The Magi persona whose voice to use
  */
+/**
+ * Optimized version using batch synthesis for better performance
+ */
 export async function speakWithMagiVoice(text: string, persona: MagiName): Promise<void> {
   try {
     validateInput(text);
@@ -148,38 +190,73 @@ export async function speakWithMagiVoice(text: string, persona: MagiName): Promi
 
     logger.debug(`Split text into ${sentences.length} sentences for TTS processing.`);
 
-    let ttsRequestPromise: Promise<Stream> | null = makeTTSRequest(sentences[0], persona);
-
-    for (let i = 0; i < sentences.length; i++) {
-        const currentSentence = sentences[i];
-        let nextTtsRequestPromise: Promise<Stream> | null = null;
-        
-        // Pre-fetch the next sentence while the current one is being processed.
-        if (i + 1 < sentences.length) {
-            const nextSentence = sentences[i + 1];
-            logger.debug(`Requesting TTS for next sentence: "${nextSentence}"`);
-            nextTtsRequestPromise = makeTTSRequest(nextSentence, persona);
-        }
-
-        try {
-            if (ttsRequestPromise) {
-              const audioStream = await ttsRequestPromise;
-              
-              await streamAudioToClients(audioStream, persona, i);
-
-              logger.debug(`${persona}: "${currentSentence}" (sequence: ${i})`);
-            }
-        } catch (error) {
-            logger.error(`Failed to process TTS for sentence: "${currentSentence}" (sequence: ${i})`, error);
-            // Continue to the next sentence even if one fails.
-        }
-        
-        ttsRequestPromise = nextTtsRequestPromise;
+    // Use batch processing for better performance when we have multiple sentences
+    if (sentences.length > 3) {
+      await speakWithBatchSynthesis(sentences, persona);
+    } else {
+      await speakWithSequentialSynthesis(sentences, persona);
     }
     
     logger.debug(`Finished playing all audio for ${persona}`);
   } catch (error) {
     logger.error(`Error in TTS service for ${persona}`, error);
     throw new Error(`Failed to generate or play speech for ${persona}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Process sentences using batch synthesis (optimal for 4+ sentences)
+ */
+async function speakWithBatchSynthesis(sentences: string[], persona: MagiName): Promise<void> {
+  logger.debug(`Using batch synthesis for ${sentences.length} sentences`);
+  
+  try {
+    // Get all audio buffers in a single batch request
+    const audioBuffers = await makeBatchTTSRequest(sentences, persona);
+    
+    // Stream each audio buffer to clients in sequence
+    for (let i = 0; i < audioBuffers.length; i++) {
+      await streamAudioToClients(audioBuffers[i], persona, i);
+      logger.debug(`${persona}: "${sentences[i]}" (sequence: ${i})`);
+    }
+  } catch (error) {
+    logger.warn(`Batch synthesis failed, falling back to sequential: ${error}`);
+    await speakWithSequentialSynthesis(sentences, persona);
+  }
+}
+
+/**
+ * Process sentences sequentially with pre-fetching (optimal for 1-3 sentences)
+ */
+async function speakWithSequentialSynthesis(sentences: string[], persona: MagiName): Promise<void> {
+  logger.debug(`Using sequential synthesis for ${sentences.length} sentences`);
+  
+  let ttsRequestPromise: Promise<Buffer> | null = makeTTSRequest(sentences[0], persona);
+
+  for (let i = 0; i < sentences.length; i++) {
+      const currentSentence = sentences[i];
+      let nextTtsRequestPromise: Promise<Buffer> | null = null;
+      
+      // Pre-fetch the next sentence while the current one is being processed.
+      if (i + 1 < sentences.length) {
+          const nextSentence = sentences[i + 1];
+          logger.debug(`Requesting TTS for next sentence: "${nextSentence}"`);
+          nextTtsRequestPromise = makeTTSRequest(nextSentence, persona);
+      }
+
+      try {
+          if (ttsRequestPromise) {
+            const audioBuffer = await ttsRequestPromise;
+            
+            await streamAudioToClients(audioBuffer, persona, i);
+
+            logger.debug(`${persona}: "${currentSentence}" (sequence: ${i})`);
+          }
+      } catch (error) {
+          logger.error(`Failed to process TTS for sentence: "${currentSentence}" (sequence: ${i})`, error);
+          // Continue to the next sentence even if one fails.
+      }
+      
+      ttsRequestPromise = nextTtsRequestPromise;
   }
 }
