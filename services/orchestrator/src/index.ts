@@ -63,19 +63,18 @@ async function main() {
     await loadMagi();
     
     isInitialized = true; 
-    logger.info('The Magi are ready.');
+    logger.info('http://localhost:4200/\nThe Magi are ready. 🟢');
   } catch (error) {
     logger.error('A critical error occurred during system initialization. The application will now exit.', error);
-    process.exit(1);
+    gracefulShutdown('unhandledRejection');
   }
 }
 
 main().catch(error => {
   logger.error('Unhandled promise rejection in main.', error);
-  process.exit(1);
+  gracefulShutdown('unhandledRejection');
 });
 
-// Graceful shutdown handling
 async function gracefulShutdown(signal: string) {
   logger.info(`Received ${signal}. Performing graceful shutdown...`);
   
@@ -92,7 +91,7 @@ async function gracefulShutdown(signal: string) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// This service provides the orchestrator'shealth route and a websocket server for the UI to connect to.
+// This service provides the orchestrator's health route and a websocket server for the UI to connect to.
 function startHttpOrchestratorService() {
   const app = express();
   app.use(cors({ origin: ['http://localhost:4200', 'http://127.0.0.1:4200'] }));
@@ -120,6 +119,6 @@ function startHttpOrchestratorService() {
 
   const PORT = process.env.PORT || 8080;
   server.listen(PORT, () => {
-    logger.info(`Orchestrator HTTP/WebSocket server listening on port ${PORT}`);
+    logger.info(`Orchestrator listening on port ${PORT}`);
   });
 }

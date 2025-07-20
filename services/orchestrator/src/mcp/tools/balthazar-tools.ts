@@ -1,5 +1,5 @@
 import { MagiName } from '../../types/magi-types';
-import { ToolRegistry, MAGI_TOOL_ASSIGNMENTS } from './tool-registry';
+import { ToolRegistry } from './tool-registry';
 import { McpServerConfig } from '../index';
 
 /**
@@ -11,16 +11,16 @@ import { McpServerConfig } from '../index';
  */
 
 /**
- * Get Balthazar's tool assignments from the registry
+ * Get Balthazar's tool assignments
  */
 export function getBalthazarToolAssignments(): string[] {
-  return MAGI_TOOL_ASSIGNMENTS[MagiName.Balthazar];
+  return ['tavily-search', 'tavily-extract'];
 }
 
 /**
  * Get MCP server configurations needed for Balthazar's tools
  */
-export function getBalthazarTools(): McpServerConfig[] {
+export function getBalthazarToolServers(): McpServerConfig[] {
   return ToolRegistry.getServersForMagi(MagiName.Balthazar).map(server => ({
     name: server.name,
     command: server.command,

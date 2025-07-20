@@ -1,7 +1,6 @@
 import { Injectable, OnDestroy } from '@angular/core';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { Subject, Observable, BehaviorSubject } from 'rxjs';
-import { retryWhen, delay, take } from 'rxjs/operators';
 
 export interface WebSocketMessage {
   type: string;
@@ -15,9 +14,6 @@ export interface AudioMessage {
   sequenceNumber: number;
 }
 
-interface WebSocketReadyState {
-  readyState: number;
-}
 
 @Injectable({
   providedIn: 'root'
@@ -30,9 +26,7 @@ export class WebsocketService implements OnDestroy {
   private processStatusSubject = new Subject<boolean>();
   private audioSubject = new Subject<AudioMessage>();
   private readonly WS_ENDPOINT = 'ws://localhost:8080';
-  private readonly RECONNECT_INTERVAL = 2000;
-  private readonly MAX_RETRIES = 3;
-  private connectionAttempts = 0;
+  private isConnecting = false;
 
   public logs$: Observable<string> = this.logSubject.asObservable();
   public isProcessRunning$: Observable<boolean> = this.processStatusSubject.asObservable();
@@ -48,64 +42,61 @@ export class WebsocketService implements OnDestroy {
   }
 
   public startConnecting(shouldStartMagi = false, inquiry?: string): void {
-    this.logSubject.next(`[CLIENT] startConnecting() called. shouldStartMagi: ${shouldStartMagi}, inquiry: ${inquiry || 'none'}`);
-    this.logSubject.next(`[CLIENT] Attempting to connect to ${this.WS_ENDPOINT}...`);
-    this.logSubject.next(`[CLIENT] Current socket state: ${this.socket$ ? (this.socket$.closed ? 'closed' : 'open') : 'null'}`);
+    // Prevent concurrent connection attempts
+    if (this.isConnecting) {
+      this.logSubject.next('[CLIENT] Connection already in progress');
+      return;
+    }
     
-    if (!this.socket$ || this.socket$.closed) {
-      this.connectionAttempts++;
-      this.logSubject.next(`[CLIENT] Creating new WebSocket connection... (attempt ${this.connectionAttempts})`);
-      this.socket$ = webSocket({
-        url: this.WS_ENDPOINT,
-        openObserver: {
-          next: (event) => {
-            this.connectionAttempts = 0;
-            this.connectionStatusSubject.next(true);
-            this.logSubject.next('[CLIENT] WebSocket connection established');
-            if (shouldStartMagi) {
-              this.logSubject.next('[CLIENT] Starting Magi as requested...');
-              this.startMagi(inquiry);
-            }
-          }
-        },
-        closeObserver: {
-          next: (event) => {
-            this.connectionStatusSubject.next(false);
-            this.logSubject.next(`[CLIENT] WebSocket connection closed (${event.code}: ${event.reason || 'No reason'})`);
-            this.processStatusSubject.next(false);
-            // This will be handled by the retryWhen operator's completion
-          }
-        }
-      });
-
-      this.socket$.pipe(
-        retryWhen(errors =>
-          errors.pipe(
-            delay(this.RECONNECT_INTERVAL),
-            take(this.MAX_RETRIES)
-          )
-        )
-      ).subscribe({
-        next: (msg) => {
-          this.handleMessage(msg);
-        },
-        error: (err) => {
-          const errorMsg = this.formatError(err);
-          this.logSubject.next(`[CLIENT] WebSocket Error: ${errorMsg}`);
-          this.processStatusSubject.next(false);
-        },
-        complete: () => {
-          this.logSubject.next('[CLIENT] WebSocket connection completed');
-          this.processStatusSubject.next(false);
-        }
-      });
-    } else {
+    // If already connected, just start magi if requested
+    if (this.socket$ && !this.socket$.closed) {
       this.logSubject.next('[CLIENT] WebSocket already connected');
       if (shouldStartMagi) {
-        this.logSubject.next('[CLIENT] Starting Magi on existing connection...');
         this.startMagi(inquiry);
       }
+      return;
     }
+
+    this.isConnecting = true;
+    this.logSubject.next(`[CLIENT] Connecting to ${this.WS_ENDPOINT}...`);
+    
+    this.socket$ = webSocket({
+      url: this.WS_ENDPOINT,
+      openObserver: {
+        next: () => {
+          this.isConnecting = false;
+          this.connectionStatusSubject.next(true);
+          this.logSubject.next('[CLIENT] WebSocket connected');
+          if (shouldStartMagi) {
+            this.startMagi(inquiry);
+          }
+        }
+      },
+      closeObserver: {
+        next: (event) => {
+          this.logSubject.next(`[CLIENT] WebSocket closed (${event.code})`);
+          this.resetConnectionState();
+        }
+      }
+    });
+
+    this.socket$.subscribe({
+      next: (msg) => this.handleMessage(msg),
+      error: (err) => {
+        this.logSubject.next(`[CLIENT] WebSocket error: ${this.formatError(err)}`);
+        this.resetConnectionState();
+      },
+      complete: () => {
+        this.logSubject.next('[CLIENT] WebSocket connection completed');
+        this.resetConnectionState();
+      }
+    });
+  }
+
+  private resetConnectionState(): void {
+    this.connectionStatusSubject.next(false);
+    this.processStatusSubject.next(false);
+    this.isConnecting = false;
   }
 
   private formatError(error: Error | Event | CloseEvent | ErrorEvent | unknown): string {
@@ -131,13 +122,7 @@ export class WebsocketService implements OnDestroy {
           this.logSubject.next(msg.data as string);
           break;
         case 'PROCESS_EXITED':
-          this.logSubject.next(msg.data as string);
-          this.processStatusSubject.next(false);
-          break;
         case 'deliberation-complete':
-          this.logSubject.next(msg.data as string);
-          this.processStatusSubject.next(false);
-          break;
         case 'deliberation-error':
           this.logSubject.next(msg.data as string);
           this.processStatusSubject.next(false);
@@ -176,6 +161,12 @@ export class WebsocketService implements OnDestroy {
       this.socket$.complete();
       this.socket$ = null;
     }
+    this.resetConnectionState();
+  }
+
+  public resetConnection(): void {
+    this.logSubject.next('[CLIENT] Resetting connection state');
+    this.disconnect();
   }
 
   public isConnected(): boolean {

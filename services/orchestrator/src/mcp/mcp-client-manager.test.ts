@@ -128,7 +128,7 @@ describe('McpClientManager', () => {
     });
 
     it('should return tools from MCP servers for Balthazar', async () => {
-      const tools = await mcpClientManager.getAvailableTools(MagiName.Balthazar);
+      const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Balthazar);
 
       expect(tools).toHaveLength(2); // Two tools from the server
       expect(tools).toEqual([
@@ -140,7 +140,8 @@ describe('McpClientManager', () => {
             properties: {
               query: { type: 'string' }
             }
-          }
+          },
+          instructions: 'query (required): The search query string\nauto_parameters: Auto-configure search parameters (boolean, default: false)\ntopic: Search category "general" or "news" (string, default: "general")\nmax_results: Maximum results to return 0-10 (number, default: 5)\ninclude_answer: Include LLM-generated answer (boolean, default: false)'
         },
         {
           name: 'tavily-extract',
@@ -150,13 +151,14 @@ describe('McpClientManager', () => {
             properties: {
               urls: { type: 'array' }
             }
-          }
+          },
+          instructions: 'urls (required): URL or array of URLs to extract content from (3 max). Ensure that any step requiring URL extraction explicitly outputs the URLs for the next step.\ninclude_images: Include extracted images (boolean, default: false)\ntimeout: Request timeout in seconds (number, default: 60)'
         }
       ]);
     });
 
     it('should return empty array for Magi without MCP client', async () => {
-      const tools = await mcpClientManager.getAvailableTools(MagiName.Caspar);
+      const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Caspar);
       expect(tools).toEqual([]);
     });
 
@@ -164,7 +166,7 @@ describe('McpClientManager', () => {
       mockClient.listTools.mockReset();
       mockClient.listTools.mockRejectedValue(new Error('List tools failed'));
 
-      const tools = await mcpClientManager.getAvailableTools(MagiName.Balthazar);
+      const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Balthazar);
       expect(tools).toEqual([]);
     });
   });

@@ -29,33 +29,22 @@ async function checkPersonaReadiness(magi: Magi): Promise<void> {
 }
 
 export async function loadMagi(): Promise<void> {
-  logger.info('--- Loading Magi Personas (Sequentially) ---');
-  
-  const magiInstances = {
-    [MagiName.Balthazar]: balthazar,
-    [MagiName.Melchior]: melchior,
-    [MagiName.Caspar]: caspar
-  };
-  
-  // As per the PRD, the loading order should be Caspar, Melchior, and then Balthazar.
-  const loadingOrder = [MagiName.Caspar, MagiName.Melchior, MagiName.Balthazar];
+  logger.info('--- Loading Magi Personas ---');
 
-  // Use a sequential for...of loop to load Magi one by one.
-  for (const name of loadingOrder) {
-    const magi = magiInstances[name];
+  // Init all Magi in parallel
+  const loadPromises = [caspar, melchior, balthazar].map(async (magi) => {
     logger.info(`Loading ${magi.name}...`);
     
     // 1. Load prompt from file using the absolute path from PERSONAS_CONFIG
-    const personaConfig = PERSONAS_CONFIG[name];
-    const prompt = await fs.readFile(personaConfig.personalitySource, 'utf-8');
+    const { personalitySource } = PERSONAS_CONFIG[magi.name];
+    const personalityPrompt = await fs.readFile(personalitySource, 'utf-8');
     
     // 2. Store it in the manager and initialize tools
-    magi.setPersonality(prompt);
-    await magi.initialize();
+    await magi.initialize(personalityPrompt);
     logger.info(`... ${magi.name}'s personality has been loaded from file.`);
 
-    // V0 placeholders for data access checks from PRD
-    switch (name) {
+    // Placeholders for data access checks
+    switch (magi.name) {
       case MagiName.Caspar:
         logger.info('... [V0] Checking for smart home access (placeholder).');
         break;
@@ -70,7 +59,9 @@ export async function loadMagi(): Promise<void> {
 
     // 3. Check readiness
     await checkPersonaReadiness(magi);
-  }
+  });
+
+  await Promise.all(loadPromises);
 
   logger.info('--- All Magi Personas Loaded Successfully ---');
 } 

@@ -2,6 +2,8 @@ echo "stopping TTS"
 pkill -f tts_server.py
 echo "stopping orchestrator"
 pkill -f orchestrator
+echo "stopping MCP servers"
+pkill -f "tavily-mcp"
 echo "stopping conduit"
 pkill -f ollama
 

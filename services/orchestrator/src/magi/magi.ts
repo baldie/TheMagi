@@ -63,20 +63,12 @@ export class Magi extends ConduitClient {
   }
 
   /**
-   * Initialize the Magi (including planner tools)
+   * Initialize the Magi
    */
-  async initialize(): Promise<void> {
-    await this.planner.initialize();
-    logger.debug(`${this.name} planner initialized with tools`);
-  }
-
-  /**
-   * Caches the personality prompt from the configured source file.
-   * @param prompt - The prompt string read from the file.
-   */
-  setPersonality(prompt: string): void {
+  async initialize(prompt: string): Promise<void> {
     this.personalityPrompt = prompt;
-    logger.debug(`... Prompt for ${this.name} cached in memory.`);
+    logger.debug(`${this.name} planner initialized with tools`);
+    return await this.planner.initialize();
   }
 
   /**

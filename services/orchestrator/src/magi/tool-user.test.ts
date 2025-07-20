@@ -16,7 +16,7 @@ jest.mock('../logger', () => ({
 jest.mock('../mcp', () => ({
   mcpClientManager: {
     initialize: jest.fn(),
-    getAvailableTools: jest.fn(),
+    getMCPToolInfoForMagi: jest.fn(),
     executeTool: jest.fn()
   }
 }));
@@ -46,16 +46,16 @@ describe('ToolUser', () => {
         }
       ];
 
-      mockMcpClientManager.getAvailableTools.mockResolvedValue(mockTools);
+      mockMcpClientManager.getMCPToolInfoForMagi.mockResolvedValue(mockTools);
 
       const tools = await toolUser.getAvailableTools();
 
-      expect(mockMcpClientManager.getAvailableTools).toHaveBeenCalledWith(MagiName.Balthazar);
+      expect(mockMcpClientManager.getMCPToolInfoForMagi).toHaveBeenCalledWith(MagiName.Balthazar);
       expect(tools).toEqual(mockTools);
     });
 
     it('should handle errors gracefully', async () => {
-      mockMcpClientManager.getAvailableTools.mockRejectedValue(new Error('Failed to get tools'));
+      mockMcpClientManager.getMCPToolInfoForMagi.mockRejectedValue(new Error('Failed to get tools'));
 
       const tools = await toolUser.getAvailableTools();
 
@@ -64,11 +64,11 @@ describe('ToolUser', () => {
 
     it('should work for different Magi', async () => {
       const casparToolUser = new ToolUser(MagiName.Caspar);
-      mockMcpClientManager.getAvailableTools.mockResolvedValue([]);
+      mockMcpClientManager.getMCPToolInfoForMagi.mockResolvedValue([]);
 
       await casparToolUser.getAvailableTools();
 
-      expect(mockMcpClientManager.getAvailableTools).toHaveBeenCalledWith(MagiName.Caspar);
+      expect(mockMcpClientManager.getMCPToolInfoForMagi).toHaveBeenCalledWith(MagiName.Caspar);
     });
   });
 

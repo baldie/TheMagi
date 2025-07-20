@@ -4,7 +4,6 @@ import os from 'os';
 import path from 'path';
 import { logger } from './logger';
 import { MAGI_CONDUIT_API_BASE_URL, TTS_API_BASE_URL, REQUIRED_MODELS } from './config';
-
 import { PERSONAS_CONFIG } from './magi/magi';
 import { promises as fs } from 'fs';
 import { exec } from 'child_process';
@@ -31,7 +30,7 @@ async function ensureServiceReady(
   
   // First, perform a quick check to see if the service is already running.
   try {
-    await axios.get(healthUrl, { timeout: 5000 }); // Increased timeout for initial check
+    await axios.get(healthUrl, { timeout: 5000 });
     logger.info(`... ${serviceName} service is already running.`);
     return; // If it's running, we're done.
   } catch (e) {
@@ -49,12 +48,6 @@ async function ensureServiceReady(
     });
     proc.unref(); // Allows the parent process to exit independently of the child.
     logger.info(`... Start command for ${serviceName} issued.`);
-    
-    if (serviceName === 'Magi Conduit') {
-      const conduitStartupDelay = 8000; // Increased to 8 seconds
-      logger.info(`... Allowing ${conduitStartupDelay / 1000}s for Magi Conduit to initialize before polling.`);
-      await new Promise(res => setTimeout(res, conduitStartupDelay));
-    }
   } catch (startError) {
     logger.error(`... Failed to issue start command for ${serviceName}. This may be okay if another process is already starting it.`, startError);
   }
@@ -62,12 +55,7 @@ async function ensureServiceReady(
   // Poll with exponential backoff for the service to become ready.
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const response = await axios.get(healthUrl, { timeout: 10000 }); // Increased timeout for health checks
-      
-      // For Magi Conduit, verify we got a valid response
-      if (serviceName === 'Magi Conduit' && response.data) {
-        logger.debug('Magi Conduit health check response:', response.data);
-      }
+      await axios.get(healthUrl, { timeout: 10000 }); // Increased timeout for health checks
       
       logger.info(`... ${serviceName} service is now ready!`);
       return;
@@ -76,24 +64,6 @@ async function ensureServiceReady(
                           typeof e === 'object' && e && 'code' in e ? String(e.code) : 
                           'Unknown error';
       logger.warn(`... ${serviceName} is still not responding. (${errorMessage})`);
-      
-      // For Magi Conduit, provide more detailed error information
-      if (serviceName === 'Magi Conduit') {
-        try {
-          // Check if port is in use
-          await new Promise<void>((resolve) => {
-            exec('netstat -ano | findstr ":11434"', (error, stdout) => {
-              if (stdout.trim()) {
-                logger.error('Port 11434 is in use. This may indicate a stale Ollama process.');
-                logger.error('Process information:', stdout.trim());
-              }
-              resolve();
-            });
-          });
-        } catch (error) {
-          logger.debug('Failed to check port status', error);
-        }
-      }
       
       if (attempt < maxRetries) {
         const delay = initialDelay * 2 ** (attempt - 1);
@@ -158,15 +128,14 @@ async function pullModel(modelName: string): Promise<void> {
  * If a model is not available, it will be pulled from the registry.
  */
 async function ensureMagiConduitReady(): Promise<void> {
-  const scriptDir = path.resolve(__dirname, '../../scripts');
+  const scriptPath = path.resolve(__dirname, '../../../scripts/start_magi_conduit.sh');
   await ensureServiceReady(
     'Magi Conduit',
     MAGI_CONDUIT_API_BASE_URL,
     {
-      cmd: 'start_magi_conduit.bat',
-      args: [],
+      cmd: 'bash',
+      args: [scriptPath],
       options: { 
-        cwd: scriptDir, 
         shell: true
       },
     },
@@ -254,7 +223,6 @@ async function ensureTTSReady(): Promise<void> {
   );
 }
 
-
 async function checkPersonaFiles(): Promise<void> {
   logger.info('Verifying access to persona files...');
   for (const persona of Object.values(PERSONAS_CONFIG)) {
@@ -305,7 +273,7 @@ async function verifyMcpServers(): Promise<void> {
     
     for (const magiName of magiToCheck) {
       try {
-        const tools = await mcpClientManager.getAvailableTools(magiName);
+        const tools = await mcpClientManager.getMCPToolInfoForMagi(magiName);
         
         if (tools.length > 0) {
           logger.info(`... ${magiName}: Found ${tools.length} available tool(s)`);
@@ -394,7 +362,7 @@ export async function runDiagnostics(): Promise<void> {
     await ensureMagiConduitReady();
     await ensureTTSReady();
     await verifyMcpServers();
-    logger.info('--- System Diagnostics Passed ---');
+    logger.info('--- System Diagnostics Complete ---');
   } catch (error) {
     logger.error('System diagnostics failed.', error);
     throw error;
