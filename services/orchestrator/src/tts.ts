@@ -64,15 +64,18 @@ function getPersonaSettings(persona: MagiName) {
   const settings = {
     [MagiName.Caspar]: {
       exaggeration: 0.5,
-      cfg_weight: 0.5
+      cfg_weight: 0.5,
+      audio_prompt_path: 'morgana.wav'
     },
     [MagiName.Melchior]: {
       exaggeration: 0.7,
-      cfg_weight: 0.3
+      cfg_weight: 0.3,
+      audio_prompt_path: 'GLaDOS.wav'
     },
     [MagiName.Balthazar]: {
       exaggeration: 0.3,
-      cfg_weight: 0.6
+      cfg_weight: 0.6,
+      audio_prompt_path: 'optimus.wav'
     }
   };
   
@@ -93,7 +96,8 @@ async function makeTTSRequest(text: string, persona: MagiName): Promise<Buffer> 
       pitch: 1.0,
       exaggeration: personaSettings.exaggeration,
       cfg_weight: personaSettings.cfg_weight,
-      use_cached_voice: true  // Use cached GLaDOS voice for performance
+      audio_prompt_path: personaSettings.audio_prompt_path,
+      use_cached_voice: false  // Use persona-specific voice file
     },
     {
       timeout: 60000, // 60-second timeout for synthesis
@@ -130,7 +134,8 @@ async function makeBatchTTSRequest(texts: string[], persona: MagiName): Promise<
       pitch: 1.0,
       exaggeration: personaSettings.exaggeration,
       cfg_weight: personaSettings.cfg_weight,
-      use_cached_voice: true
+      audio_prompt_path: personaSettings.audio_prompt_path,
+      use_cached_voice: false
     },
     {
       timeout: 120000, // 2-minute timeout for batch requests

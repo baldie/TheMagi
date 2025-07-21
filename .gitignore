@@ -54,8 +54,9 @@ coverage/
 temp/
 .temp/
 
-# Generated audio files
+# Generated audio files (but allow voice files in TTS service)
 *.wav
+!services/tts/*.wav
 services/tts_microservice/outputs/
 services/tts_microservice/processed/
 
@@ -100,6 +101,11 @@ launcher/logs/
 
 # Large files
 /.models/
+
+# Runtime user data
+.magi-data/
+**/.magi-data/
+services/orchestrator/.magi-data/
 
 # Local Ollama installation with GPU support
 services/conduit/CUDA/ 

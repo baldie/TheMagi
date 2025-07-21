@@ -1,7 +1,7 @@
 import { serviceManager } from './service_manager';
 import { logger } from './logger';
 import { loadMagi } from './loading';
-import { beginDeliberation } from './ready';
+import { routeInquiry } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics } from './diagnostics';
 import { balthazar, caspar, melchior } from './magi/magi';
@@ -115,7 +115,7 @@ function startHttpOrchestratorService() {
       });
   });
 
-  createWebSocketServer(server, beginDeliberation);
+  createWebSocketServer(server, routeInquiry);
 
   const PORT = process.env.PORT || 8080;
   server.listen(PORT, () => {

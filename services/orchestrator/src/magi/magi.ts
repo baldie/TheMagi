@@ -123,6 +123,12 @@ export class Magi extends ConduitClient {
     );
   }
 
+  async directInquiry(inquiry: string): Promise<string> {
+    return this.executeWithStatusManagement(() => 
+      super.contact(inquiry, this.getPersonality(), this.config.model, this.config.options)
+    );
+  }
+
   /**
    * Executes a contact operation with proper status management
    */

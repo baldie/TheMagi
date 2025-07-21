@@ -1,4 +1,4 @@
-import { balthazar, caspar, melchior, MagiName } from './magi/magi';
+import { balthazar, caspar, melchior, MagiName, Magi, allMagi } from './magi/magi';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
 import { MemoryService } from './memory';
@@ -178,6 +178,48 @@ async function extractAndStoreMemory(inquiry: string, deliberationTranscript: st
 }
 
 /**
+ * Route inquiry based on prefix or fallback to deliberation
+ * @param inquiry - The user's question or request potentially with prefix
+ * @returns The response from either direct inquiry or deliberation
+ */
+export async function routeInquiry(inquiry?: string): Promise<string> {
+  if (!inquiry) {
+    return beginDeliberation(inquiry);
+  }
+
+  const trimmedInquiry = inquiry.trim();
+
+  const magiDirect = async (magi: Magi, inquiry: string): Promise<string> => {
+    logger.debug(`Directly routing inquiry to ${magi.name}`);
+    const response = await magi.directInquiry(inquiry);
+    logger.debug(`Received response from ${magi.name}:\n${response}`);
+    await speakWithMagiVoice(response, magi.name);
+    return response;
+  }
+
+  // Regex patterns for each Magi: (short|full name)[:,]
+  const melchiorMatch = trimmedInquiry.match(/^(m|melchior)[:,]\s*/i);
+  if (melchiorMatch) {
+    const melchiorInquiry = trimmedInquiry.substring(melchiorMatch[0].length);
+    return await magiDirect(allMagi[MagiName.Melchior], melchiorInquiry);
+  }
+
+  const balthazarMatch = trimmedInquiry.match(/^(b|balthazar)[:,]\s*/i);
+  if (balthazarMatch) {
+    const balthazarInquiry = trimmedInquiry.substring(balthazarMatch[0].length);
+    return await magiDirect(allMagi[MagiName.Balthazar], balthazarInquiry);
+  }
+
+  const casparMatch = trimmedInquiry.match(/^(c|caspar)[:,]\s*/i);
+  if (casparMatch) {
+    const casparInquiry = trimmedInquiry.substring(casparMatch[0].length);
+    return await magiDirect(allMagi[MagiName.Caspar], casparInquiry);
+  }
+  
+  return beginDeliberation(inquiry);
+}
+
+/**
  * Main function that runs the deliberation process according to the V0 PRD.
  * @param inquiry - The user's question or request
  * @returns The final synthesized response or a summary of the impasse.
@@ -192,10 +234,8 @@ export async function beginDeliberation(inquiry?: string): Promise<string> {
     }
     logger.info('Starting deliberation proceedings');
 
-    
-    // V0 placeholders from PRD (now partially implemented with memory)
-    logger.info('... [V0] Caspar providing sanitized history to other Magi (implemented via memory).');
-    logger.info('... [V0] Caspar providing smart device health info to Melchior (placeholder).');
+    // V0 placeholders from PRD
+    logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
 
     const sealedEnvelope = await runSealedEnvelopePhase(inquiry || '', memoryService);
     const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
