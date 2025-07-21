@@ -11,19 +11,19 @@ if errorlevel 1 (
 )
 
 echo.
-echo Installing gemma3:4b...
-wsl -e ollama pull gemma3:4b
+echo Installing gemma3:12b...
+wsl -e ollama pull gemma3:12b
 if errorlevel 1 (
-    echo Failed to install gemma3:4b model.
+    echo Failed to install gemma3:12b model.
     pause
     exit /b 1
 )
 
 echo.
-echo Installing qwen2.5vl:3b...
-wsl -e ollama pull qwen2.5vl:3b
+echo Installing qwen2.5vl:7b...
+wsl -e ollama pull qwen2.5vl:7b
 if errorlevel 1 (
-    echo Failed to install qwen2.5vl:3b model.
+    echo Failed to install qwen2.5vl:7b model.
     pause
     exit /b 1
 )

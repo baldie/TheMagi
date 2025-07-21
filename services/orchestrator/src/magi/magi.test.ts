@@ -17,9 +17,10 @@ describe('Magi Configuration', () => {
   it('should have initial plan configured', () => {
     const seedPlan = Planner.getSeedPlan();
     
-    expect(seedPlan).toHaveLength(2);
+    expect(seedPlan).toHaveLength(3);
     expect(seedPlan[0].instruction).toContain('Create response plan');
-    expect(seedPlan[1].instruction).toContain('Execute custom plan');
+    expect(seedPlan[1].instruction).toContain('Format the plan');
+    expect(seedPlan[2].instruction).toContain('Execute custom plan');
     expect(seedPlan.every((step: any) => !step.toolName)).toBe(true);
   });
 });
@@ -466,7 +467,7 @@ Here is my analysis plan:
 }
 \`\`\`
 
-This plan will help me address the inquiry systematically.
+This plan will help me address the User's Message systematically.
     `.trim();
 
     // Extract JSON from the plan response for testing

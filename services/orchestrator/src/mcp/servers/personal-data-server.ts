@@ -21,6 +21,7 @@ import { LocalIndex, MetadataTypes } from 'vectra';
 import path from 'path';
 import fs from 'fs/promises';
 import axios from 'axios';
+import { logger } from '../../logger';
 
 /**
  * Configuration for the Personal Data server
@@ -324,7 +325,7 @@ class PersonalDataServer {
   /**
    * Retrieve data by categories
    */
-  private async retrieveData(categories: string[], user_context?: string, limit: number = 10): Promise<CallToolResult> {
+  private async retrieveData(categories: string[], user_context?: string, limit: number = 10): Promise<CallToolResult> {    
     if (!categories || !Array.isArray(categories) || categories.length === 0) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -333,11 +334,52 @@ class PersonalDataServer {
     }
 
     const allItems = await this.vectorIndex.listItems();
-    
-    const filteredItems = allItems
+
+    const filteredItemsPromises = allItems
       .filter(item => typeof item.metadata.category === 'string' && categories.includes(item.metadata.category))
       .slice(0, limit)
-      .map(item => item.metadata);
+      .map(async item => {
+        // Handle both current PersonalDataItem format and any legacy formats
+        const metadata = item.metadata as any;
+        
+        // The item.id should be the primary source for ID, with metadata.id as fallback
+        const id = item.id || metadata.id || 'unknown';
+        
+        // Try multiple possible locations for content
+        let content: string;
+        if (item.metadataFile && typeof item.metadataFile === 'string') {
+          // Content is stored in a separate metadata file
+          try {
+            const metadataFilePath = path.join(this.indexPath, item.metadataFile);
+            const metadataFileContent = await fs.readFile(metadataFilePath, 'utf-8');
+            const parsedMetadata = JSON.parse(metadataFileContent);
+            content = parsedMetadata.content || '[Content not available in metadata file]';
+          } catch (error) {
+            logger.error(`Error reading metadata file ${item.metadataFile}:`, error);
+            content = '[Error reading content from metadata file]';
+          }
+        } else if (metadata.content && typeof metadata.content === 'string') {
+          content = metadata.content;
+        } else if (metadata.text && typeof metadata.text === 'string') {
+          // Legacy format check
+          content = metadata.text;
+        } else if (metadata.value && typeof metadata.value === 'string') {
+          // Another possible legacy format
+          content = metadata.value;
+        } else {
+          content = '[Content not available - please re-add this information]';
+        }
+        
+        return {
+          id,
+          content,
+          category: metadata.category || 'unknown',
+          timestamp: metadata.timestamp || new Date().toISOString(),
+          user_context: metadata.user_context || metadata.context || ''
+        };
+      });
+
+    const filteredItems = await Promise.all(filteredItemsPromises);
 
     const response = {
       data: {
@@ -374,13 +416,32 @@ class PersonalDataServer {
     const results = await this.vectorIndex.queryItems(queryVector, query, limit);
 
     const items = results.map(result => {
-      const metadata = result.item.metadata as PersonalDataItem;
+      const item = result.item;
+      const metadata = item.metadata as any;
+     
+      // The item.id should be the primary source for ID, with metadata.id as fallback
+      const id = item.id || metadata.id || 'unknown';
+      
+      // Try multiple possible locations for content
+      let content: string;
+      if (metadata.content && typeof metadata.content === 'string') {
+        content = metadata.content;
+      } else if (metadata.text && typeof metadata.text === 'string') {
+        // Legacy format check
+        content = metadata.text;
+      } else if (metadata.value && typeof metadata.value === 'string') {
+        // Another possible legacy format
+        content = metadata.value;
+      } else {
+        content = '[Content not available - please re-add this information]';
+      }
+      
       return {
-        id: metadata.id,
-        content: metadata.content,
-        category: metadata.category,
-        timestamp: metadata.timestamp,
-        user_context: metadata.user_context || '',
+        id,
+        content,
+        category: metadata.category || 'unknown',
+        timestamp: metadata.timestamp || new Date().toISOString(),
+        user_context: metadata.user_context || metadata.context || '',
         similarity_score: result.score
       };
     });

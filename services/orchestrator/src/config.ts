@@ -5,8 +5,8 @@
 /** Enum for the LLM models used */
 export enum Model {
   Llama = 'llama3.2:3b-instruct-q8_0',
-  Gemma = 'gemma3:4b',
-  Qwen = 'qwen2.5vl:3b',
+  Gemma = 'gemma3:12b',
+  Qwen = 'qwen2.5vl:7b',
 }
 
 /** Base URL for the Magi Conduit API (powered by Ollama) */

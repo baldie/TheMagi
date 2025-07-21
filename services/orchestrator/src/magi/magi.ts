@@ -14,6 +14,7 @@ export { MagiName };
 interface MagiConfig {
   model: Model;
   personalitySource: string;
+  uniqueInstructions: string;
   options: {
     temperature: number;
   };
@@ -26,16 +27,19 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
+    uniqueInstructions: ``,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
+    uniqueInstructions: `If the user's message reveals personal preferences, emotional states, personal details, or other information relevant to your role, you must include a step in your plan to store this data using your tool(s). For simple statements of fact or preference, your plan should first store the information and then, in a separate step, acknowledge that it has been stored without trying to retrieve or search for related data. Conversely, if the user asks a question about their personal information, your plan should first retrieve the data and then answer the question in a subsequent step.`,
     options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
+    uniqueInstructions: ``,
     options: { temperature: 0.5 },
   },
 };
@@ -88,13 +92,13 @@ export class Magi extends ConduitClient {
     return this.status;
   }
 
-  async performIndependentAssessment(inquiry: string): Promise<string> {
+  async respondUsingAgenticPlan(userMessage: string): Promise<string> {
     try {
-      logger.info(`${this.name} beginning independent assessment for: ${inquiry}`);
+      logger.info(`${this.name} beginning independent assessment for: ${userMessage}`);
       
       // Every assessment starts with a seed plan
       const initialPlan = Planner.getSeedPlan();
-      const assessmentResult = await this.planner.executePlan(initialPlan, inquiry);
+      const assessmentResult = await this.planner.executePlan(initialPlan, userMessage);
       logger.debug(`${this.name} completed plan execution`);
       
       return assessmentResult;
@@ -104,7 +108,6 @@ export class Magi extends ConduitClient {
       throw new Error(`Independent assessment failed for ${this.name}: ${errorMessage}`);
     }
   }
-
 
   /**
    * Contacts the Magi persona through the Magi Conduit to get a response.
@@ -123,9 +126,10 @@ export class Magi extends ConduitClient {
     );
   }
 
-  async directInquiry(inquiry: string): Promise<string> {
+  // TODO: maybe we don't need this indirection of "direct User's Message"
+  async directMessage(userMessage: string): Promise<string> {
     return this.executeWithStatusManagement(() => 
-      super.contact(inquiry, this.getPersonality(), this.config.model, this.config.options)
+      this.respondUsingAgenticPlan(userMessage)
     );
   }
 

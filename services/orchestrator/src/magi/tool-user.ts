@@ -3,16 +3,16 @@ import { mcpClientManager, McpToolInfo } from '../mcp';
 import { MagiName } from './magi';
 import { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
 
-export function getCleanExtractPrompt(inquiry: string, toolResponse: string): string {
+export function getCleanExtractPrompt(userMessage: string, toolResponse: string): string {
   return `
     PERSONA:
     You are familiar with typical web page content and are adept at separating the useful text from the superfluous noise.
 
     CONTEXT:
-    Consider the following inquiry: "${inquiry}"
+    Consider the following User's Message: "${userMessage}"
 
     INSTRUCTIONS:
-    I will now share with you a body of text extracted from a webpage. Your job is to extract the text that is associated with the inquiry. Do not summarize the text, just include it as-is. Filter out any unrelated text like image URLs, privacy policy information, disclaimers, etc. Only respond with the resulting relevant text verbatim.
+    I will now share with you a body of text extracted from a webpage. Your job is to extract the text that is associated with the User's Message. Do not summarize the text, just include it as-is. Filter out any unrelated text like image URLs, privacy policy information, disclaimers, etc. Only respond with the resulting relevant text verbatim.
 
     TEXT:
     ${toolResponse}
@@ -196,18 +196,7 @@ export class ToolUser {
    * Format personal data response for display
    */
   private formatPersonalDataResponse(response: PersonalDataResponse): string {
-    let output = `Personal Data Query\n`;
-    output += `Context: ${response.context}\n`;
-    output += `Categories: ${response.categories.join(', ')}\n`;
-    
-    if (response.last_updated) {
-      output += `Last Updated: ${response.last_updated}\n`;
-    }
-    
-    output += '\nData:\n';
-    output += JSON.stringify(response.data, null, 2);
-    
-    return output;
+    return JSON.stringify(response.data, null, 2);
   }
   
   /**

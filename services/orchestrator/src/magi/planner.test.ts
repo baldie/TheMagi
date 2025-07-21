@@ -95,7 +95,7 @@ describe('Planner', () => {
       const result = await (planner as any).hydrateToolParameters(
         step,
         'Previous step found: https://example.com',
-        'Original inquiry'
+        'Original User Message'
       );
       
       expect(result).toEqual({
@@ -125,7 +125,7 @@ describe('Planner', () => {
       const result = await (planner as any).hydrateToolParameters(
         step,
         'Previous output',
-        'Original inquiry'
+        'Original User Message'
       );
       
       expect(result).toEqual(step);
@@ -144,7 +144,7 @@ describe('Planner', () => {
       const result = await (planner as any).hydrateToolParameters(
         step,
         'Previous output',
-        'Original inquiry'
+        'Original User Message'
       );
       
       expect(result).toEqual(step);
@@ -162,7 +162,7 @@ describe('Planner', () => {
       const result = await (planner as any).hydrateToolParameters(
         step,
         'Previous output',
-        'Original inquiry'
+        'Original User Message'
       );
       
       expect(result).toEqual(step);
