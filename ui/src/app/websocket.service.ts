@@ -41,7 +41,7 @@ export class WebsocketService implements OnDestroy {
     this.disconnect();
   }
 
-  public startConnecting(shouldStartMagi = false, inquiry?: string): void {
+  public startConnecting(shouldStartMagi = false, userMessage?: string): void {
     // Prevent concurrent connection attempts
     if (this.isConnecting) {
       this.logSubject.next('[CLIENT] Connection already in progress');
@@ -52,7 +52,7 @@ export class WebsocketService implements OnDestroy {
     if (this.socket$ && !this.socket$.closed) {
       this.logSubject.next('[CLIENT] WebSocket already connected');
       if (shouldStartMagi) {
-        this.startMagi(inquiry);
+        this.startMagi(userMessage);
       }
       return;
     }
@@ -68,7 +68,7 @@ export class WebsocketService implements OnDestroy {
           this.connectionStatusSubject.next(true);
           this.logSubject.next('[CLIENT] WebSocket connected');
           if (shouldStartMagi) {
-            this.startMagi(inquiry);
+            this.startMagi(userMessage);
           }
         }
       },
@@ -138,17 +138,16 @@ export class WebsocketService implements OnDestroy {
     }
   }
 
-  public startMagi(inquiry?: string): void {
+  public startMagi(userMessage?: string): void {
     try {
       if (!this.socket$ || this.socket$.closed) {
         this.logSubject.next('[CLIENT] WebSocket not connected - cannot start Magi');
         return;
       }
       
-      const message: WebSocketMessage = { type: 'start-magi', data: { inquiry } };
+      const message: WebSocketMessage = { type: 'start-magi', data: { userMessage } };
       this.processStatusSubject.next(true);
       this.socket$.next(message);
-      this.logSubject.next('[CLIENT] Starting Magi deliberation...');
     } catch (error) {
       const errorMsg = this.formatError(error);
       this.logSubject.next(`[CLIENT] Failed to start Magi: ${errorMsg}`);

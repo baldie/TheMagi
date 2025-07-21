@@ -8,7 +8,7 @@ import { logStream } from './log-stream';
 // Store connected clients for audio streaming
 const connectedClients = new Set<WebSocket>();
 
-export function createWebSocketServer(server: Server, startCallback: (inquiry?: string) => Promise<string>) {
+export function createWebSocketServer(server: Server, startCallback: (userMessage?: string) => Promise<string>) {
   const wss = new WebSocketServer({ server });
 
   wss.on('connection', (ws: WebSocket) => {
@@ -34,12 +34,9 @@ export function createWebSocketServer(server: Server, startCallback: (inquiry?: 
         const message = rawMessage.toString();
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'start-magi') {
-          logger.info('[WebSocket] Received start-magi signal from client.');
-          if (parsedMessage.data?.inquiry) {
-            logger.userQuery(parsedMessage.data.inquiry);
-          }
+          logger.info(`[WebSocket] Received start-magi signal from client. ${message}`);
           try {
-            const response = await startCallback(parsedMessage.data?.inquiry);
+            const response = await startCallback(parsedMessage.data?.userMessage);
             logger.info('[WebSocket] Deliberation completed successfully');
             
             // Send the final response back to the client
@@ -113,7 +110,5 @@ export function broadcastAudioToClients(audioData: Buffer, persona: string, isCo
     }
   });
 
-  if (connectedClients.size > 0) {
-    logger.debug(`[WebSocket] Broadcasted audio chunk to ${connectedClients.size} clients (sequence: ${sequenceNumber})`);
-  }
+  // Audio chunks are broadcasted frequently - no need to log each one
 } 

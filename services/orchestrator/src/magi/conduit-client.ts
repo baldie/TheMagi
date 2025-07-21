@@ -125,7 +125,7 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
    */
   private parseJsonResponse(jsonResponse: string): any {
     try {
-      logger.debug(`${this.magiName} attempting to parse JSON:`, jsonResponse);
+      logger.debug(`${this.magiName} attempting to parse JSON:\n${jsonResponse}`);
       
       // Try to extract JSON from the response if it's wrapped in markdown or other text
       let cleanedJSON = jsonResponse.trim();
@@ -134,11 +134,11 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
       const jsonBlockMatch = cleanedJSON.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonBlockMatch) {
         cleanedJSON = jsonBlockMatch[1].trim();
-        logger.debug(`${this.magiName} extracted JSON from code block:`, cleanedJSON);
+        logger.debug(`${this.magiName} extracted JSON from code block:\n${cleanedJSON}`);
       }
-
+      
       const parsedData = JSON.parse(cleanedJSON);
-      logger.debug(`${this.magiName} successfully parsed JSON data:`, parsedData);
+      logger.debug(`${this.magiName} successfully parsed JSON data:\n${JSON.stringify(parsedData)}`);
       return parsedData;
       
     } catch (error) {

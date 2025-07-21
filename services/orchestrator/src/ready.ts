@@ -22,18 +22,18 @@ async function retry<T>(
   }
 }
 
-async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
+async function runSealedEnvelopePhase(userMessage: string): Promise<string> {
   logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(() => balthazar.performIndependentAssessment(inquiry));
+  const balthazarResponse = await retry(() => balthazar.respondUsingAgenticPlan(userMessage));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(() => melchior.performIndependentAssessment(inquiry));
+  const melchiorResponse = await retry(() => melchior.respondUsingAgenticPlan(userMessage));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(() => caspar.performIndependentAssessment(inquiry));
+  const casparResponse = await retry(() => caspar.respondUsingAgenticPlan(userMessage));
 
   const sealedEnvelope = `
     
@@ -118,7 +118,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       ${roundResponses}
 
       If there are fundamental disagreements still, respond ONLY with the word "IMPASSE".
-      Otherwise, respond with the final, agreed-upon recommendation/answer summarized so that it directly answers the inquiry.
+      Otherwise, respond with the final, agreed-upon recommendation/answer summarized so that it directly answers the User's Message.
       It is very important that you concise in your summary.
       Use as few words as possible to convey the outcome.
       `;
@@ -178,66 +178,61 @@ async function extractAndStoreMemory(inquiry: string, deliberationTranscript: st
 }
 
 /**
- * Route inquiry based on prefix or fallback to deliberation
- * @param inquiry - The user's question or request potentially with prefix
- * @returns The response from either direct inquiry or deliberation
+ * Route User's Message based on prefix or fallback to deliberation
+ * @param userMessage - The user's question or request potentially with prefix
+ * @returns The response from either direct User's Message or deliberation
  */
-export async function routeInquiry(inquiry?: string): Promise<string> {
-  if (!inquiry) {
-    return beginDeliberation(inquiry);
+export async function routeMessage(userMessage?: string): Promise<string> {
+  if (!userMessage) {
+    return beginDeliberation(userMessage);
   }
 
-  const trimmedInquiry = inquiry.trim();
+  const trimmedUserMessage = userMessage.trim();
 
-  const magiDirect = async (magi: Magi, inquiry: string): Promise<string> => {
-    logger.debug(`Directly routing inquiry to ${magi.name}`);
-    const response = await magi.directInquiry(inquiry);
+  const magiDirect = async (magi: Magi, userMessage: string): Promise<string> => {
+    logger.debug(`Directly routing User's Message to ${magi.name}`);
+    const response = await magi.directMessage(userMessage);
     logger.debug(`Received response from ${magi.name}:\n${response}`);
     await speakWithMagiVoice(response, magi.name);
     return response;
   }
 
   // Regex patterns for each Magi: (short|full name)[:,]
-  const melchiorMatch = trimmedInquiry.match(/^(m|melchior)[:,]\s*/i);
+  const melchiorMatch = trimmedUserMessage.match(/^(m|melchior)[:,]\s*/i);
   if (melchiorMatch) {
-    const melchiorInquiry = trimmedInquiry.substring(melchiorMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Melchior], melchiorInquiry);
+    const melchiorUserMessage = trimmedUserMessage.substring(melchiorMatch[0].length);
+    return await magiDirect(allMagi[MagiName.Melchior], melchiorUserMessage);
   }
 
-  const balthazarMatch = trimmedInquiry.match(/^(b|balthazar)[:,]\s*/i);
+  const balthazarMatch = trimmedUserMessage.match(/^(b|balthazar)[:,]\s*/i);
   if (balthazarMatch) {
-    const balthazarInquiry = trimmedInquiry.substring(balthazarMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Balthazar], balthazarInquiry);
+    const balthazarUserMessage = trimmedUserMessage.substring(balthazarMatch[0].length);
+    return await magiDirect(allMagi[MagiName.Balthazar], balthazarUserMessage);
   }
 
-  const casparMatch = trimmedInquiry.match(/^(c|caspar)[:,]\s*/i);
+  const casparMatch = trimmedUserMessage.match(/^(c|caspar)[:,]\s*/i);
   if (casparMatch) {
-    const casparInquiry = trimmedInquiry.substring(casparMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Caspar], casparInquiry);
+    const casparUserMessage = trimmedUserMessage.substring(casparMatch[0].length);
+    return await magiDirect(allMagi[MagiName.Caspar], casparUserMessage);
   }
   
-  return beginDeliberation(inquiry);
+  return beginDeliberation(userMessage);
 }
 
 /**
  * Main function that runs the deliberation process according to the V0 PRD.
- * @param inquiry - The user's question or request
+ * @param userMessage - The user's question or request
  * @returns The final synthesized response or a summary of the impasse.
  */
-export async function beginDeliberation(inquiry?: string): Promise<string> {
-  const memoryService = new MemoryService(logger);
-  
+export async function beginDeliberation(userMessage?: string): Promise<string> {
   try {
     logger.info('--- MAGI DELIBERATION INITIATED ---');
-    if (inquiry) {
-      logger.userQuery(inquiry);
-    }
-    logger.info('Starting deliberation proceedings');
+    logger.info('Starting deliberation proceedings', { userMessage });
 
     // V0 placeholders from PRD
     logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
 
-    const sealedEnvelope = await runSealedEnvelopePhase(inquiry || '', memoryService);
+    const sealedEnvelope = await runSealedEnvelopePhase(userMessage || '');
     const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
 
     logger.info('--- Deliberation Complete ---');

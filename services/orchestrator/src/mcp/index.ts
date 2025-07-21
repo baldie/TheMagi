@@ -289,10 +289,9 @@ export class McpClientManager {
         }
       } catch (error) {
         logger.error(`Failed to check tools or execute ${toolName} on ${config.name} server for ${magiName}:`);
-        logger.error('Error details:', error);
+        logger.error(`Error details: ${error}`);
         if (error instanceof Error) {
-          logger.error('Error message:', error.message);
-          logger.error('Error stack:', error.stack);
+          logger.error(`Error message: ${error.message}`, error.message);
         }
         continue;
       }

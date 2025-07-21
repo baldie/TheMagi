@@ -22,8 +22,8 @@
 
 A personal, omnipresent Artificial Intelligence system, built to serve a human as a board of directors for decisions large and small.
 
-* Caspar - qwen2.5vl:3b
-* Melchior - gemma3:4b
+* Caspar - qwen2.5vl:7b
+* Melchior - gemma3:12b
 * Balthazar - llama3.2:3b-instruct-q8_0
 
 ## Setup
