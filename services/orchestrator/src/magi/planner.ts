@@ -262,18 +262,7 @@ INSTRUCTIONS:
             }
           },
           "Step4": {
-            "instruction": "Based on the food-related information retrieved from the previous step, propose a list of popular, simple, and healthy meal options that fit the user's preferences, allergies, and dietary restrictions. The output of this step will be this filtered list of meal options.",
-            "tool": {
-              "name": "tavily-search",
-              "args": {
-                "query": "simple healthy meal options based on <PLACEHOLDER>",
-                "max_results": 5,
-                "include_answer": true
-              }
-            }
-          },
-          "Step5": {
-            "instruction": "From the list of meal options generated in the previous step, summarize the most suitable ones and include a justification for each based on the user's preferences, allergies, and dietary restrictions. This summary, along with the justifications, will be presented for the other Magi to consider."
+            "instruction": "Based on the food-related information retrieved from the previous step, propose a list of popular, simple, and healthy meal options. Justify the suggestions based on the user's preferences, allergies, and dietary restrictions. Share with the other Magi to consider.",
           }
         }
         \`\`\``;
@@ -606,9 +595,8 @@ Respond with ONLY the properly formatted JSON`;
       // Web pages can have a lot of noise that throw off the magi, so lets clean it
       if (updatedStep.toolName == 'tavily-extract'){
         const cleanExtractPrompt = getCleanExtractPrompt(originalInquiry, toolResponse);
-        logger.debug(`😅😅😅😅😅😅Cleaned extract prompt:\n\n${cleanExtractPrompt}\n😅😅😅😅😅😅`);
         toolResponse = await this.conduitClient.contact(cleanExtractPrompt, '', this.model, { temperature: this.temperature })
-        logger.debug(`😅😅😅😅😅😅Cleaned extract response:\n\n${toolResponse}\n😅😅😅😅😅😅`);
+        //logger.debug(`Cleaned extract response:\n\n${toolResponse}\n\n`);
       }
 
       return toolResponse;
