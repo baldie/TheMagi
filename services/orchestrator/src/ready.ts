@@ -34,7 +34,6 @@ async function runSealedEnvelopePhase(userMessage: string): Promise<string> {
   
   logger.info('Running Caspar assessment...');
   const casparResponse = await retry(() => caspar.respondUsingAgenticPlan(userMessage));
-
   const sealedEnvelope = `
     
 --------------------------------------------------------------------------
@@ -219,6 +218,34 @@ export async function routeMessage(userMessage?: string): Promise<string> {
   return beginDeliberation(userMessage);
 }
 
+async function extractAndStoreMemory(inquiry: string, deliberationTranscript: string, memoryService: MemoryService): Promise<void> {
+  logger.info('Memory extraction phase: Starting memory extraction from deliberation.');
+  
+  try {
+    const memoryPrompt = memoryService.createMemoryExtractionPrompt(inquiry, deliberationTranscript);
+    
+    // Extract memory from each Magi
+    const casparMemoryResponse = await retry(() => caspar.contact(memoryPrompt));
+    const melchiorMemoryResponse = await retry(() => melchior.contact(memoryPrompt));
+    const balthazarMemoryResponse = await retry(() => balthazar.contact(memoryPrompt));
+    
+    // Parse memory from responses
+    const casparMemory = memoryService.extractMemoryFromResponse(casparMemoryResponse);
+    const melchiorMemory = memoryService.extractMemoryFromResponse(melchiorMemoryResponse);
+    const balthazarMemory = memoryService.extractMemoryFromResponse(balthazarMemoryResponse);
+    
+    // Extract topics from inquiry
+    const topics = inquiry.toLowerCase().split(' ').filter(word => word.length > 3);
+    
+    // Update memory
+    await memoryService.updateMemory(casparMemory, melchiorMemory, balthazarMemory, [], topics);
+    
+    logger.info('Memory extraction complete and stored.');
+  } catch (error) {
+    logger.error('Memory extraction failed, but deliberation was successful', error);
+  }
+}
+
 /**
  * Main function that runs the deliberation process according to the V0 PRD.
  * @param userMessage - The user's question or request
@@ -238,8 +265,6 @@ export async function beginDeliberation(userMessage?: string): Promise<string> {
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });
 
-    // Extract and store memory from this conversation
-    await extractAndStoreMemory(inquiry || '', sealedEnvelope, memoryService);
 
     // Trigger TTS for the final response using Caspar's voice (primary spokesperson)
     try {
