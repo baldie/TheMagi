@@ -83,7 +83,8 @@
       "Bash(TAVILY_API_KEY=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 npx -y tavily-mcp@latest --list-tools)",
       "Bash(git check-ignore:*)",
       "Bash(git rm:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(bash:*)"
     ],
     "deny": []
   },

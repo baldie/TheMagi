@@ -387,40 +387,80 @@ fi
 echo "  - Downloading required AI models (this may take several minutes)..."
 echo "    Note: Models will be stored in $MODELS_DIR"
 
-echo "    Downloading Qwen2.5 7B model..."
-timeout 600 $OLLAMA_BIN pull qwen2.5:7b-instruct-q6_k
+echo "    Downloading Qwen2.5 Vision Language model..."
+timeout 600 $OLLAMA_BIN pull qwen2.5vl:7b
 if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Qwen2.5 model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull qwen2.5:7b-instruct-q6_k"
+    echo "[WARNING] Failed to download Qwen2.5 Vision Language model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull qwen2.5vl:7b"
 fi
 
-echo "    Downloading Gemma3n E2B model..."
-timeout 600 $OLLAMA_BIN pull gemma3n:e2b
+echo "    Downloading Gemma3 12B model..."
+timeout 600 $OLLAMA_BIN pull gemma3:12b
 if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Gemma3n model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull gemma3n:e2b"
+    echo "[WARNING] Failed to download Gemma3 model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull gemma3:12b"
 fi
 
-echo "    Downloading Llama3.2 3B model..."
-timeout 600 $OLLAMA_BIN pull llama3.2:3b
+echo "    Downloading Llama3.2 3B Instruct model..."
+timeout 600 $OLLAMA_BIN pull llama3.2:3b-instruct-q8_0
 if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Llama3.2 model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull llama3.2:3b"
+    echo "[WARNING] Failed to download Llama3.2 Instruct model. You may need to download it manually."
+    echo "          Run: $OLLAMA_BIN pull llama3.2:3b-instruct-q8_0"
 fi
 
 echo "    Downloading nomic-embed-text model for embeddings..."
-timeout 600 $OLLAMA_BIN pull nomic-embed-text
+timeout 600 $OLLAMA_BIN pull nomic-embed-text:latest
 if [ $? -ne 0 ]; then
     echo "[WARNING] Failed to download nomic-embed-text model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull nomic-embed-text"
+    echo "          Run: $OLLAMA_BIN pull nomic-embed-text:latest"
 fi
 
 echo "  - Verifying model installations..."
 AVAILABLE_MODELS=$($OLLAMA_BIN list 2>/dev/null)
 echo "$AVAILABLE_MODELS"
 
+# Clean up unwanted models - keep only the required ones
+echo "  - Cleaning up unwanted models (keeping only required models)..."
+REQUIRED_MODELS=("gemma3:12b" "qwen2.5vl:7b" "nomic-embed-text:latest" "llama3.2:3b-instruct-q8_0")
+
+# Get list of installed models (skip header line)
+INSTALLED_MODELS=$($OLLAMA_BIN list 2>/dev/null | tail -n +2 | awk '{print $1}')
+
+# Check each installed model
+for model in $INSTALLED_MODELS; do
+    # Skip empty lines
+    if [ -z "$model" ]; then
+        continue
+    fi
+    
+    # Check if this model is in our required list
+    KEEP_MODEL=false
+    for required in "${REQUIRED_MODELS[@]}"; do
+        if [ "$model" = "$required" ]; then
+            KEEP_MODEL=true
+            break
+        fi
+    done
+    
+    # Remove model if not required
+    if [ "$KEEP_MODEL" = false ]; then
+        echo "    Removing unwanted model: $model"
+        $OLLAMA_BIN rm "$model" 2>/dev/null
+        if [ $? -eq 0 ]; then
+            echo "    [OK] Removed $model"
+        else
+            echo "    [WARNING] Failed to remove $model"
+        fi
+    else
+        echo "    [OK] Keeping required model: $model"
+    fi
+done
+
+echo "  - Model cleanup complete. Final model list:"
+$OLLAMA_BIN list 2>/dev/null
+
 # Test GPU functionality if models are available
-if echo "$AVAILABLE_MODELS" | grep -q "llama3.2\|qwen2.5\|gemma3n"; then
+if echo "$AVAILABLE_MODELS" | grep -q "llama3.2:3b-instruct-q8_0\|qwen2.5vl:7b\|gemma3:12b"; then
     echo "  - Testing GPU acceleration..."
     
     # Get a quick test to see if GPU is being used
@@ -558,28 +598,28 @@ fi
 # Test if models are available
 echo "  - Verifying AI models are downloaded..."
 MODELS_OUTPUT=$($OLLAMA_BIN list 2>/dev/null)
-if echo "$MODELS_OUTPUT" | grep -q "qwen2.5"; then
-    echo "    [OK] Qwen2.5 model available."
+if echo "$MODELS_OUTPUT" | grep -q "qwen2.5vl:7b"; then
+    echo "    [OK] Qwen2.5 Vision Language model available."
 else
-    echo "[WARNING] Qwen2.5 model not found. Download with: $OLLAMA_BIN pull qwen2.5:7b-instruct-q6_k"
+    echo "[WARNING] Qwen2.5 Vision Language model not found. Download with: $OLLAMA_BIN pull qwen2.5vl:7b"
 fi
 
-if echo "$MODELS_OUTPUT" | grep -q "gemma3n"; then
-    echo "    [OK] Gemma3n model available."
+if echo "$MODELS_OUTPUT" | grep -q "gemma3:12b"; then
+    echo "    [OK] Gemma3 12B model available."
 else
-    echo "[WARNING] Gemma3n model not found. Download with: $OLLAMA_BIN pull gemma3n:e2b"
+    echo "[WARNING] Gemma3 12B model not found. Download with: $OLLAMA_BIN pull gemma3:12b"
 fi
 
-if echo "$MODELS_OUTPUT" | grep -q "llama3.2"; then
-    echo "    [OK] Llama3.2 model available."
+if echo "$MODELS_OUTPUT" | grep -q "llama3.2:3b-instruct-q8_0"; then
+    echo "    [OK] Llama3.2 3B Instruct model available."
 else
-    echo "[WARNING] Llama3.2 model not found. Download with: $OLLAMA_BIN pull llama3.2:3b"
+    echo "[WARNING] Llama3.2 3B Instruct model not found. Download with: $OLLAMA_BIN pull llama3.2:3b-instruct-q8_0"
 fi
 
-if echo "$MODELS_OUTPUT" | grep -q "nomic-embed-text"; then
+if echo "$MODELS_OUTPUT" | grep -q "nomic-embed-text:latest"; then
     echo "    [OK] nomic-embed-text model available."
 else
-    echo "[WARNING] nomic-embed-text model not found. Download with: $OLLAMA_BIN pull nomic-embed-text"
+    echo "[WARNING] nomic-embed-text model not found. Download with: $OLLAMA_BIN pull nomic-embed-text:latest"
 fi
 
 # Test TypeScript compilation
