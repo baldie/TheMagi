@@ -1,6 +1,7 @@
 import { balthazar, caspar, melchior, MagiName } from './magi';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
+import { MemoryService } from './memory';
 
 /**
  * Retry a function with exponential backoff.
@@ -21,14 +22,20 @@ async function retry<T>(
   }
 }
 
-async function runSealedEnvelopePhase(inquiry: string): Promise<string> {
+async function runSealedEnvelopePhase(inquiry: string, memoryService: MemoryService): Promise<string> {
   logger.info('Phase 1: Beginning independent analysis for "sealed envelope".');
 
+  // Load user memory and inject context
+  const userMemory = await memoryService.loadUserMemory();
+  const balthazarMemoryContext = memoryService.generateMemoryContext(userMemory, 'balthazar');
+  const melchiorMemoryContext = memoryService.generateMemoryContext(userMemory, 'melchior');
+  const casparMemoryContext = memoryService.generateMemoryContext(userMemory, 'caspar');
+
   // Process models sequentially to avoid overwhelming the system
-  const prompt = `Regarding "${inquiry}", what are your thoughts? Be concise and on topic.`;
-  const balthazarResponse = await retry(() => balthazar.contact(prompt));
-  const melchiorResponse = await retry(() => melchior.contact(prompt));
-  const casparResponse = await retry(() => caspar.contact(prompt));
+  const basePrompt = `Regarding "${inquiry}", what are your thoughts? Be concise and on topic.`;
+  const balthazarResponse = await retry(() => balthazar.contact(`${balthazarMemoryContext}\n\n${basePrompt}`));
+  const melchiorResponse = await retry(() => melchior.contact(`${melchiorMemoryContext}\n\n${basePrompt}`));
+  const casparResponse = await retry(() => caspar.contact(`${casparMemoryContext}\n\n${basePrompt}`));
 
   const sealedEnvelope = `
     ---
@@ -119,25 +126,62 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
   return await retry(() => caspar.contact(impasseSummaryPrompt));
 }
 
+async function extractAndStoreMemory(inquiry: string, deliberationTranscript: string, memoryService: MemoryService): Promise<void> {
+  logger.info('Memory extraction phase: Starting memory extraction from deliberation.');
+  
+  try {
+    const memoryPrompt = memoryService.createMemoryExtractionPrompt(inquiry, deliberationTranscript);
+    
+    // Extract memory from each Magi
+    const casparMemoryResponse = await retry(() => caspar.contact(memoryPrompt));
+    const melchiorMemoryResponse = await retry(() => melchior.contact(memoryPrompt));
+    const balthazarMemoryResponse = await retry(() => balthazar.contact(memoryPrompt));
+    
+    // Parse memory from responses
+    const casparMemory = memoryService.extractMemoryFromResponse(casparMemoryResponse);
+    const melchiorMemory = memoryService.extractMemoryFromResponse(melchiorMemoryResponse);
+    const balthazarMemory = memoryService.extractMemoryFromResponse(balthazarMemoryResponse);
+    
+    // Extract topics from inquiry
+    const topics = inquiry.toLowerCase().split(' ').filter(word => word.length > 3);
+    
+    // Update memory
+    await memoryService.updateMemory(casparMemory, melchiorMemory, balthazarMemory, [], topics);
+    
+    logger.info('Memory extraction complete and stored.');
+  } catch (error) {
+    logger.error('Memory extraction failed, but deliberation was successful', error);
+  }
+}
+
 /**
  * Main function that runs the deliberation process according to the V0 PRD.
  * @param inquiry - The user's question or request
  * @returns The final synthesized response or a summary of the impasse.
  */
 export async function beginDeliberation(inquiry?: string): Promise<string> {
+  const memoryService = new MemoryService(logger);
+  
   try {
     logger.info('--- MAGI DELIBERATION INITIATED ---');
-    logger.info('Starting deliberation proceedings', { inquiry });
+    if (inquiry) {
+      logger.userQuery(inquiry);
+    }
+    logger.info('Starting deliberation proceedings');
 
-    // V0 placeholders from PRD
-    logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
+    
+    // V0 placeholders from PRD (now partially implemented with memory)
+    logger.info('... [V0] Caspar providing sanitized history to other Magi (implemented via memory).');
     logger.info('... [V0] Caspar providing smart device health info to Melchior (placeholder).');
 
-    const sealedEnvelope = await runSealedEnvelopePhase(inquiry || '');
+    const sealedEnvelope = await runSealedEnvelopePhase(inquiry || '', memoryService);
     const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
 
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });
+
+    // Extract and store memory from this conversation
+    await extractAndStoreMemory(inquiry || '', sealedEnvelope, memoryService);
 
     // Trigger TTS for the final response using Caspar's voice (primary spokesperson)
     try {

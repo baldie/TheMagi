@@ -97,6 +97,25 @@ class Logger {
   }
 
   /**
+   * Log user query with special highlighting
+   * @param query - The user's query to highlight
+   */
+  userQuery(query: string): void {
+    const timestamp = new Date().toISOString();
+    const logHeader = `[${timestamp}] [USER QUERY]`;
+    const plainMessage = `${logHeader} ${query}`;
+
+    // Write to file stream (un-colored)
+    fileStream.write(plainMessage + '\n');
+
+    // Emit to the stream for websockets (without color)
+    logStream.emit(plainMessage);
+
+    // Console output with bright yellow background and black text for high visibility
+    console.log(chalk.bgYellow.black(`${logHeader} ${query}`));
+  }
+
+  /**
    * Log error level messages
    * @param message - The error message
    * @param error - Optional error object or data to include

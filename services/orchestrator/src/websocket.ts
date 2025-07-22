@@ -35,6 +35,9 @@ export function createWebSocketServer(server: Server, startCallback: (inquiry?: 
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'start-magi') {
           logger.info('[WebSocket] Received start-magi signal from client.');
+          if (parsedMessage.data?.inquiry) {
+            logger.userQuery(parsedMessage.data.inquiry);
+          }
           try {
             const response = await startCallback(parsedMessage.data?.inquiry);
             logger.info('[WebSocket] Deliberation completed successfully');
