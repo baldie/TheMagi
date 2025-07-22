@@ -50,6 +50,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
  */
 export class Magi extends ConduitClient {
   private personalityPrompt: string = '';
+  private memoryContext: string = '';
   private status: 'available' | 'busy' | 'offline' = 'offline';
   private toolUser: ToolUser;
   public planner: Planner;
@@ -69,8 +70,9 @@ export class Magi extends ConduitClient {
   /**
    * Initialize the Magi
    */
-  async initialize(prompt: string): Promise<void> {
+  async initialize(prompt: string, memoryContext?: string): Promise<void> {
     this.personalityPrompt = prompt;
+    this.memoryContext = memoryContext || '';
     logger.debug(`${this.name} planner initialized with tools`);
     return await this.planner.initialize();
   }
@@ -86,6 +88,14 @@ export class Magi extends ConduitClient {
       throw err;
     }
     return this.personalityPrompt;
+  }
+
+  /**
+   * Retrieves the cached memory context.
+   * @returns The memory context string, empty if not loaded.
+   */
+  getMemoryContext(): string {
+    return this.memoryContext;
   }
 
   public getStatus(): 'available' | 'busy' | 'offline' {
@@ -115,8 +125,9 @@ export class Magi extends ConduitClient {
    * @returns The AI's response text.
    */
   async contact(userPrompt: string): Promise<string> {
+    const systemPrompt = this.getPersonality() + '\n\n' + this.getMemoryContext();
     return this.executeWithStatusManagement(() => 
-      super.contact(userPrompt, this.getPersonality(), this.config.model, this.config.options)
+      super.contact(userPrompt, systemPrompt, this.config.model, this.config.options)
     );
   }
 

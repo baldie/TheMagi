@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import { logger } from './logger';
 import { balthazar, caspar, melchior, Magi, MagiName, PERSONAS_CONFIG } from './magi/magi';
+import { MemoryService } from './memory';
 
 async function checkPersonaReadiness(magi: Magi): Promise<void> {
   const maxRetries = 3;
@@ -31,6 +32,12 @@ async function checkPersonaReadiness(magi: Magi): Promise<void> {
 export async function loadMagi(): Promise<void> {
   logger.info('--- Loading Magi Personas ---');
 
+  // Initialize memory service
+  const memoryService = new MemoryService(logger);
+  
+  // Load user memory once for all Magi
+  const userMemory = await memoryService.loadUserMemory();
+
   // Init all Magi in parallel
   const loadPromises = [caspar, melchior, balthazar].map(async (magi) => {
     logger.info(`Loading ${magi.name}...`);
@@ -39,9 +46,13 @@ export async function loadMagi(): Promise<void> {
     const { personalitySource } = PERSONAS_CONFIG[magi.name];
     const personalityPrompt = await fs.readFile(personalitySource, 'utf-8');
     
-    // 2. Store it in the manager and initialize tools
-    await magi.initialize(personalityPrompt);
-    logger.info(`... ${magi.name}'s personality has been loaded from file.`);
+    // 2. Load memory context for this specific Magi
+    const magiNameLower = magi.name.toLowerCase() as 'caspar' | 'melchior' | 'balthazar';
+    const memoryContext = memoryService.generateMemoryContext(userMemory, magiNameLower);
+    
+    // 3. Store personality and memory in the Magi and initialize tools
+    await magi.initialize(personalityPrompt, memoryContext);
+    logger.info(`... ${magi.name}'s personality and memory have been loaded.`);
 
     // Placeholders for data access checks
     switch (magi.name) {

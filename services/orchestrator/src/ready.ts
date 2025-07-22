@@ -1,7 +1,6 @@
 import { balthazar, caspar, melchior, MagiName, Magi, allMagi } from './magi/magi';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
-import { MemoryService } from './memory';
 
 /**
  * Retry a function with exponential backoff.
@@ -148,33 +147,6 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
   return await retry(() => caspar.contactWithoutPersonality(impasseSummaryPrompt));
 }
 
-async function extractAndStoreMemory(inquiry: string, deliberationTranscript: string, memoryService: MemoryService): Promise<void> {
-  logger.info('Memory extraction phase: Starting memory extraction from deliberation.');
-  
-  try {
-    const memoryPrompt = memoryService.createMemoryExtractionPrompt(inquiry, deliberationTranscript);
-    
-    // Extract memory from each Magi
-    const casparMemoryResponse = await retry(() => caspar.contact(memoryPrompt));
-    const melchiorMemoryResponse = await retry(() => melchior.contact(memoryPrompt));
-    const balthazarMemoryResponse = await retry(() => balthazar.contact(memoryPrompt));
-    
-    // Parse memory from responses
-    const casparMemory = memoryService.extractMemoryFromResponse(casparMemoryResponse);
-    const melchiorMemory = memoryService.extractMemoryFromResponse(melchiorMemoryResponse);
-    const balthazarMemory = memoryService.extractMemoryFromResponse(balthazarMemoryResponse);
-    
-    // Extract topics from inquiry
-    const topics = inquiry.toLowerCase().split(' ').filter(word => word.length > 3);
-    
-    // Update memory
-    await memoryService.updateMemory(casparMemory, melchiorMemory, balthazarMemory, [], topics);
-    
-    logger.info('Memory extraction complete and stored.');
-  } catch (error) {
-    logger.error('Memory extraction failed, but deliberation was successful', error);
-  }
-}
 
 /**
  * Route User's Message based on prefix or fallback to deliberation
@@ -216,34 +188,6 @@ export async function routeMessage(userMessage?: string): Promise<string> {
   }
   
   return beginDeliberation(userMessage);
-}
-
-async function extractAndStoreMemory(inquiry: string, deliberationTranscript: string, memoryService: MemoryService): Promise<void> {
-  logger.info('Memory extraction phase: Starting memory extraction from deliberation.');
-  
-  try {
-    const memoryPrompt = memoryService.createMemoryExtractionPrompt(inquiry, deliberationTranscript);
-    
-    // Extract memory from each Magi
-    const casparMemoryResponse = await retry(() => caspar.contact(memoryPrompt));
-    const melchiorMemoryResponse = await retry(() => melchior.contact(memoryPrompt));
-    const balthazarMemoryResponse = await retry(() => balthazar.contact(memoryPrompt));
-    
-    // Parse memory from responses
-    const casparMemory = memoryService.extractMemoryFromResponse(casparMemoryResponse);
-    const melchiorMemory = memoryService.extractMemoryFromResponse(melchiorMemoryResponse);
-    const balthazarMemory = memoryService.extractMemoryFromResponse(balthazarMemoryResponse);
-    
-    // Extract topics from inquiry
-    const topics = inquiry.toLowerCase().split(' ').filter(word => word.length > 3);
-    
-    // Update memory
-    await memoryService.updateMemory(casparMemory, melchiorMemory, balthazarMemory, [], topics);
-    
-    logger.info('Memory extraction complete and stored.');
-  } catch (error) {
-    logger.error('Memory extraction failed, but deliberation was successful', error);
-  }
 }
 
 /**
