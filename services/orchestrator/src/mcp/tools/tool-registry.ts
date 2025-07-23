@@ -104,7 +104,7 @@ query_purpose: Purpose of the query for context`
     responseType: 'PersonalDataResponse',
     instructions: `action: Operation to perform - "store", "retrieve", or "search" (**THESE ARE THE ONLY 3 VALID ACTIONS**)
 content: Content to store or search for (required for store/search actions)
-category: Category of the data (required for store action)
+category: Category of the data (**REQUIRED WHEN STORING**)
 categories: Array of data categories to retrieve (**REQUIRED FOR RETRIEVAL**)
 user_context: Context for the data request
 limit: Maximum results to return (number, default: 10)`

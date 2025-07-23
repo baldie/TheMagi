@@ -1,7 +1,26 @@
 import { logger } from '../logger';
 import { mcpClientManager, McpToolInfo } from '../mcp';
-import { MagiName } from './magi';
+import { Magi, AgenticTool } from './magi';
 import { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
+
+/**
+ * JSON Schema type definitions
+ */
+interface JsonSchemaProperty {
+  type?: string;
+  description?: string;
+  enum?: unknown[];
+  items?: JsonSchemaProperty;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+  default?: unknown;
+}
+
+interface JsonSchema {
+  type?: string;
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
+}
 
 export function getCleanExtractPrompt(userMessage: string, toolResponse: string): string {
   return `
@@ -23,7 +42,7 @@ export function getCleanExtractPrompt(userMessage: string, toolResponse: string)
  * ToolUser handles tool identification and execution for the Magi system.
  */
 export class ToolUser {
-  constructor(private magiName: MagiName) {}
+  constructor(private magi: Magi) {}
 
   /**
    * Gets all the tools that are available for the current Magi persona.   
@@ -32,9 +51,9 @@ export class ToolUser {
   async getAvailableTools(): Promise<McpToolInfo[]> {
     try {
       // Dynamically get tools from MCP servers
-      return await mcpClientManager.getMCPToolInfoForMagi(this.magiName);
+      return await mcpClientManager.getMCPToolInfoForMagi(this.magi.name);
     } catch (error) {
-      logger.error(`Failed to get available tools for ${this.magiName}:`, error);
+      logger.error(`Failed to get available tools for ${this.magi.name}:`, error);
       return [];
     }
   }
@@ -56,14 +75,14 @@ export class ToolUser {
       await mcpClientManager.initialize();
       
       // Execute the tool with Magi-determined arguments
-      const toolResult = await mcpClientManager.executeTool(this.magiName, toolName, toolArguments);
+      const toolResult = await mcpClientManager.executeTool(this.magi.name, toolName, toolArguments);
       
       // Extract the text from the typed response object
       const processedOutput = this.extractToolOutput(toolResult);
       
       return `Tool used: ${toolName}\nArguments: ${JSON.stringify(toolArguments)}\nResult: ${processedOutput}`;
     } catch (error) {
-      logger.error(`${this.magiName} tool execution failed:`, error);
+      logger.error(`${this.magi.name} tool execution failed:`, error);
       // Fallback to reasoning-based approach
       return `Tool execution failed, proceeding with reasoning-based analysis for: ${stepDescription}`;
     }
@@ -211,5 +230,72 @@ export class ToolUser {
       return data;
     }
     return JSON.stringify(data);
+  }
+
+  /**
+   * Extract parameter details from JSON Schema for MCP format
+   */
+  public extractParameterDetails(inputSchema: JsonSchema | undefined): Record<string, string> {
+    if (!inputSchema?.properties) {
+      return { query: 'string (required)' };
+    }
+
+    const properties = inputSchema.properties;
+    const required = inputSchema.required || [];
+    
+    const parameters: Record<string, string> = {};
+    
+    Object.entries(properties).forEach(([name, schema]: [string, JsonSchemaProperty]) => {
+      const type = schema.type || 'any';
+      const isRequired = required.includes(name);
+      const defaultValue = schema.default !== undefined ? `, default: ${JSON.stringify(schema.default)}` : '';
+      const status = isRequired ? 'required' : 'optional';
+      
+      // Include enum constraints if present
+      const enumConstraint = schema.enum ? ` [options: ${schema.enum.map(v => `"${v}"`).join('|')}]` : '';
+      
+      // Special handling for common parameter patterns
+      let description = '';
+      if (name === 'options' && type === 'object') {
+        // Check for nested topic enum in options object
+        const topicProperty = schema.properties?.topic;
+        const topicEnum = topicProperty?.enum ? `topic must be one of: ${topicProperty.enum.map(v => `"${v}"`).join('|')}. ` : '';
+        description = ` - Configure search depth, topic, max results, etc. ${topicEnum}`;
+      } else if (name === 'urls' && type === 'array') {
+        description = ' - List of URLs to process (up to 20)';
+      } else if (name === 'query') {
+        description = ' - Search query or question';
+      } else if (name === 'url') {
+        description = ' - URL to crawl';
+      } else if (name === 'include_content') {
+        description = ' - Whether to include full content';
+      }
+      
+      parameters[name] = `${type} (${status}${defaultValue})${enumConstraint}${description}`;
+    });
+
+    return parameters;
+  }
+
+  async executeAgenticTool(tool: AgenticTool, thought: string, userMessage: string): Promise<string> {
+    let toolResponse = await this.executeWithTool(
+      tool.name, 
+      tool.args, 
+      thought
+    );
+
+    // Web pages can have a lot of noise that throw off the magi, so lets clean it
+    if (tool.name == 'tavily-extract'){
+      const cleanExtractPrompt = getCleanExtractPrompt(userMessage, toolResponse);
+      toolResponse = await this.magi.contactWithoutPersonality(cleanExtractPrompt);
+    }
+
+    // Summarize the data we recieved back in human readable form.
+    if (tool.name == "personal-data") {
+      logger.debug(`Raw personal-data retreived: ${toolResponse}`);
+      const summarize = `You have just completed the following task:\n${thought}\nThis resulted in:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language.`;
+      toolResponse = await this.magi.contactWithoutPersonality(summarize);
+    }
+    return toolResponse;
   }
 }

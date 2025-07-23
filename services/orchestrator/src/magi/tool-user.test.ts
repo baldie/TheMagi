@@ -1,5 +1,5 @@
 import { ToolUser } from './tool-user';
-import { MagiName } from './magi';
+import { MagiName, Magi, PERSONAS_CONFIG } from './magi';
 import { mcpClientManager } from '../mcp';
 
 // Mock logger to avoid path issues
@@ -25,10 +25,12 @@ const mockMcpClientManager = mcpClientManager as jest.Mocked<typeof mcpClientMan
 
 describe('ToolUser', () => {
   let toolUser: ToolUser;
+  let mockMagi: Magi;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    toolUser = new ToolUser(MagiName.Balthazar);
+    mockMagi = new Magi(MagiName.Balthazar, PERSONAS_CONFIG[MagiName.Balthazar]);
+    toolUser = new ToolUser(mockMagi);
   });
 
   describe('getAvailableTools', () => {
@@ -63,7 +65,8 @@ describe('ToolUser', () => {
     });
 
     it('should work for different Magi', async () => {
-      const casparToolUser = new ToolUser(MagiName.Caspar);
+      const casparMagi = new Magi(MagiName.Caspar, PERSONAS_CONFIG[MagiName.Caspar]);
+      const casparToolUser = new ToolUser(casparMagi);
       mockMcpClientManager.getMCPToolInfoForMagi.mockResolvedValue([]);
 
       await casparToolUser.getAvailableTools();

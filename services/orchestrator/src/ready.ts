@@ -26,13 +26,13 @@ async function runSealedEnvelopePhase(userMessage: string): Promise<string> {
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(() => balthazar.respondUsingAgenticPlan(userMessage));
+  const balthazarResponse = await retry(() => balthazar.directMessage(userMessage));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(() => melchior.respondUsingAgenticPlan(userMessage));
+  const melchiorResponse = await retry(() => melchior.directMessage(userMessage));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(() => caspar.respondUsingAgenticPlan(userMessage));
+  const casparResponse = await retry(() => caspar.directMessage(userMessage));
 
   const sealedEnvelope = `
     
