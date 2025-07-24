@@ -81,7 +81,7 @@ include_answer: Include LLM-generated answer (boolean, default: false)`
       raw_content_format: 'markdown'
     },
     responseType: 'WebExtractResponse',
-    instructions: `urls (required): URL or array of URLs to extract content from (3 max). Ensure that any step requiring URL extraction explicitly outputs the URLs for the next step.
+    instructions: `urls (required): URL or array of URLs to extract content from (3 max).
 include_images: Include extracted images (boolean, default: false)
 timeout: Request timeout in seconds (number, default: 60)`
   },

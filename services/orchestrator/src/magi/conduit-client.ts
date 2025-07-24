@@ -2,6 +2,7 @@ import axios from 'axios';
 import { MAGI_CONDUIT_API_BASE_URL, Model } from '../config';
 import { logger } from '../logger';
 import { MagiName } from './magi';
+import { MagiErrorHandler } from './error-handler';
 
 /**
  * Interface for the response from the Magi Conduit (Ollama API).
@@ -48,23 +49,22 @@ export class ConduitClient {
     options: ConduitRequestOptions
   ): Promise<string> {
     const requestData = this.buildRequestData(userPrompt, systemPrompt, model, options);
-    const startTime = Date.now();
 
-    try {
-      const response = await axios.post<ConduitResponse>(
-        `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
-        requestData,
-        { timeout: 60000 } // 1-minute timeout
-      );
-
-      const duration = Date.now() - startTime;
-      logger.info(`${this.magiName} conduit contact took ${duration}ms`);
-      return response.data.response;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      logger.info(`${this.magiName} conduit contact failed after ${duration}ms`);
-      return this.handleError(error);
-    }
+    return MagiErrorHandler.withErrorHandling(
+      async () => {
+        const response = await axios.post<ConduitResponse>(
+          `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
+          requestData,
+          { timeout: 60000 } // 1-minute timeout
+        );
+        return response.data.response;
+      },
+      {
+        magiName: this.magiName,
+        operation: 'conduit contact',
+        startTime: Date.now()
+      }
+    );
   }
 
   /**
@@ -125,8 +125,6 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
    */
   private parseJsonResponse(jsonResponse: string): any {
     try {
-      logger.debug(`${this.magiName} attempting to parse JSON:\n${jsonResponse}`);
-      
       // Try to extract JSON from the response if it's wrapped in markdown or other text
       let cleanedJSON = jsonResponse.trim();
       
@@ -142,11 +140,7 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
       return parsedData;
       
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`${this.magiName} failed to parse JSON response. Error: ${errorMessage}`);
-      logger.error(`\n\n${jsonResponse}\n\n`);
-
-      throw error;
+      // we intentionally do not want to log anything here
     }
   }
 

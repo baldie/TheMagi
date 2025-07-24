@@ -102,7 +102,6 @@ describe('ToolUser', () => {
         'web_search',
         { query: 'test query' }
       );
-      expect(result).toContain('Tool used: web_search');
       expect(result).toContain('Search results for test query');
     });
 
@@ -195,7 +194,6 @@ describe('ToolUser', () => {
       );
 
       expect(result).toContain('Simple text content');
-      expect(result).toContain('Tool used: text_tool');
     });
   });
 
@@ -242,7 +240,7 @@ describe('ToolUser', () => {
         'Test empty text'
       );
 
-      expect(result).toContain('Tool used: empty_text_tool');
+      expect(result).toBe('');
     });
   });
 });

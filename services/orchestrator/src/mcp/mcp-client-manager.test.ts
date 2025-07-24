@@ -152,7 +152,7 @@ describe('McpClientManager', () => {
               urls: { type: 'array' }
             }
           },
-          instructions: 'urls (required): URL or array of URLs to extract content from (3 max). Ensure that any step requiring URL extraction explicitly outputs the URLs for the next step.\ninclude_images: Include extracted images (boolean, default: false)\ntimeout: Request timeout in seconds (number, default: 60)'
+          instructions: 'urls (required): URL or array of URLs to extract content from (3 max).\ninclude_images: Include extracted images (boolean, default: false)\ntimeout: Request timeout in seconds (number, default: 60)'
         }
       ]);
     });

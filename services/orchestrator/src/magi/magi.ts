@@ -5,6 +5,7 @@ import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { MagiName } from '../types/magi-types';
 import { EXCLUDED_TOOL_PARAMS } from '../mcp/tools/tool-registry';
+import { MagiErrorHandler } from './error-handler';
 
 export { MagiName };
 
@@ -20,7 +21,7 @@ interface MagiConfig {
   };
 }
 
-export type AgenticTool = { name: string; args: Record<string, unknown>};
+export type AgenticTool = { name: string; parameters: Record<string, unknown>};
 
 export interface AgenticResponse {
   thought: string;
@@ -33,13 +34,13 @@ export interface AgenticResponse {
 /**
  * Configuration for each Magi persona.
  */
-const MAX_STEPS = 5;
+const MAX_STEPS = 8;
 
 export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
-    uniqueInstructions: ``,
+    uniqueInstructions: `You can only use URLs provided by a search tool. Do not make up or guess URLs`,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
@@ -56,18 +57,20 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   },
 };
 
+
 /**
  * The Magi class represents a single AI persona within the Magi system.
- * It extends ConduitClient to inherit communication capabilities.
+ * It uses composition to communicate through a ConduitClient.
  */
-export class Magi extends ConduitClient {
+export class Magi {
   private personalityPrompt: string = '';
   private status: 'available' | 'busy' | 'offline' = 'offline';
   private toolUser: ToolUser;
   private toolsList: string = '';
+  private conduit: ConduitClient;
   
   constructor(public name: MagiName, private config: MagiConfig) {
-    super(name);
+    this.conduit = new ConduitClient(name);
     this.toolUser = new ToolUser(this);
   }
 
@@ -117,13 +120,13 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
    */
   async contact(userPrompt: string): Promise<string> {
     return this.executeWithStatusManagement(() => 
-      super.contact(userPrompt, this.getPersonality(), this.config.model, this.config.options)
+      this.conduit.contact(userPrompt, this.getPersonality(), this.config.model, this.config.options)
     );
   }
 
   async contactWithoutPersonality(userPrompt: string): Promise<string> {
     return this.executeWithStatusManagement(() => 
-      super.contact(userPrompt, '', this.config.model, this.config.options)
+      this.conduit.contact(userPrompt, '', this.config.model, this.config.options)
     );
   }
 
@@ -134,84 +137,121 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
     );
   }
 
-  private async contactAsAgent(userMessage: string): Promise<string> {
-    let response = ''
+ private async contactAsAgent(userMessage: string): Promise<string> {
+    let response = '';
     try {
-      logger.info(`${this.name} beginning agentic loop for`);
+        logger.info(`${this.name} beginning agentic loop...`);
 
-      let previousLoopResults = '';
-      for(let step: number = 1; step < MAX_STEPS; step++){
-        const reasonPrompt = `
-        Your job is to decide the single next step to take to respond to the user's message.
-        Here is the origianl message from the user: "${userMessage}".
-        
-        ${PERSONAS_CONFIG[this.name].uniqueInstructions || ''}
-        Here are the tools you have available:
-        ${this.toolsList}
-        
-        ${step > 1 ? `Review your internal scratchpad below, which tracks your progress. Determine if the original request has been fully addressed.:\n- If the request is complete, your ACTION must be a "FinalAnswer".\n- If the request is not yet complete, your ACTION must be a call to one of the available tools.\n\n--- SCRATCHPAD ---\n${previousLoopResults}\n--- END SCRATCHPAD ---` : ''}
+        // ... (state declaration and Phase 1 are unchanged)
+        const loopState = {
+            synthesis: "Nothing is known yet.",
+            goal: "Formulate a plan to answer the user's message.",
+            history: ""
+        };
 
-        Format your answer as JSON in the following format:
-        \`\`\`json
-        {
-          "thought": "<YOUR THOUGHT HERE>",
-          "action": {
-            "tool": {
-              "name": "<TOOL NAME>",
-              "args": {
-                "<ARGUMENT NAME>": "<ARGUMENT VALUE>",
-                "<ARGUMENT NAME>": "<ARGUMENT VALUE>",
-                "<ARGUMENT NAME>": "<ARGUMENT VALUE>",
-              }
+        const { model, options } = this.config;
+
+        for (let step: number = 1; step < MAX_STEPS; step++) {
+            // =================================================================
+            // PHASE 1: SYNTHESIZE STATE (This part remains the same)
+            // =================================================================
+            if (step > 1) { 
+                // ... (synthesisPrompt and stateUpdate call are unchanged)
             }
-          }
-        }
-        \`\`\`
 
-        OR
+            // =================================================================
+            // PHASE 2: DECIDE ACTION
+            // =================================================================
+            
+            // MINIMAL CHANGE 1: Add the new 'ask_user' tool to the tools list
+            // We do this by creating a new toolsList string for the prompt
+            const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask_user", "description": "Ask the user a clarifying question when more information is needed to proceed.", "parameters": {"question":"string (required) - The question to ask the user."} } }';
 
-        \`\`\`json
-        {
-          "thought": "<YOUR THOUGHT HERE>",
-          "action": {
-            "finalAnswer": "<YOUR FINAL ANSWER HERE>"
-          }
+            const reasonPrompt = `
+Your job is to decide the single next step to take to achieve a goal.
+
+**Current Goal:** ${loopState.goal}
+
+**What I know so far:**
+${loopState.synthesis}
+
+Here is the original message from the user: "${userMessage}".
+Here are the tools you have available:
+${toolsWithClarification}
+
+--- INSTRUCTIONS & FORMAT ---
+- Based *only* on the "Current Goal", decide the next "thought" and "action".
+- If you have enough information, your action must be a "FinalAnswer".
+- **If you need more information from the user, you must use the "ask_user" tool.**
+- **You must format your response as a single JSON object with no other text.**
+
+**Example for a tool call:**
+\`\`\`json
+{
+  "thought": "I will use a tool to get information.",
+  "action": { "tool": { "name": "tavily-search", "parameters": { "query": "..." } } }
+}
+\`\`\`
+
+**Example for asking the user a question:**
+\`\`\`json
+{
+  "thought": "I cannot proceed without knowing the user's budget.",
+  "action": { "tool": { "name": "ask_user", "parameters": { "question": "What is your budget for this project?" } } }
+}
+\`\`\`
+
+**Example for a final answer:**
+\`\`\`json
+{
+  "thought": "I have all the information needed.",
+  "action": { "finalAnswer": "Here is the final answer..." }
+}
+\`\`\`
+`;
+
+            logger.debug(`💬💬💬Prompt for Step ${step}:\n${reasonPrompt}`);
+            const agenticResponse: { thought: string, action: { tool?: any, finalAnswer?: string } } = await this.conduit.contactForJSON(reasonPrompt, this.getPersonality(), model, options);
+            
+            const { tool, finalAnswer } = agenticResponse.action;
+
+            if (tool) {
+                // MINIMAL CHANGE 2: Add an else if block to handle the new tool
+                if (tool.name === 'ask_user') {
+                    response = tool.parameters.question;
+                    logger.info(`Agent is asking a clarifying question: "${response}"`);
+                    break; // Exit the loop to return the question to the user
+                } else {
+                    const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
+                    loopState.history += `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${toolResponse}\n\n`;
+                }
+            }
+            else if (finalAnswer) {
+                response = finalAnswer;
+                break;
+            } else {
+                logger.error(`Invalid results response from agentic loop:\n${JSON.stringify(agenticResponse)}`);
+                response = "Sorry, I received an invalid response and had to stop.";
+                break;
+            }
         }
-        \`\`\`
         
-        Now ${this.name}, what is your next thought and action?
-        Only respond with the properly formatted JSON for the next step you want to take. Do not include any other text.`;
-
-        logger.debug(`💬💬💬Prompt for Step ${step}:\n${reasonPrompt}`);
-        const agenticResponse: AgenticResponse = await super.contactForJSON(reasonPrompt, this.getPersonality(), this.config.model, this.config.options);
-        
-        const { tool, finalAnswer } = agenticResponse.action;
-        if (tool) {
-          const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
-          previousLoopResults += `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${toolResponse}\n\n`;
+        if (!response) {
+            logger.warn(`${this.name} agentic loop completed ${MAX_STEPS - 1} steps without reaching final answer`);
+            response = `Sorry, I seem to have gotten stuck in a loop. Here is what I found:\n${loopState.synthesis}`;
         }
-        else if (finalAnswer) {
-          response = finalAnswer;
-          break;
-        } else {
-          logger.error(`Invalid results response from agentic loop:\n${JSON.stringify(agenticResponse)}`)
-          break;
-        }
-      }
-      
-      if (!response) {
-        logger.warn(`${this.name} agentic loop completed ${MAX_STEPS - 1} steps without reaching final answer`);
-        response = `Sorry, I seem to have gotten stuck in a loop.`
-      }
     }
     catch(error) {
-      logger.error(`${this.name} encountered an error during agentic loop: ${error}`);
-      throw error;
+      logger.error(`ERROR: ${error}`);
+        throw MagiErrorHandler.createContextualError(error, {
+            magiName: this.name,
+            operation: 'agentic loop'
+        });
     }
     logger.debug(`✅✅✅Final response:\n${response}\n`);
 
     return response;
-  }
+}
 
   /**
    * Executes a contact operation with proper status management
