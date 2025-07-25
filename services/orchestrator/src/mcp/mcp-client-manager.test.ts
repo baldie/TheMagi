@@ -18,6 +18,16 @@ jest.mock('../logger', () => ({
   }
 }));
 
+// Mock config to avoid file system issues during testing
+jest.mock('../config', () => ({
+  MAGI_CONDUIT_API_BASE_URL: 'http://localhost:11434',
+  Model: {
+    Qwen: 'qwen2.5:7b',
+    Gemma: 'gemma2:9b',
+    Llama: 'llama3.2:3b'
+  }
+}));
+
 // Mock path module
 jest.mock('path', () => ({
   resolve: jest.fn().mockReturnValue('/mocked/path/tavily'),

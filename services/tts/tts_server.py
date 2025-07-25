@@ -351,8 +351,8 @@ async def synthesize_speech_direct(request: TTSRequest):
 async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = True):
     """Internal synthesis function with optional file saving"""
     request_id = str(uuid.uuid4())[:8]
-    logger.info(f"[{request_id}] New synthesis request received")
-    logger.info(
+    logger.debug(f"[{request_id}] New synthesis request received")
+    logger.debug(
         f"[{request_id}] Request details: text='{request.text[:100]}...', "
         f"voice={request.voice}, exaggeration={request.exaggeration}, "
         f"cfg_weight={request.cfg_weight}"
@@ -369,7 +369,7 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
                 ),
             )
 
-        logger.info(f"[{request_id}] Model available, starting synthesis...")
+        logger.debug(f"[{request_id}] Model available, starting synthesis...")
 
         # Generate unique audio ID for tracking
         audio_id = str(uuid.uuid4())
@@ -393,16 +393,16 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
             and os.path.exists(glados_voice_path)
         ):
             generation_kwargs["audio_prompt_path"] = glados_voice_path
-            logger.info(f"[{request_id}] Using cached GLaDOS voice for cloning")
+            logger.debug(f"[{request_id}] Using cached GLaDOS voice for cloning")
         elif request.audio_prompt_path and os.path.exists(request.audio_prompt_path):
             generation_kwargs["audio_prompt_path"] = request.audio_prompt_path
-            logger.info(
+            logger.debug(
                 f"[{request_id}] Using custom voice cloning with: "
                 f"{request.audio_prompt_path}"
             )
 
         # Generate speech using Chatterbox TTS
-        logger.info(
+        logger.debug(
             f"[{request_id}] Calling tts_model.generate() with parameters: "
             f"{generation_kwargs}"
         )
@@ -411,7 +411,7 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
         try:
             wav = tts_model.generate(request.text, **generation_kwargs)
             generation_time = (datetime.now() - start_time).total_seconds()
-            logger.info(
+            logger.debug(
                 f"[{request_id}] Generation completed in {generation_time:.2f} seconds"
             )
         except Exception as gen_error:
@@ -427,11 +427,11 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
 
         if save_file:
             # Save the generated audio to file (legacy behavior)
-            logger.info(f"[{request_id}] Saving audio to file...")
+            logger.debug(f"[{request_id}] Saving audio to file...")
             try:
                 torchaudio.save(audio_path, wav.cpu(), tts_model.sr)
                 file_size = os.path.getsize(audio_path)
-                logger.info(
+                logger.debug(
                     f"[{request_id}] Audio saved successfully, "
                     f"file size: {file_size} bytes"
                 )
@@ -449,7 +449,7 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
                 )
         else:
             # Return audio data directly (optimized behavior)
-            logger.info(f"[{request_id}] Preparing audio data for direct return...")
+            logger.debug(f"[{request_id}] Preparing audio data for direct return...")
             try:
                 # Convert audio tensor to bytes in memory
                 audio_buffer = io.BytesIO()
@@ -459,7 +459,7 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
 
                 # Encode as base64 for JSON response
                 audio_data_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-                logger.info(
+                logger.debug(
                     f"[{request_id}] Audio data prepared, size: {file_size} bytes"
                 )
             except Exception as data_error:
@@ -469,7 +469,7 @@ async def _synthesize_speech_internal(request: TTSRequest, save_file: bool = Tru
                 raise
 
         duration = wav.shape[-1] / tts_model.sr
-        logger.info(
+        logger.debug(
             f"[{request_id}] Synthesis completed successfully - "
             f"Duration: {duration:.2f}s, Sample rate: {tts_model.sr}Hz"
         )

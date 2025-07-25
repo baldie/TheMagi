@@ -3,7 +3,7 @@ import { logger } from './logger';
 import { loadMagi } from './loading';
 import { routeMessage as routeMessage } from './ready';
 import { createWebSocketServer } from './websocket';
-import { runDiagnostics } from './diagnostics';
+import { runDiagnostics, runBackgroundMcpVerification } from './diagnostics';
 import { balthazar, caspar, melchior } from './magi/magi';
 import { mcpClientManager } from './mcp';
 import express from 'express';
@@ -46,11 +46,13 @@ async function main() {
   loadEnvironmentVariables();
   logger.info('Magi Orchestrator is starting up...');
 
-  // Start the services
+  // Start the services in parallel
   try {
-    await serviceManager.startTTSService();
-    await serviceManager.startConduitService();
-    await serviceManager.startUIService();
+    await Promise.all([
+      serviceManager.startTTSService(),
+      serviceManager.startConduitService(),
+      serviceManager.startUIService()
+    ]);
     startHttpOrchestratorService();
   } catch (error) {
     logger.error('A critical error occurred while starting the services.', error);
@@ -59,11 +61,18 @@ async function main() {
 
   // Perform startup initialization
   try {
-    await runDiagnostics(); // This now includes MCP server verification and initialization
+    await runDiagnostics();
     await loadMagi();
     
     isInitialized = true; 
-    logger.info('http://localhost:4200/\nThe Magi are ready. 🟢');
+    
+    // Run background MCP verification after system is ready
+    runBackgroundMcpVerification(() => {
+      // This callback runs when MCP verification is complete
+      logger.info('http://localhost:4200/\nThe Magi are ready. 🟢');
+    }).catch(error => {
+      logger.warn('Background MCP verification failed:', error);
+    });
   } catch (error) {
     logger.error('A critical error occurred during system initialization. The application will now exit.', error);
     gracefulShutdown('unhandledRejection');

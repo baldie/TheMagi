@@ -1,19 +1,19 @@
 import path from 'path';
-import { Model } from '../config';
+import { Model, ModelType } from '../config';
 import { logger } from '../logger';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { MagiName } from '../types/magi-types';
 import { EXCLUDED_TOOL_PARAMS } from '../mcp/tools/tool-registry';
 import { MagiErrorHandler } from './error-handler';
-
+import { ShortTermMemory } from './short-term-memory';
 export { MagiName };
 
 /**
  * Interface for the configuration of a single Magi persona.
  */
 interface MagiConfig {
-  model: Model;
+  model: ModelType;
   personalitySource: string;
   uniqueInstructions: string;
   options: {
@@ -68,10 +68,12 @@ export class Magi {
   private toolUser: ToolUser;
   private toolsList: string = '';
   private conduit: ConduitClient;
+  private shortTermMemory: ShortTermMemory;
   
   constructor(public name: MagiName, private config: MagiConfig) {
     this.conduit = new ConduitClient(name);
     this.toolUser = new ToolUser(this);
+    this.shortTermMemory = new ShortTermMemory(this);
   }
 
   /**
@@ -119,15 +121,32 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
    * @returns The AI's response text.
    */
   async contact(userPrompt: string): Promise<string> {
-    return this.executeWithStatusManagement(() => 
-      this.conduit.contact(userPrompt, this.getPersonality(), this.config.model, this.config.options)
+    const workingMemory = await this.shortTermMemory.summarize();
+    const promptWithContext = workingMemory + '\n' + userPrompt;
+    const response = await this.executeWithStatusManagement(() => 
+      this.conduit.contact(promptWithContext, this.getPersonality(), this.config.model, this.config.options)
     );
+    
+    // Store the interaction in short-term memory
+    try {
+      this.shortTermMemory.remember('user', 'User prompt', userPrompt);
+      this.shortTermMemory.remember(this.name, 'Response', response);
+    } catch (memoryError) {
+      logger.warn(`Failed to store memory for ${this.name}: ${memoryError}`);
+      // Continue execution - memory failure shouldn't break the response
+    }
+    
+    return response;
   }
 
   async contactWithoutPersonality(userPrompt: string): Promise<string> {
     return this.executeWithStatusManagement(() => 
       this.conduit.contact(userPrompt, '', this.config.model, this.config.options)
     );
+  }
+
+  public forget(): void {
+    this.shortTermMemory.forget();
   }
 
   // TODO: maybe we don't need this indirection of "direct User's Message"
@@ -142,7 +161,9 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
     try {
         logger.info(`${this.name} beginning agentic loop...`);
 
-        // ... (state declaration and Phase 1 are unchanged)
+        // Get working memory context for this interaction
+        const workingMemory = await this.shortTermMemory.summarize();
+
         const loopState = {
             synthesis: "Nothing is known yet.",
             goal: "Formulate a plan to answer the user's message.",
@@ -153,37 +174,79 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
 
         for (let step: number = 1; step < MAX_STEPS; step++) {
             // =================================================================
-            // PHASE 1: SYNTHESIZE STATE (This part remains the same)
+            // PHASE 1: SYNTHESIZE STATE (This part is now enhanced)
             // =================================================================
-            if (step > 1) { 
-                // ... (synthesisPrompt and stateUpdate call are unchanged)
+            if (step > 1) {
+                // This prompt is enhanced with Goal Re-evaluation logic.
+                const synthesisPrompt = `
+You are a state manager AI. Your job is to synthesize information and define the next goal for yourself.
+
+--- PREVIOUS STATE ---
+**What you know so far:**
+${loopState.synthesis}
+
+**Your previous goal was:**
+${loopState.goal}
+
+--- LATEST OBSERVATION ---
+${loopState.history.split('\n\n').slice(-2).join('\n\n')}
+
+**Latest User Message:** "${userMessage}"
+
+--- GOAL RE-EVALUATION INSTRUCTIONS ---
+1. **Update your synthesis** based on the latest observation
+2. **Evaluate your current goal:**
+   - Is it still relevant to the user?
+   - Have you learned something that changes what you should focus on?
+   - Are you getting stuck in a loop or pursuing an unproductive path?
+3. **Define your next goal:**
+   - If current goal is still valid: Continue with the logical next step
+   - If current goal is complete: Move to the next phase or provide final answer
+   - If current goal is no longer relevant: Pivot to what the user actually needs
+
+--- YOUR TASK & FORMAT ---
+- Review all the information to update the "synthesis" of what you know.
+- Based on your re-evaluation, define the single next "goal".
+- **You must format your response as a single JSON object with no other text.**
+
+**Example format:**
+\`\`\`json
+{
+  "synthesis": "Updated summary of what you now know...",
+  "goal": "The single next objective to pursue..."
+}
+\`\`\``;
+                const stateUpdate: { synthesis: string, goal: string } = await this.conduit.contactForJSON(synthesisPrompt, this.getPersonality(), model, options);
+                loopState.synthesis = stateUpdate.synthesis;
+                loopState.goal = stateUpdate.goal;
             }
 
             // =================================================================
-            // PHASE 2: DECIDE ACTION
+            // PHASE 2: DECIDE ACTION (This part remains the same)
             // =================================================================
-            
-            // MINIMAL CHANGE 1: Add the new 'ask_user' tool to the tools list
-            // We do this by creating a new toolsList string for the prompt
             const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask_user", "description": "Ask the user a clarifying question when more information is needed to proceed.", "parameters": {"question":"string (required) - The question to ask the user."} } }';
 
             const reasonPrompt = `
-Your job is to decide the single next step to take to achieve a goal.
+Your job is to decide the single next step to achieve your current goal.
+
+**Context:**
+${workingMemory}
 
 **Current Goal:** ${loopState.goal}
 
-**What I know so far:**
-${loopState.synthesis}
+**What you know:** ${loopState.synthesis}
 
-Here is the original message from the user: "${userMessage}".
-Here are the tools you have available:
+**User's latest message:** "${userMessage}"
+
+**Available tools:**
 ${toolsWithClarification}
 
---- INSTRUCTIONS & FORMAT ---
-- Based *only* on the "Current Goal", decide the next "thought" and "action".
-- If you have enough information, your action must be a "FinalAnswer".
-- **If you need more information from the user, you must use the "ask_user" tool.**
-- **You must format your response as a single JSON object with no other text.**
+--- ACTION PRIORITIES ---
+1. **Final Answer**: If you have sufficient information to fully address the goal
+2. **Use Tools**: If you need additional information or capabilities  
+3. **Ask User**: If you need clarification that only the user can provide
+
+**Format your response as JSON only:**
 
 **Example for a tool call:**
 \`\`\`json
@@ -216,7 +279,6 @@ ${toolsWithClarification}
             const { tool, finalAnswer } = agenticResponse.action;
 
             if (tool) {
-                // MINIMAL CHANGE 2: Add an else if block to handle the new tool
                 if (tool.name === 'ask_user') {
                     response = tool.parameters.question;
                     logger.info(`Agent is asking a clarifying question: "${response}"`);
@@ -236,13 +298,21 @@ ${toolsWithClarification}
             }
         }
         
-        if (!response) {
+        // Store the interaction in short-term memory
+        if (response) {
+            try {
+                this.shortTermMemory.remember('user', 'User message', userMessage);
+                this.shortTermMemory.remember(this.name, loopState.synthesis, response);
+            } catch (memoryError) {
+                logger.warn(`Failed to store agentic memory for ${this.name}: ${memoryError}`);
+            }
+        } else {
             logger.warn(`${this.name} agentic loop completed ${MAX_STEPS - 1} steps without reaching final answer`);
             response = `Sorry, I seem to have gotten stuck in a loop. Here is what I found:\n${loopState.synthesis}`;
         }
     }
     catch(error) {
-      logger.error(`ERROR: ${error}`);
+        logger.error(`ERROR: ${error}`);
         throw MagiErrorHandler.createContextualError(error, {
             magiName: this.name,
             operation: 'agentic loop'

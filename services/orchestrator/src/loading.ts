@@ -14,6 +14,11 @@ async function checkPersonaReadiness(magi: Magi): Promise<void> {
         throw new Error(`Received unexpected response from ${magi.name}: ${response}`);
       }
       logger.info(`... ${magi.name} is loaded and ready.`);
+      
+      // Clear any memories from the readiness check
+      magi.forget();
+      logger.debug(`... ${magi.name}'s memory has been cleared after readiness check.`);
+      
       return; // Success, exit the function
     } catch (error) {
       logger.warn(`Readiness check failed for ${magi.name} on attempt ${attempt}.`, error);
@@ -31,8 +36,8 @@ async function checkPersonaReadiness(magi: Magi): Promise<void> {
 export async function loadMagi(): Promise<void> {
   logger.info('--- Loading Magi Personas ---');
 
-  // Init all Magi in parallel
-  const loadPromises = [caspar, melchior, balthazar].map(async (magi) => {
+  // Step 1: Initialize all Magi in parallel
+  const initPromises = [caspar, melchior, balthazar].map(async (magi) => {
     logger.info(`Loading ${magi.name}...`);
     
     // 1. Load prompt from file using the absolute path from PERSONAS_CONFIG
@@ -56,12 +61,17 @@ export async function loadMagi(): Promise<void> {
         logger.info('... [V0] Verifying internet access (by prompt design).');
         break;
     }
-
-    // 3. Check readiness
-    await checkPersonaReadiness(magi);
   });
 
-  await Promise.all(loadPromises);
+  await Promise.all(initPromises);
+  logger.info('--- All Magi Personas Initialized ---');
 
+  // Step 2: Check readiness of all Magi in parallel
+  logger.info('--- Checking Magi Readiness ---');
+  const readinessPromises = [caspar, melchior, balthazar].map(magi => 
+    checkPersonaReadiness(magi)
+  );
+
+  await Promise.all(readinessPromises);
   logger.info('--- All Magi Personas Loaded Successfully ---');
 } 

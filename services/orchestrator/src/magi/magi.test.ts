@@ -97,6 +97,11 @@ describe('Magi contactAsAgent', () => {
       }
     };
 
+    const synthesisResponse = {
+      synthesis: "I found some search results about testing",
+      goal: "Provide a comprehensive answer based on the search results"
+    };
+
     const finalResponse = {
       thought: "Based on the search results, I can now answer",
       action: {
@@ -106,6 +111,7 @@ describe('Magi contactAsAgent', () => {
 
     mockContactForJSON
       .mockResolvedValueOnce(toolResponse)
+      .mockResolvedValueOnce(synthesisResponse)
       .mockResolvedValueOnce(finalResponse);
     
     mockExecuteAgenticTool.mockResolvedValue("Search results: test data");
@@ -113,7 +119,7 @@ describe('Magi contactAsAgent', () => {
     const result = await magi.directMessage("Search for information about testing");
 
     expect(result).toBe("Here is my final answer based on the search");
-    expect(mockContactForJSON).toHaveBeenCalledTimes(2);
+    expect(mockContactForJSON).toHaveBeenCalledTimes(3);
     expect(mockExecuteAgenticTool).toHaveBeenCalledWith(
       { name: "web_search", args: { query: "test query" } },
       "I need to search for information",
@@ -137,10 +143,22 @@ describe('Magi contactAsAgent', () => {
       }
     ];
 
+    // Need to add synthesis responses between decision steps
+    const synthesisResponse1 = {
+      synthesis: "I have search results",
+      goal: "Now analyze the data"
+    };
+    const synthesisResponse2 = {
+      synthesis: "I have search results and analysis",
+      goal: "Provide final comprehensive answer"
+    };
+
     mockContactForJSON
-      .mockResolvedValueOnce(responses[0])
-      .mockResolvedValueOnce(responses[1])
-      .mockResolvedValueOnce(responses[2]);
+      .mockResolvedValueOnce(responses[0])  // Step 1: Decision (search)
+      .mockResolvedValueOnce(synthesisResponse1)  // Step 2: Synthesis
+      .mockResolvedValueOnce(responses[1])  // Step 2: Decision (analyze)
+      .mockResolvedValueOnce(synthesisResponse2)  // Step 3: Synthesis
+      .mockResolvedValueOnce(responses[2]);  // Step 3: Decision (final answer)
 
     mockExecuteAgenticTool
       .mockResolvedValueOnce("Search results")
@@ -149,7 +167,7 @@ describe('Magi contactAsAgent', () => {
     const result = await magi.directMessage("Complex request requiring multiple steps");
 
     expect(result).toBe("Final comprehensive answer");
-    expect(mockContactForJSON).toHaveBeenCalledTimes(3);
+    expect(mockContactForJSON).toHaveBeenCalledTimes(5);
     expect(mockExecuteAgenticTool).toHaveBeenCalledTimes(2);
   });
 
@@ -161,13 +179,33 @@ describe('Magi contactAsAgent', () => {
       }
     };
 
-    mockContactForJSON.mockResolvedValue(toolResponse);
+    const synthesisResponse = {
+      synthesis: "I have executed some tools but not found a complete answer",
+      goal: "Keep working on the task"
+    };
+
+    // Mock all 13 calls explicitly: 7 decisions + 6 synthesis calls
+    mockContactForJSON
+      .mockResolvedValueOnce(toolResponse)     // Step 1: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 2: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 2: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 3: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 3: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 4: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 4: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 5: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 5: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 6: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 6: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 7: Synthesis
+      .mockResolvedValueOnce(toolResponse);    // Step 7: Decision
+    
     mockExecuteAgenticTool.mockResolvedValue("Tool executed");
 
     const result = await magi.directMessage("Never ending task");
 
-    expect(result).toBe("Sorry, I seem to have gotten stuck in a loop. Here is what I found:\nNothing is known yet.");
-    expect(mockContactForJSON).toHaveBeenCalledTimes(7); // MAX_STEPS - 1
+    expect(result).toBe("Sorry, I seem to have gotten stuck in a loop. Here is what I found:\nI have executed some tools but not found a complete answer");
+    expect(mockContactForJSON).toHaveBeenCalledTimes(13); // (MAX_STEPS - 1) * 2 - 1 = 13 (7 decisions + 6 synthesis)
     expect(mockExecuteAgenticTool).toHaveBeenCalledTimes(7);
   });
 
@@ -206,22 +244,27 @@ describe('Magi contactAsAgent', () => {
         action: { tool: { name: "search", args: { query: "test" } } }
       },
       {
+        synthesis: "I have completed a search and got results",
+        goal: "Provide the final answer based on search results"
+      },
+      {
         thought: "Now I can answer",
         action: { finalAnswer: "Answer based on search" }
       }
     ];
 
     mockContactForJSON
-      .mockResolvedValueOnce(responses[0])
-      .mockResolvedValueOnce(responses[1]);
+      .mockResolvedValueOnce(responses[0])  // Step 1: Decision
+      .mockResolvedValueOnce(responses[1])  // Step 2: Synthesis  
+      .mockResolvedValueOnce(responses[2]); // Step 2: Decision
 
     mockExecuteAgenticTool.mockResolvedValue("Search completed successfully");
 
     await magi.directMessage("Search and answer");
 
-    // Check that the second call includes the synthesis (which is currently static)
-    const secondCallArgs = mockContactForJSON.mock.calls[1][0];
-    expect(secondCallArgs).toContain("**What I know so far:**");
-    expect(secondCallArgs).toContain("Nothing is known yet.");
+    // Check that the synthesis call includes the previous state
+    const synthesisCallArgs = mockContactForJSON.mock.calls[1][0];
+    expect(synthesisCallArgs).toContain("**What you know so far:**");
+    expect(synthesisCallArgs).toContain("Nothing is known yet.");
   });
 });

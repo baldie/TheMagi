@@ -1,0 +1,27 @@
+{
+  "_comment": "This is an example local override for models.json",
+  "_instructions": [
+    "Copy this file to 'models.local.json' to override the default model configuration",
+    "models.local.json will be ignored by git and won't be committed",
+    "You can modify any model assignment or add custom models here"
+  ],
+  "models": [
+    {
+      "name": "llama3.2:3b-instruct-q8_0",
+      "magi": "Balthazar"
+    },
+    {
+      "name": "gemma3:1b-it-fp16",
+      "magi": "Melchior"
+    },
+    {
+      "name": "qwen2.5vl:7b",
+      "magi": "Caspar"
+    }
+  ],
+  "meta": {
+    "version": "1.0.0",
+    "updated": "2025-01-25",
+    "description": "Local override configuration for AI models used by The Magi system"
+  }
+}

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { MAGI_CONDUIT_API_BASE_URL, Model } from '../config';
+import { MAGI_CONDUIT_API_BASE_URL, ModelType } from '../config';
 import { logger } from '../logger';
 import { MagiName } from './magi';
 import { MagiErrorHandler } from './error-handler';
@@ -45,7 +45,7 @@ export class ConduitClient {
   async contact(
     userPrompt: string,
     systemPrompt: string,
-    model: Model,
+    model: ModelType,
     options: ConduitRequestOptions
   ): Promise<string> {
     const requestData = this.buildRequestData(userPrompt, systemPrompt, model, options);
@@ -78,7 +78,7 @@ export class ConduitClient {
   async contactForJSON(
     userPrompt: string,
     systemPrompt: string,
-    model: Model,
+    model: ModelType,
     options: ConduitRequestOptions
   ): Promise<any> {
     // First attempt: Get response from LLM
@@ -150,7 +150,7 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
   private buildRequestData(
     userPrompt: string,
     systemPrompt: string,
-    model: Model,
+    model: ModelType,
     options: ConduitRequestOptions
   ) {
     return {

@@ -383,36 +383,67 @@ else
     echo "    [OK] Ollama service already running."
 fi
 
-# Download required AI models
+# Download required AI models from models.json
 echo "  - Downloading required AI models (this may take several minutes)..."
 echo "    Note: Models will be stored in $MODELS_DIR"
 
-echo "    Downloading Qwen2.5 Vision Language model..."
-timeout 600 $OLLAMA_BIN pull qwen2.5vl:7b
-if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Qwen2.5 Vision Language model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull qwen2.5vl:7b"
+# Parse models.json using Node.js (with local override support)
+MODELS_CONFIG_FILE="models.json"
+if [ -f "models.local.json" ]; then
+    echo "  - Using local model configuration override: models.local.json"
+    MODELS_CONFIG_FILE="models.local.json"
+elif [ -f "models.json" ]; then
+    echo "  - Using default model configuration: models.json"
+else
+    echo "[ERROR] Neither models.json nor models.local.json found! Cannot determine which models to download."
+    exit 1
 fi
 
-echo "    Downloading Gemma3 12B model..."
-timeout 600 $OLLAMA_BIN pull gemma3:12b
-if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Gemma3 model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull gemma3:12b"
-fi
-
-echo "    Downloading Llama3.2 3B Instruct model..."
-timeout 600 $OLLAMA_BIN pull llama3.2:3b-instruct-q8_0
-if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download Llama3.2 Instruct model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull llama3.2:3b-instruct-q8_0"
-fi
-
-echo "    Downloading nomic-embed-text model for embeddings..."
-timeout 600 $OLLAMA_BIN pull nomic-embed-text:latest
-if [ $? -ne 0 ]; then
-    echo "[WARNING] Failed to download nomic-embed-text model. You may need to download it manually."
-    echo "          Run: $OLLAMA_BIN pull nomic-embed-text:latest"
+if [ -f "$MODELS_CONFIG_FILE" ]; then
+    # Get main models
+    MAIN_MODELS=$(node -e "
+        const config = require('./' + process.argv[1]);
+        config.models.forEach(model => {
+            console.log(model.name + '|' + model.magi);
+        });
+    " "$MODELS_CONFIG_FILE")
+    
+    # Get additional models  
+    ADDITIONAL_MODELS=$(node -e "
+        const config = require('./' + process.argv[1]);
+        if (config.additional_models) {
+            config.additional_models.forEach(model => {
+                console.log(model.name);
+            });
+        }
+    " "$MODELS_CONFIG_FILE")
+    
+    # Download main models
+    echo "$MAIN_MODELS" | while IFS='|' read -r model_name magi; do
+        if [ -n "$model_name" ]; then
+            echo "    Downloading $model_name ($magi)..."
+            timeout 600 $OLLAMA_BIN pull "$model_name"
+            if [ $? -ne 0 ]; then
+                echo "[WARNING] Failed to download $model_name. You may need to download it manually."
+                echo "          Run: $OLLAMA_BIN pull $model_name"
+            fi
+        fi
+    done
+    
+    # Download additional models
+    echo "$ADDITIONAL_MODELS" | while read -r model_name; do
+        if [ -n "$model_name" ]; then
+            echo "    Downloading $model_name..."
+            timeout 600 $OLLAMA_BIN pull "$model_name"
+            if [ $? -ne 0 ]; then
+                echo "[WARNING] Failed to download $model_name. You may need to download it manually."
+                echo "          Run: $OLLAMA_BIN pull $model_name"
+            fi
+        fi
+    done
+else
+    echo "[ERROR] models.json not found! Cannot determine which models to download."
+    exit 1
 fi
 
 echo "  - Verifying model installations..."
@@ -421,7 +452,19 @@ echo "$AVAILABLE_MODELS"
 
 # Clean up unwanted models - keep only the required ones
 echo "  - Cleaning up unwanted models (keeping only required models)..."
-REQUIRED_MODELS=("gemma3:12b" "qwen2.5vl:7b" "nomic-embed-text:latest" "llama3.2:3b-instruct-q8_0")
+
+# Get required models from JSON
+REQUIRED_MODELS_LIST=$(node -e "
+    const config = require('./' + process.argv[1]);
+    const allModels = [...config.models.map(m => m.name)];
+    if (config.additional_models) {
+        allModels.push(...config.additional_models.map(m => m.name));
+    }
+    console.log(allModels.join(' '));
+" "$MODELS_CONFIG_FILE")
+
+# Convert to array
+IFS=' ' read -ra REQUIRED_MODELS <<< "$REQUIRED_MODELS_LIST"
 
 # Get list of installed models (skip header line)
 INSTALLED_MODELS=$($OLLAMA_BIN list 2>/dev/null | tail -n +2 | awk '{print $1}')
@@ -598,29 +641,26 @@ fi
 # Test if models are available
 echo "  - Verifying AI models are downloaded..."
 MODELS_OUTPUT=$($OLLAMA_BIN list 2>/dev/null)
-if echo "$MODELS_OUTPUT" | grep -q "qwen2.5vl:7b"; then
-    echo "    [OK] Qwen2.5 Vision Language model available."
-else
-    echo "[WARNING] Qwen2.5 Vision Language model not found. Download with: $OLLAMA_BIN pull qwen2.5vl:7b"
-fi
 
-if echo "$MODELS_OUTPUT" | grep -q "gemma3:12b"; then
-    echo "    [OK] Gemma3 12B model available."
-else
-    echo "[WARNING] Gemma3 12B model not found. Download with: $OLLAMA_BIN pull gemma3:12b"
-fi
-
-if echo "$MODELS_OUTPUT" | grep -q "llama3.2:3b-instruct-q8_0"; then
-    echo "    [OK] Llama3.2 3B Instruct model available."
-else
-    echo "[WARNING] Llama3.2 3B Instruct model not found. Download with: $OLLAMA_BIN pull llama3.2:3b-instruct-q8_0"
-fi
-
-if echo "$MODELS_OUTPUT" | grep -q "nomic-embed-text:latest"; then
-    echo "    [OK] nomic-embed-text model available."
-else
-    echo "[WARNING] nomic-embed-text model not found. Download with: $OLLAMA_BIN pull nomic-embed-text:latest"
-fi
+# Check each required model from JSON
+node -e "
+    const config = require('./' + process.argv[1]);
+    const allModels = [...config.models, ...(config.additional_models || [])];
+    allModels.forEach(model => {
+        const modelName = model.name;
+        const magiInfo = model.magi ? model.magi : 'additional';
+        console.log(modelName + '|' + magiInfo);
+    });
+" "$MODELS_CONFIG_FILE" | while IFS='|' read -r model_name magi_info; do
+    if [ -n "$model_name" ]; then
+        if echo "$MODELS_OUTPUT" | grep -q "$model_name"; then
+            echo "    [OK] $model_name available ($magi_info)"
+        else
+            echo "[WARNING] $model_name not found ($magi_info)"
+            echo "          Download with: $OLLAMA_BIN pull $model_name"
+        fi
+    fi
+done
 
 # Test TypeScript compilation
 cd "$SCRIPT_DIR"

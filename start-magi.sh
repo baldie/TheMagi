@@ -70,15 +70,34 @@ echo "[Magi System] Verifying AI models..."
 MODELS_OUTPUT=$(OLLAMA_MODELS="$MODELS_DIR" $OLLAMA_CMD list 2>/dev/null)
 MISSING_MODELS=""
 
-if ! echo "$MODELS_OUTPUT" | grep -q "qwen2.5vl:7b"; then
-    MISSING_MODELS="$MISSING_MODELS qwen2.5vl:7b"
+# Check models from models.json (with local override support)
+MODELS_CONFIG_FILE="models.json"
+if [ -f "models.local.json" ]; then
+    echo "[Magi System] Using local model configuration override: models.local.json"
+    MODELS_CONFIG_FILE="models.local.json"
+elif [ -f "models.json" ]; then
+    MODELS_CONFIG_FILE="models.json"
+else
+    echo "[ERROR] Neither models.json nor models.local.json found! Cannot verify AI models."
+    exit 1
 fi
-if ! echo "$MODELS_OUTPUT" | grep -q "gemma3:12b"; then
-    MISSING_MODELS="$MISSING_MODELS gemma3:12b"
-fi
-if ! echo "$MODELS_OUTPUT" | grep -q "llama3.2:3b-instruct-q8_0"; then
-    MISSING_MODELS="$MISSING_MODELS llama3.2:3b-instruct-q8_0"
-fi
+
+# Get list of required models
+REQUIRED_MODEL_NAMES=$(node -e "
+    const config = require('./' + process.argv[1]);
+    const allModels = [...config.models.map(m => m.name)];
+    if (config.additional_models) {
+        allModels.push(...config.additional_models.map(m => m.name));
+    }
+    console.log(allModels.join(' '));
+" "$MODELS_CONFIG_FILE")
+
+# Check each model
+for model in $REQUIRED_MODEL_NAMES; do
+    if ! echo "$MODELS_OUTPUT" | grep -q "$model"; then
+        MISSING_MODELS="$MISSING_MODELS $model"
+    fi
+done
 
 if [ -n "$MISSING_MODELS" ]; then
     echo "WARNING: Missing AI models:$MISSING_MODELS"

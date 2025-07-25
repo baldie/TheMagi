@@ -22,9 +22,13 @@
 
 A personal, omnipresent Artificial Intelligence system, built to serve a human as a board of directors for decisions large and small.
 
-* Caspar - qwen2.5vl:7b
-* Melchior - gemma3:12b
-* Balthazar - llama3.2:3b-instruct-q8_0
+The Magi personas and their associated AI models are configured in [`models.json`](models.json):
+
+* **Caspar** (Primary Voice) - Qwen Vision-Language model for comprehensive responses
+* **Melchior** (Creative/Intuitive) - Gemma model for nuanced understanding  
+* **Balthazar** (Logical/Analytical) - Llama model optimized for analytical reasoning
+
+*Note: All model assignments and versions are centrally managed in `models.json` - this is the single source of truth for all AI model configurations across the system.*
 
 ## Setup
 

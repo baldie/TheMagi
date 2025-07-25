@@ -1,0 +1,26 @@
+{
+  "models": [
+    {
+      "name": "llama3.2:3b-instruct-q8_0",
+      "magi": "Balthazar"
+    },
+    {
+      "name": "gemma3:12b", 
+      "magi": "Melchior"
+    },
+    {
+      "name": "qwen2.5vl:7b",
+      "magi": "Caspar"
+    }
+  ],
+  "additional_models": [
+    {
+      "name": "nomic-embed-text:latest"
+    }
+  ],
+  "meta": {
+    "version": "1.0.0",
+    "updated": "2025-01-25",
+    "description": "Central configuration for all AI models used by The Magi system"
+  }
+}

@@ -108,4 +108,7 @@ launcher/logs/
 services/orchestrator/.magi-data/
 
 # Local Ollama installation with GPU support
-services/conduit/CUDA/ 
+services/conduit/CUDA/
+
+# Local model configuration overrides
+models.local.json 

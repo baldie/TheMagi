@@ -82,7 +82,8 @@ async function ensureServiceReady(
  * @param modelName The name of the model to pull.
  */
 async function pullModel(modelName: string): Promise<void> {
-  logger.info(`Model "${modelName}" not found. Attempting to download via command line. This may take several minutes...`);
+  logger.info(`Model "${modelName}" not found. Downloading model...`);
+  logger.info(`⏳ This may take several minutes depending on model size and network speed.`);
   
   // We execute the command within WSL
   const command = `wsl ollama pull ${modelName}`;
@@ -90,19 +91,37 @@ async function pullModel(modelName: string): Promise<void> {
 
   return new Promise<void>((resolve, reject) => {
     const child = exec(command);
+    let lastProgressLine = '';
 
-    // Log stdout to our info logger
+    // Log stdout to our info logger with improved progress handling
     child.stdout?.on('data', (data) => {
-      // Ollama's CLI output includes carriage returns for progress bars, so we clean it up.
-      const sanitizedData = data.toString().trim().replace(/(\r\n|\n|\r)/gm, "");
-      if (sanitizedData) {
-        logger.info(`[Ollama CLI] ${sanitizedData}`);
+      const lines = data.toString().split('\n');
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim().replace(/\r/g, '');
+        if (trimmedLine) {
+          // Check if this is a progress line (contains percentage or MB/GB)
+          if (trimmedLine.includes('%') || trimmedLine.includes('MB') || trimmedLine.includes('GB')) {
+            // Only log progress updates every few lines to avoid spam
+            if (trimmedLine !== lastProgressLine) {
+              logger.info(`[${modelName}] ${trimmedLine}`);
+              lastProgressLine = trimmedLine;
+            }
+          } else {
+            logger.info(`[${modelName}] ${trimmedLine}`);
+          }
+        }
       }
     });
 
     // Log stderr to our error logger
     child.stderr?.on('data', (data) => {
-      logger.error(`[Ollama CLI] ${data.toString().trim()}`);
+      const errorLines = data.toString().trim().split('\n');
+      for (const line of errorLines) {
+        if (line.trim()) {
+          logger.error(`[${modelName} Error] ${line.trim()}`);
+        }
+      }
     });
 
     child.on('error', (error) => {
@@ -112,10 +131,10 @@ async function pullModel(modelName: string): Promise<void> {
 
     child.on('close', (code) => {
       if (code === 0) {
-        logger.info(`Successfully downloaded model "${modelName}".`);
+        logger.info(`✅ Successfully downloaded model "${modelName}".`);
         resolve();
       } else {
-        const errorMessage = `Model download for "${modelName}" failed. The process exited with code ${code}.`;
+        const errorMessage = `❌ Model download for "${modelName}" failed. The process exited with code ${code}.`;
         logger.error(errorMessage);
         reject(new Error(errorMessage));
       }
@@ -153,15 +172,23 @@ async function ensureMagiConduitReady(): Promise<void> {
     logger.debug('Models reported by Magi Conduit API:', response.data.models.map((m: {name: string}) => m.name));
     logger.debug('Models after parsing (tags removed):', availableModels);
 
-    for (const model of REQUIRED_MODELS) {
-      if (!availableModels.includes(model)) {
-        // If model is not found, pull it.
+    const missingModels = REQUIRED_MODELS.filter((model: string) => !availableModels.includes(model));
+    const foundModels = REQUIRED_MODELS.filter((model: string) => availableModels.includes(model));
+
+    // Log found models
+    for (const model of foundModels) {
+      logger.info(`✅ Model available: ${model}`);
+    }
+
+    // Download missing models
+    if (missingModels.length > 0) {
+      logger.info(`📥 Downloading ${missingModels.length} missing model(s)...`);
+      for (const model of missingModels) {
         await pullModel(model);
-      } else {
-        logger.info(`... Model found: ${model}`);
       }
     }
-    logger.info('... All required models are available.');
+
+    logger.info(`🎯 All ${REQUIRED_MODELS.length} required models are now available.`);
   } catch (error) {
     throw new Error(`Failed to verify access to models via Magi Conduit: ${error}`);
   }
@@ -223,19 +250,6 @@ async function ensureTTSReady(): Promise<void> {
   );
 }
 
-async function checkPersonaFiles(): Promise<void> {
-  logger.info('Verifying access to persona files...');
-  for (const persona of Object.values(PERSONAS_CONFIG)) {
-    try {
-      // Use fs.promises.access to check file readability
-      await fs.access(persona.personalitySource, fs.constants.R_OK);
-      logger.info(`... Persona file accessible: ${path.basename(persona.personalitySource)}`);
-    } catch (error) {
-      const errorMessage = `Cannot access persona file: ${persona.personalitySource}`;
-      throw new Error(errorMessage);
-    }
-  }
-}
 
 async function verifyInternetAccess(): Promise<void> {
   logger.info('Verifying internet access...');
@@ -258,7 +272,23 @@ async function verifySufficientRam(): Promise<void> {
 }
 
 /**
- * Verifies MCP server connections and tool availability
+ * Basic MCP server initialization without heavy tool testing
+ */
+async function initializeMcpServers(): Promise<void> {
+  logger.info('Initializing MCP servers...');
+  
+  try {
+    // Initialize MCP client manager
+    await mcpClientManager.initialize();
+    logger.info('... MCP client manager initialized successfully');
+  } catch (error) {
+    logger.error('MCP server initialization failed:', error);
+    throw new Error(`MCP server initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Verifies MCP server connections and tool availability (heavy testing)
  */
 async function verifyMcpServers(): Promise<void> {
   logger.info('Verifying MCP server connections...');
@@ -416,13 +446,31 @@ export async function runDiagnostics(): Promise<void> {
   try {
     await verifyInternetAccess();
     await verifySufficientRam();
-    await checkPersonaFiles();
     await ensureMagiConduitReady();
     await ensureTTSReady();
-    await verifyMcpServers();
+    await initializeMcpServers();
     logger.info('--- System Diagnostics Complete ---');
   } catch (error) {
     logger.error('System diagnostics failed.', error);
     throw error;
+  }
+}
+
+/**
+ * Runs background MCP server verification after system is ready
+ */
+export async function runBackgroundMcpVerification(onComplete?: () => void): Promise<void> {
+  logger.info('Starting background MCP server verification...');
+  try {
+    await verifyMcpServers();
+    logger.info('Background MCP server verification completed successfully');
+    if (onComplete) {
+      onComplete();
+    }
+  } catch (error) {
+    logger.warn('Background MCP server verification failed (system will continue running):', error);
+    if (onComplete) {
+      onComplete();
+    }
   }
 } 

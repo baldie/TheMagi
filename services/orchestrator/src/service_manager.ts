@@ -93,7 +93,21 @@ class ServiceManager {
 
     this.ttsProcess.stdout?.on('data', (data) => {
         data.toString().split('\n').forEach((line: string) => {
-            if (line.trim().length > 0) logger.info(`[TTS] ${line.trim()}`);
+            if (line.trim().length > 0) {
+                const trimmedLine = line.trim();
+                // Only log important TTS messages as INFO, others as DEBUG
+                if (trimmedLine.includes('TTS Service Starting Up') ||
+                    trimmedLine.includes('loaded successfully') ||
+                    trimmedLine.includes('ready to accept requests') ||
+                    trimmedLine.includes('ERROR') ||
+                    trimmedLine.includes('WARNING') ||
+                    trimmedLine.includes('Failed') ||
+                    trimmedLine.includes('startup completed')) {
+                    logger.info(`[TTS] ${trimmedLine}`);
+                } else {
+                    logger.debug(`[TTS] ${trimmedLine}`);
+                }
+            }
         });
     });
 
@@ -102,9 +116,12 @@ class ServiceManager {
             if (line.trim().length > 0) {
                 const trimmedLine = line.trim();
                 // Check if this is actually an info message sent to stderr
-                if (trimmedLine.includes('INFO:') || trimmedLine.includes('Application startup complete') || 
+                if (trimmedLine.includes('Application startup complete') || 
                     trimmedLine.includes('Uvicorn running on')) {
                     logger.info(`[TTS] ${trimmedLine}`);
+                } else if (trimmedLine.includes('INFO:')) {
+                    // Log most INFO messages as debug to reduce verbosity
+                    logger.debug(`[TTS] ${trimmedLine}`);
                 } else if (trimmedLine.includes('Sampling:') && trimmedLine.includes('it/s')) {
                     // Filter out sampling progress messages completely - they clutter the logs
                     return;
