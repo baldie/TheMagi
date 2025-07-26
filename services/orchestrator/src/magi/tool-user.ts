@@ -167,9 +167,9 @@ export class ToolUser {
       const toolResult = await mcpClientManager.executeTool(this.magi.name, toolName, toolArguments);
       
       // Extract the text from the typed response object
-      return this.extractToolOutput(toolResult);
-      
-      //return `Tool used: ${toolName}\nArguments: ${JSON.stringify(toolArguments)}\nResult: ${processedOutput}`;
+      const toolResponse = this.extractToolOutput(toolResult);
+      logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n🛠️🛠️🛠️}`);
+      return toolResponse;
     } catch (error) {
       return MagiErrorHandler.handleToolError(error, {
         magiName: this.magi.name,
@@ -385,19 +385,19 @@ export class ToolUser {
     if (tool.name == 'tavily-extract'){
       logger.debug(`☑️☑️☑️Raw web-extract retreived:\n${toolResponse}`);
       const contentOnlyPrompt = getCoreContentPrompt(toolResponse);
-      toolResponse = await this.magi.contactWithoutPersonality(contentOnlyPrompt);
+      toolResponse = await this.magi.contactSimple(contentOnlyPrompt);
       logger.debug(`☑️☑️☑️Content reduced to:\n${toolResponse}`);
       const relevantTextOnlyPrompt = getRelevantExtractFromCoreContentPrompt(userMessage, toolResponse);
-      toolResponse = await this.magi.contactWithoutPersonality(relevantTextOnlyPrompt);
+      toolResponse = await this.magi.contactSimple(relevantTextOnlyPrompt);
       logger.debug(`☑️☑️☑️Further refined for relevancy:\n${toolResponse}`);
     }
 
     // Summarize the data we recieved back in human readable form.
     if (tool.name == "personal-data") {
       logger.debug(`Raw personal-data retreived: ${toolResponse}`);
-      const summarize = `You have just completed the following task:\n${thought}\nThis resulted in:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language.`;
+      const summarize = `You have just completed the following task:\n${thought}\nThis resulted in:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language.When referring to ${this.magi.name}, speak in the first person.`;
       logger.debug(`Summary prompt:\n${summarize}`);
-      toolResponse = await this.magi.contactWithoutPersonality(summarize);
+      toolResponse = await this.magi.contactSimple(summarize);
     }
     return toolResponse;
   }

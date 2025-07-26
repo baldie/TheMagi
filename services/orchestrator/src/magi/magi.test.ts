@@ -7,6 +7,9 @@ jest.mock('./conduit-client', () => ({
     constructor(name: string) {
       this.name = name;
     }
+    async contact() {
+      return 'mock contact response';
+    }
     async contactForJSON() {
       return {};
     }
@@ -22,6 +25,17 @@ jest.mock('./tool-user', () => ({
     async executeAgenticTool() {
       return 'mock tool response';
     }
+  }
+}));
+
+jest.mock('./short-term-memory', () => ({
+  ShortTermMemory: class MockShortTermMemory {
+    constructor() {}
+    async summarize() {
+      return '';
+    }
+    remember() {}
+    forget() {}
   }
 }));
 
@@ -69,20 +83,16 @@ describe('Magi contactAsAgent', () => {
     jest.restoreAllMocks();
   });
 
-  it('should handle direct final answer without tools', async () => {
-    const mockResponse = {
-      thought: "This is a simple question that I can answer directly",
-      action: {
-        finalAnswer: "This is my direct answer to the user"
-      }
-    };
+  it('should handle simple contact without agentic loop', async () => {
+    // Mock the conduit.contact method directly for contactSimple
+    const mockContact = jest.spyOn(magi['conduit'], 'contact');
+    mockContact.mockResolvedValue("Simple response");
     
-    mockContactForJSON.mockResolvedValue(mockResponse);
+    const result = await magi.contactSimple("What is 2+2?", "You are a math expert");
     
-    const result = await magi.directMessage("What is 2+2?");
-    
-    expect(result).toBe("This is my direct answer to the user");
-    expect(mockContactForJSON).toHaveBeenCalledTimes(1);
+    expect(result).toBe("Simple response");
+    expect(mockContact).toHaveBeenCalledWith("What is 2+2?", "You are a math expert", magi['config'].model, magi['config'].options);
+    expect(mockContactForJSON).not.toHaveBeenCalled();
     expect(mockExecuteAgenticTool).not.toHaveBeenCalled();
   });
 
@@ -92,7 +102,7 @@ describe('Magi contactAsAgent', () => {
       action: {
         tool: {
           name: "web_search",
-          args: { query: "test query" }
+          parameters: { query: "test query" }
         }
       }
     };
@@ -116,12 +126,12 @@ describe('Magi contactAsAgent', () => {
     
     mockExecuteAgenticTool.mockResolvedValue("Search results: test data");
 
-    const result = await magi.directMessage("Search for information about testing");
+    const result = await magi.contactAsAgent("Search for information about testing");
 
     expect(result).toBe("Here is my final answer based on the search");
     expect(mockContactForJSON).toHaveBeenCalledTimes(3);
     expect(mockExecuteAgenticTool).toHaveBeenCalledWith(
-      { name: "web_search", args: { query: "test query" } },
+      { name: "web_search", parameters: { query: "test query" } },
       "I need to search for information",
       "Search for information about testing"
     );
@@ -131,11 +141,11 @@ describe('Magi contactAsAgent', () => {
     const responses = [
       {
         thought: "First I need to search",
-        action: { tool: { name: "search", args: { query: "test" } } }
+        action: { tool: { name: "search", parameters: { query: "test" } } }
       },
       {
         thought: "Now I need to analyze the data",
-        action: { tool: { name: "analyze", args: { data: "search_results" } } }
+        action: { tool: { name: "analyze", parameters: { data: "search_results" } } }
       },
       {
         thought: "I can now provide the final answer",
@@ -164,7 +174,7 @@ describe('Magi contactAsAgent', () => {
       .mockResolvedValueOnce("Search results")
       .mockResolvedValueOnce("Analysis complete");
 
-    const result = await magi.directMessage("Complex request requiring multiple steps");
+    const result = await magi.contactAsAgent("Complex request requiring multiple steps");
 
     expect(result).toBe("Final comprehensive answer");
     expect(mockContactForJSON).toHaveBeenCalledTimes(5);
@@ -175,7 +185,7 @@ describe('Magi contactAsAgent', () => {
     const toolResponse = {
       thought: "I need to keep working",
       action: {
-        tool: { name: "test_tool", args: {} }
+        tool: { name: "test_tool", parameters: {} }
       }
     };
 
@@ -202,7 +212,7 @@ describe('Magi contactAsAgent', () => {
     
     mockExecuteAgenticTool.mockResolvedValue("Tool executed");
 
-    const result = await magi.directMessage("Never ending task");
+    const result = await magi.contactAsAgent("Never ending task");
 
     expect(result).toBe("Sorry, I seem to have gotten stuck in a loop. Here is what I found:\nI have executed some tools but not found a complete answer");
     expect(mockContactForJSON).toHaveBeenCalledTimes(13); // (MAX_STEPS - 1) * 2 - 1 = 13 (7 decisions + 6 synthesis)
@@ -217,7 +227,7 @@ describe('Magi contactAsAgent', () => {
 
     mockContactForJSON.mockResolvedValue(invalidResponse);
 
-    const result = await magi.directMessage("Simple question");
+    const result = await magi.contactAsAgent("Simple question");
 
     expect(result).toBe("Sorry, I received an invalid response and had to stop.");
     expect(mockContactForJSON).toHaveBeenCalledTimes(1);
@@ -227,21 +237,21 @@ describe('Magi contactAsAgent', () => {
     const toolResponse = {
       thought: "I'll try to use a tool",
       action: {
-        tool: { name: "failing_tool", args: {} }
+        tool: { name: "failing_tool", parameters: {} }
       }
     };
 
     mockContactForJSON.mockResolvedValue(toolResponse);
     mockExecuteAgenticTool.mockRejectedValue(new Error("Tool execution failed"));
 
-    await expect(magi.directMessage("Test tool error")).rejects.toThrow("Tool execution failed");
+    await expect(magi.contactAsAgent("Test tool error")).rejects.toThrow("Tool execution failed");
   });
 
   it('should include previous results in subsequent prompts', async () => {
     const responses = [
       {
         thought: "I need to search first",
-        action: { tool: { name: "search", args: { query: "test" } } }
+        action: { tool: { name: "search", parameters: { query: "test" } } }
       },
       {
         synthesis: "I have completed a search and got results",
@@ -260,11 +270,11 @@ describe('Magi contactAsAgent', () => {
 
     mockExecuteAgenticTool.mockResolvedValue("Search completed successfully");
 
-    await magi.directMessage("Search and answer");
+    await magi.contactAsAgent("Search and answer");
 
-    // Check that the synthesis call includes the previous state
+    // Check that the synthesis call includes the previous state  
     const synthesisCallArgs = mockContactForJSON.mock.calls[1][0];
-    expect(synthesisCallArgs).toContain("**What you know so far:**");
+    expect(synthesisCallArgs).toContain("What you know so far:");
     expect(synthesisCallArgs).toContain("Nothing is known yet.");
   });
 });

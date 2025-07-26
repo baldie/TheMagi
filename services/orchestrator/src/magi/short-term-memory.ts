@@ -1,5 +1,6 @@
 import { Magi } from './magi';
 import { MagiName } from '../types/magi-types';
+import { sys } from 'node_modules/typescript/lib/typescript';
 
 export interface Memory {
   scratchpad: string;
@@ -71,8 +72,8 @@ Message: ${memory.message}
 ---`
     ).join('\n');
 
-    const summarizationPrompt = `PERSONA\nYou are a helpful assistant that creates concise extractive summaries.
-
+    const systemPrompt = `PERSONA\nYou are a helpful assistant that creates concise extractive summaries.`;
+    const summarizationPrompt = `
 INSTRUCTIONS:
 Please provide an extractive summary of the following short-term memories for context.
 Focus on key information, decisions, and ongoing tasks.
@@ -83,7 +84,7 @@ ${memoryText}
 Provide a clear, organized summary that captures the essential information from these memories. No other text`;
 
     try {
-      const summary = await this.magi.contactWithoutPersonality(summarizationPrompt);
+      const summary = await this.magi.contactSimple(summarizationPrompt, systemPrompt);
       
       // Cache the summary
       this.lastSummary = summary;

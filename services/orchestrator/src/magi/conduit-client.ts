@@ -46,9 +46,12 @@ export class ConduitClient {
     userPrompt: string,
     systemPrompt: string,
     model: ModelType,
-    options: ConduitRequestOptions
+    options: ConduitRequestOptions,
+    format?: string
   ): Promise<string> {
-    const requestData = this.buildRequestData(userPrompt, systemPrompt, model, options);
+    const requestData = this.buildRequestData(userPrompt, systemPrompt, model, options, format);
+    
+    logger.debug(`✅✅✅\n\n${systemPrompt}\n\n${userPrompt}\n\n✅✅✅\n\n`);
 
     return MagiErrorHandler.withErrorHandling(
       async () => {
@@ -57,6 +60,8 @@ export class ConduitClient {
           requestData,
           { timeout: 60000 } // 1-minute timeout
         );
+
+        logger.debug(`☑️☑️☑️\n\n${response.data.response}\n\n☑️☑️☑️\n\n`);
         return response.data.response;
       },
       {
@@ -81,8 +86,7 @@ export class ConduitClient {
     model: ModelType,
     options: ConduitRequestOptions
   ): Promise<any> {
-    // First attempt: Get response from LLM
-    const originalResponse = await this.contact(userPrompt, systemPrompt, model, options);
+    const originalResponse = await this.contact(userPrompt, systemPrompt, model, options, 'json');
     
     // Try to parse the JSON response
     try {
@@ -90,31 +94,8 @@ export class ConduitClient {
     } catch (parseError) {
       // JSON parsing failed, attempt to fix it
       logger.debug(`${this.magiName} original malformed response:`, originalResponse);
-    }
-    
-    // Second attempt: Ask LLM to fix the JSON
-    const fixPrompt = `The following JSON response contains syntax errors. Fix it to be valid JSON while preserving all the original data and structure:
-
-${originalResponse}
-
-Respond with ONLY the corrected JSON, no additional text or explanation.`;
-
-    const fixedResponse = await this.contact(
-      fixPrompt,
-      '', // No personality for JSON fixing
-      model,
-      { temperature: 0.1 } // Low temperature for precise correction
-    );
-    
-    // Try parsing the fixed response
-    try {
-      return this.parseJsonResponse(fixedResponse);
-    } catch (correctionError) {
-      // JSON correction also failed, log both attempts and throw
-      logger.error(`${this.magiName} contactForJSON failed after correction attempt`);
-      logger.error(`${this.magiName} original response:`, originalResponse);
-      logger.error(`${this.magiName} corrected response:`, fixedResponse);
-      throw new Error(`JSON parsing failed after correction attempt`);
+      logger.error(`${this.magiName} failed to parse JSON response:`, parseError);
+      throw new Error(`Failed to parse JSON response: ${parseError}`);
     }
   }
 
@@ -140,7 +121,8 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
       return parsedData;
       
     } catch (error) {
-      // we intentionally do not want to log anything here
+      // Throw the error so it can be handled by the calling method
+      throw error;
     }
   }
 
@@ -151,13 +133,15 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
     userPrompt: string,
     systemPrompt: string,
     model: ModelType,
-    options: ConduitRequestOptions
+    options: ConduitRequestOptions,
+    format?: string
   ) {
     return {
       model: model,
       system: systemPrompt,
       prompt: userPrompt,
       stream: false,
+      format: format,
       keep_alive: "30m",
       options: {
         ...options,
@@ -166,30 +150,5 @@ Respond with ONLY the corrected JSON, no additional text or explanation.`;
         repeat_penalty: 1.1,
       },
     };
-  }
-
-  /**
-   * Handles errors from the Conduit API.
-   */
-  private handleError(error: any): never {
-    if (axios.isAxiosError(error)) {
-      if (error.response) {
-        logger.error(`Magi Conduit returned an error for ${this.magiName}:`, {
-          status: error.response.status,
-          data: error.response.data,
-        });
-        throw new Error(`API Error for ${this.magiName}: ${error.response.statusText}`);
-      } else if (error.request) {
-        // Handle cases like 'socket hang up' or ECONNREFUSED where the message might be empty
-        const errorMessage = error.message || 'The connection was abruptly closed.';
-        logger.error(`Network error when contacting ${this.magiName}. No response received.`, {
-          errorMessage: errorMessage,
-          code: error.code,
-        });
-        throw new Error(`Network Error for ${this.magiName}: ${errorMessage}. Is the Magi Conduit running correctly?`);
-      }
-    }
-    logger.error(`Unexpected error calling Magi Conduit for ${this.magiName}:`, error);
-    throw new Error(`Failed to get response from ${this.magiName}.`);
   }
 }

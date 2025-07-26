@@ -26,13 +26,13 @@ async function runSealedEnvelopePhase(userMessage: string): Promise<string> {
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(() => balthazar.directMessage(userMessage));
+  const balthazarResponse = await retry(() => balthazar.contactAsAgent(userMessage));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(() => melchior.directMessage(userMessage));
+  const melchiorResponse = await retry(() => melchior.contactAsAgent(userMessage));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(() => caspar.directMessage(userMessage));
+  const casparResponse = await retry(() => caspar.contactAsAgent(userMessage));
 
   const sealedEnvelope = `
     
@@ -106,10 +106,10 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
     logger.info(`Checking for consensus after Round ${round}.`);
     
     // For consensus check, only send the latest round responses
+    const systemPrompt = `
+      You are an impartial moderator of a discussion.
+      Review the latest round of deliberations below and determine if an consensus has been reached.`
     const consensusCheckPrompt = `
-      You will now act as an impartial moderator of a discussion.
-      Review the latest round of deliberations below and determine if an consensus has been reached.
-
       Initial Positions:
       ${sealedEnvelope}
 
@@ -121,7 +121,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       It is very important that you concise in your summary.
       Use as few words as possible to convey the outcome.
       `;
-    const consensusResult = await retry(() => caspar.contactWithoutPersonality(consensusCheckPrompt));
+    const consensusResult = await retry(() => caspar.contactSimple(consensusCheckPrompt, systemPrompt));
 
     if (consensusResult.trim().toUpperCase() !== 'IMPASSE') {
       logger.info(`Consensus reached in Round ${round}.`);
@@ -141,11 +141,10 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
   Final Debate Transcript:
   ${debateTranscript}
   
-  Please capture each Magi's final position and present them clearly to the user.
+  Capture each Magi's final position and present them clearly to the user.
   Be very concise and do not use bullet points, use conversational prose.
-  The user should be able to understand the differing viewpoints and the nature of the impasse.
-  `;
-  return await retry(() => caspar.contactWithoutPersonality(impasseSummaryPrompt));
+  The user should be able to understand the differing viewpoints and the nature of the impasse.`;
+  return await retry(() => caspar.contactSimple(impasseSummaryPrompt, ''));
 }
 
 /**
@@ -162,7 +161,7 @@ export async function routeMessage(userMessage?: string): Promise<string> {
 
   const magiDirect = async (magi: Magi, userMessage: string): Promise<string> => {
     logger.debug(`Directly routing User's Message to ${magi.name}`);
-    const response = await magi.directMessage(userMessage);
+    const response = await magi.contactAsAgent(userMessage);
     logger.debug(`Received response from ${magi.name}:\n${response}`);
     await speakWithMagiVoice(response, magi.name);
     return response;

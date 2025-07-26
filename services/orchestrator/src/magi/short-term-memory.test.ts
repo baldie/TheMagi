@@ -10,7 +10,7 @@ describe('ShortTermMemory', () => {
 
   beforeEach(() => {
     mockMagi = {
-      contactWithoutPersonality: jest.fn().mockResolvedValue('Test summary')
+      contactSimple: jest.fn().mockResolvedValue('Test summary')
     } as any;
     memory = new ShortTermMemory(mockMagi);
   });
@@ -77,7 +77,7 @@ describe('ShortTermMemory', () => {
     it('should return empty string when no memories exist', async () => {
       const summary = await memory.summarize();
       expect(summary).toBe('');
-      expect(mockMagi.contactWithoutPersonality).not.toHaveBeenCalled();
+      expect(mockMagi.contactSimple).not.toHaveBeenCalled();
     });
 
     it('should call magi with proper parameters when memories exist', async () => {
@@ -85,15 +85,16 @@ describe('ShortTermMemory', () => {
       
       const summary = await memory.summarize();
       
-      expect(mockMagi.contactWithoutPersonality).toHaveBeenCalledWith(
-        expect.stringContaining('Please provide an extractive summary')
+      expect(mockMagi.contactSimple).toHaveBeenCalledWith(
+        expect.stringContaining('Please provide an extractive summary'),
+        expect.stringContaining('PERSONA')
       );
       expect(summary).toBe('Test summary');
     });
 
     it('should handle magi errors gracefully', async () => {
       memory.remember('user', 'test scratchpad', 'test message');
-      mockMagi.contactWithoutPersonality = jest.fn().mockRejectedValue(new Error('Connection failed'));
+      mockMagi.contactSimple = jest.fn().mockRejectedValue(new Error('Connection failed'));
       
       const summary = await memory.summarize();
       
@@ -106,7 +107,7 @@ describe('ShortTermMemory', () => {
       
       await memory.summarize();
       
-      const callArgs = mockMagi.contactWithoutPersonality.mock.calls[0];
+      const callArgs = mockMagi.contactSimple.mock.calls[0];
       const prompt = callArgs[0];
       
       expect(prompt).toContain('Memory 1:');

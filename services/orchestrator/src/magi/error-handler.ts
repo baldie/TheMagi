@@ -51,7 +51,7 @@ export class MagiErrorHandler {
    * Handle tool execution errors with fallback messaging
    */
   static handleToolError(error: unknown, context: ErrorContext, stepDescription: string): string {
-    logger.error(`${context.magiName} tool execution failed:`, error);
+    logger.error(`${context.magiName} tool execution failed: ${error}`, error);
     return `Tool execution failed, proceeding with reasoning-based analysis for: ${stepDescription}`;
   }
 

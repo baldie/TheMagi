@@ -57,7 +57,6 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   },
 };
 
-
 /**
  * The Magi class represents a single AI persona within the Magi system.
  * It uses composition to communicate through a ConduitClient.
@@ -93,8 +92,7 @@ export class Magi {
         .map(([name, type]) => `"${name}":"${type}"`)
         .join(',');
       
-      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }
-USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
+      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\nUSAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
     }).join('\n');
   }
 
@@ -102,13 +100,13 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
    * Retrieves the cached personality prompt.
    * @throws If the prompt has not been loaded yet.
    */
-  getPersonality(): string {
+  withPersonality(systemInstructionsPrompt: string): string {
     if (!this.personalityPrompt) {
       const err = new Error(`Attempted to access personality for ${this.name}, but it has not been cached.`);
       logger.error('Prompt retrieval error', err);
       throw err;
     }
-    return this.personalityPrompt;
+    return `${this.personalityPrompt}\n\n${systemInstructionsPrompt}`;
   }
 
   public getStatus(): 'available' | 'busy' | 'offline' {
@@ -124,7 +122,7 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
     const workingMemory = await this.shortTermMemory.summarize();
     const promptWithContext = workingMemory + '\n' + userPrompt;
     const response = await this.executeWithStatusManagement(() => 
-      this.conduit.contact(promptWithContext, this.getPersonality(), this.config.model, this.config.options)
+      this.conduit.contact(promptWithContext, this.withPersonality(''), this.config.model, this.config.options)
     );
     
     // Store the interaction in short-term memory
@@ -139,9 +137,9 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
     return response;
   }
 
-  async contactWithoutPersonality(userPrompt: string): Promise<string> {
+  async contactSimple(userPrompt: string, systemPrompt?: string): Promise<string> {
     return this.executeWithStatusManagement(() => 
-      this.conduit.contact(userPrompt, '', this.config.model, this.config.options)
+      this.conduit.contact(userPrompt, systemPrompt || '', this.config.model, this.config.options)
     );
   }
 
@@ -149,14 +147,7 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
     this.shortTermMemory.forget();
   }
 
-  // TODO: maybe we don't need this indirection of "direct User's Message"
-  async directMessage(userMessage: string): Promise<string> {
-    return this.executeWithStatusManagement(() => 
-      this.contactAsAgent(userMessage)
-    );
-  }
-
- private async contactAsAgent(userMessage: string): Promise<string> {
+  public async contactAsAgent(userMessage: string): Promise<string> {
     let response = '';
     try {
         logger.info(`${this.name} beginning agentic loop...`);
@@ -166,7 +157,7 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
 
         const loopState = {
             synthesis: "Nothing is known yet.",
-            goal: "Formulate a plan to answer the user's message.",
+            goal: "Formulate a plan to address the user's message.",
             history: ""
         };
 
@@ -174,118 +165,171 @@ USAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
 
         for (let step: number = 1; step < MAX_STEPS; step++) {
             // =================================================================
-            // PHASE 1: SYNTHESIZE STATE (This part is now enhanced)
+            // PHASE 1: SYNTHESIZE STATE
             // =================================================================
             if (step > 1) {
-                // This prompt is enhanced with Goal Re-evaluation logic.
-                const synthesisPrompt = `
-You are a state manager AI. Your job is to synthesize information and define the next goal for yourself.
+              // Extract the most recent observation from history
+              let observation = "No previous actions taken yet.";
+              if (loopState.history.trim()) {
+                // Find the last "Observation:" in the history
+                const lastObservationIndex = loopState.history.lastIndexOf('Observation: ');
+                if (lastObservationIndex !== -1) {
+                  // Extract from "Observation: " to the end of that observation block
+                  const observationStart = lastObservationIndex;
+                  const restOfHistory = loopState.history.substring(observationStart);
+                  // Split by double newlines and take the first part (the complete observation)
+                  const observationParts = restOfHistory.split('\n\n');
+                  observation = observationParts[0] || "No observation found.";
+                  logger.debug(`${this.name} extracted observation: ${observation}`);
+                } else {
+                  observation = "Previous actions taken but no observation found.";
+                }
+              }
+              const systemInstructionsPrompt = `
+Your job is to synthesize information and define the next goal for yourself.
 
---- PREVIOUS STATE ---
-**What you know so far:**
-${loopState.synthesis}
-
-**Your previous goal was:**
-${loopState.goal}
-
---- LATEST OBSERVATION ---
-${loopState.history.split('\n\n').slice(-2).join('\n\n')}
-
-**Latest User Message:** "${userMessage}"
-
---- GOAL RE-EVALUATION INSTRUCTIONS ---
-1. **Update your synthesis** based on the latest observation
-2. **Evaluate your current goal:**
+INSTRUCTIONS:
+1. Update your synthesis based on the latest observation
+2. Evaluate your current goal:
    - Is it still relevant to the user?
    - Have you learned something that changes what you should focus on?
    - Are you getting stuck in a loop or pursuing an unproductive path?
-3. **Define your next goal:**
+3. Define your next goal:
    - If current goal is still valid: Continue with the logical next step
    - If current goal is complete: Move to the next phase or provide final answer
    - If current goal is no longer relevant: Pivot to what the user actually needs
 
---- YOUR TASK & FORMAT ---
-- Review all the information to update the "synthesis" of what you know.
-- Based on your re-evaluation, define the single next "goal".
-- **You must format your response as a single JSON object with no other text.**
+TASK:
+Review all information to update the "synthesis" of what you know.
+Define the single next "goal" based on your evaluation.
+Format response as a single JSON object with no other text.
 
-**Example format:**
+Example format:
 \`\`\`json
 {
   "synthesis": "Updated summary of what you now know...",
-  "goal": "The single next objective to pursue..."
+  "goal": "The single next goal to pursue..."
 }
-\`\`\``;
-                const stateUpdate: { synthesis: string, goal: string } = await this.conduit.contactForJSON(synthesisPrompt, this.getPersonality(), model, options);
-                loopState.synthesis = stateUpdate.synthesis;
-                loopState.goal = stateUpdate.goal;
+\`\`\`
+`.trim();
+
+const synthesisPrompt = `
+CONTEXT:
+What you know so far:
+${loopState.synthesis}
+
+Your previous goal was:
+${loopState.goal}
+
+OBSERVATION:
+${observation}
+
+Latest User Message: "${userMessage}"
+`.trim();
+
+                try {
+                    const stateUpdate: { synthesis: string, goal: string | object } = await this.conduit.contactForJSON(synthesisPrompt, this.withPersonality(systemInstructionsPrompt), model, options);
+                    loopState.synthesis = stateUpdate.synthesis;
+                    
+                    // Handle goal - AI sometimes returns object instead of string
+                    if (typeof stateUpdate.goal === 'string') {
+                        loopState.goal = stateUpdate.goal;
+                    } else if (typeof stateUpdate.goal === 'object' && stateUpdate.goal !== null) {
+                        // Extract description if it exists, otherwise stringify the object
+                        const goalObj = stateUpdate.goal as any;
+                        loopState.goal = goalObj.description || goalObj.task || JSON.stringify(stateUpdate.goal);
+                    } else {
+                        loopState.goal = "Continue with current objective";
+                    }
+                    
+                    logger.debug(`${this.name} state update - synthesis: ${stateUpdate.synthesis}, goal: ${loopState.goal}`);
+                } catch (jsonError) {
+                    logger.error(`${this.name} failed to get JSON response for state synthesis:`, jsonError);
+                    // Continue with previous state rather than breaking the loop
+                    logger.warn(`${this.name} continuing with previous goal: ${loopState.goal}`);
+                }
             }
 
             // =================================================================
             // PHASE 2: DECIDE ACTION (This part remains the same)
             // =================================================================
-            const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask_user", "description": "Ask the user a clarifying question when more information is needed to proceed.", "parameters": {"question":"string (required) - The question to ask the user."} } }';
+            const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }';
 
-            const reasonPrompt = `
-Your job is to decide the single next step to achieve your current goal.
+            const systemPrompt = `
+Your job is to decide the single next step to achieve your current goal. Think step by step.
 
-**Context:**
-${workingMemory}
-
-**Current Goal:** ${loopState.goal}
-
-**What you know:** ${loopState.synthesis}
-
-**User's latest message:** "${userMessage}"
-
-**Available tools:**
+Available tools:
 ${toolsWithClarification}
 
---- ACTION PRIORITIES ---
-1. **Final Answer**: If you have sufficient information to fully address the goal
-2. **Use Tools**: If you need additional information or capabilities  
-3. **Ask User**: If you need clarification that only the user can provide
+ACTION PRIORITIES:
+1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
+2. Ask User: Only if the query is too vague or you need specific personal constraints that your tools cannot provide
+3. Final Answer: When you have gathered sufficient information using your available resources
 
-**Format your response as JSON only:**
+Format your response as JSON only:
 
-**Example for a tool call:**
+Example for a tool call:
 \`\`\`json
 {
   "thought": "I will use a tool to get information.",
-  "action": { "tool": { "name": "tavily-search", "parameters": { "query": "..." } } }
+  "action": { "tool": { "name": "tool-name", "parameters": { "query": "..." } } }
 }
 \`\`\`
 
-**Example for asking the user a question:**
+Example for asking the user a question:
 \`\`\`json
 {
   "thought": "I cannot proceed without knowing the user's budget.",
-  "action": { "tool": { "name": "ask_user", "parameters": { "question": "What is your budget for this project?" } } }
+  "action": { "tool": { "name": "ask-user", "parameters": { "question": "What is your budget for this project?" } } }
 }
 \`\`\`
 
-**Example for a final answer:**
+Example for a final answer:
 \`\`\`json
 {
   "thought": "I have all the information needed.",
   "action": { "finalAnswer": "Here is the final answer..." }
 }
 \`\`\`
-`;
+`.trim();
 
-            logger.debug(`💬💬💬Prompt for Step ${step}:\n${reasonPrompt}`);
-            const agenticResponse: { thought: string, action: { tool?: any, finalAnswer?: string } } = await this.conduit.contactForJSON(reasonPrompt, this.getPersonality(), model, options);
+const reasonPrompt = `
+CONTEXT:
+${workingMemory}
+
+CURRENT GOAL:
+${loopState.goal}
+
+WHAT YOU KNOW:
+${loopState.synthesis}
+
+USER'S LATEST MESSAGE:
+"${userMessage}"
+`.trim();
+
+            let agenticResponse: AgenticResponse;
+            try {
+                agenticResponse = await this.conduit.contactForJSON(reasonPrompt, this.withPersonality(systemPrompt), model, options);
+                logger.debug(`${this.name} agentic response - thought: ${agenticResponse.thought}, action: ${JSON.stringify(agenticResponse.action)}`);
+            } catch (jsonError) {
+                logger.error(`${this.name} failed to get JSON response for action decision:`, jsonError);
+                response = "Sorry, I encountered an error processing my response and had to stop.";
+                break;
+            }
             
             const { tool, finalAnswer } = agenticResponse.action;
 
             if (tool) {
-                if (tool.name === 'ask_user') {
-                    response = tool.parameters.question;
-                    logger.info(`Agent is asking a clarifying question: "${response}"`);
+                if (tool.name === 'ask-user') {
+                    response = tool.parameters.question as string;
+                    logger.info(`${this.name} has a clarifying question: "${response}"`);
                     break; // Exit the loop to return the question to the user
                 } else {
                     const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
-                    loopState.history += `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${toolResponse}\n\n`;
+                    const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${toolResponse}\n\n`;
+                    loopState.history += historyEntry;
+                    logger.debug(`${this.name} added to history: ${historyEntry}`);
+                    logger.debug(`${this.name} full history now: ${loopState.history}`);
                 }
             }
             else if (finalAnswer) {
@@ -318,7 +362,7 @@ ${toolsWithClarification}
             operation: 'agentic loop'
         });
     }
-    logger.debug(`✅✅✅Final response:\n${response}\n`);
+    logger.debug(`🤖🤖🤖 Final response:\n${response}\n🤖🤖🤖`);
 
     return response;
 }
