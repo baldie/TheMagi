@@ -168,7 +168,7 @@ export class ToolUser {
       
       // Extract the text from the typed response object
       const toolResponse = this.extractToolOutput(toolResult);
-      logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n🛠️🛠️🛠️}`);
+      logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n🛠️🛠️🛠️`);
       return toolResponse;
     } catch (error) {
       return MagiErrorHandler.handleToolError(error, {

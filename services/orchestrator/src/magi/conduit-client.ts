@@ -145,9 +145,11 @@ export class ConduitClient {
       keep_alive: "30m",
       options: {
         ...options,
-        num_ctx: 4096,
-        num_predict: 512,
-        repeat_penalty: 1.1,
+        num_ctx: 8192,        // Increased for better context retention
+        num_predict: 1024,    // Allow for more detailed responses
+        repeat_penalty: 1.05, // Slightly lower to allow concept reinforcement
+        top_k: 40,           // Add for better response variety
+        top_p: 0.9,          // Add for balanced creativity/coherence
       },
     };
   }
