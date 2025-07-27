@@ -77,6 +77,9 @@ describe('Magi contactAsAgent', () => {
     
     // Mock the ConduitClient.contactForJSON method through the conduit property
     mockContactForJSON = jest.spyOn(magi['conduit'], 'contactForJSON');
+    
+    // Mock the makeTTSReady method to return the input unchanged
+    jest.spyOn(magi as any, 'makeTTSReady').mockImplementation((...args: unknown[]) => Promise.resolve(args[0] as string));
   });
 
   afterEach(() => {
@@ -115,7 +118,10 @@ describe('Magi contactAsAgent', () => {
     const finalResponse = {
       thought: "Based on the search results, I can now answer",
       action: {
-        finalAnswer: "Here is my final answer based on the search"
+        tool: {
+          name: "answer-user",
+          parameters: { answer: "Here is my final answer based on the search" }
+        }
       }
     };
 
@@ -149,7 +155,12 @@ describe('Magi contactAsAgent', () => {
       },
       {
         thought: "I can now provide the final answer",
-        action: { finalAnswer: "Final comprehensive answer" }
+        action: {
+          tool: {
+            name: "answer-user",
+            parameters: { answer: "Final comprehensive answer" }
+          }
+        }
       }
     ];
 
@@ -268,7 +279,12 @@ describe('Magi contactAsAgent', () => {
       },
       {
         thought: "Now I can answer",
-        action: { finalAnswer: "Answer based on search" }
+        action: {
+          tool: {
+            name: "answer-user",
+            parameters: { answer: "Answer based on search" }
+          }
+        }
       }
     ];
 

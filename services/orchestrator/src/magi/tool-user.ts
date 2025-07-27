@@ -39,6 +39,7 @@ export function getRelevantContentFromRawText(userMessage: string, rawToolRespon
   - Related Links: Lists or grids of "Related Articles," "Recent Posts," "Popular Stories," or "You might also like."
   - Metadata and Threading: Author bios, user signatures, post dates, comment sections, and any replies or comments that follow the main post.
   - Off-topic Text: Any content that is not directly part of the main content's central topic.
+  - Images in base64 encoded strings and markdown tokens
 
   OUTPUT
   Respond ONLY with the cleaned text

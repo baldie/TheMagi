@@ -65,11 +65,11 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       include_raw_content: false
     },
     responseType: 'WebSearchResponse',
-    instructions: `query (required): The search query string
-auto_parameters: false
-topic: Search category "general" or "news" (string, default: "general")
-max_results: Maximum results to return 0-10 (number, default: 5)
-include_answer: Include LLM-generated answer (boolean, default: false)`
+    instructions: ` query (required): The search query string
+  auto_parameters: false
+  topic: Search category "general" or "news" (string, default: "general")
+  max_results: Maximum results to return 0-10 (number, default: 5)
+  include_answer: Include LLM-generated answer (boolean, default: false)`
   },
 
   'tavily-extract': {
@@ -81,10 +81,10 @@ include_answer: Include LLM-generated answer (boolean, default: false)`
       raw_content_format: 'markdown'
     },
     responseType: 'WebExtractResponse',
-    instructions: `urls (required): URL or array of URLs to extract content from (3 URLS MAXIMUM)
-topic: 'general' or 'news' (string, default: 'general')
-include_images: Include extracted images (boolean, default: false)
-timeout: Request timeout in seconds (number, default: 60)`
+    instructions: ` urls (required): URL or array of URLs to extract content from (3 URLS MAXIMUM)
+  topic: 'general' or 'news' (string, default: 'general')
+  include_images: Include extracted images (boolean, default: false)
+  timeout: Request timeout in seconds (number, default: 60)`
   },
 
   'smart-home-devices': {
@@ -93,8 +93,8 @@ timeout: Request timeout in seconds (number, default: 60)`
     category: ToolCategory.SMART_HOME,
     defaults: {},
     responseType: 'SmartHomeResponse',
-    instructions: `device_types: Array of device types to query
-query_purpose: Purpose of the query for context`
+    instructions: ` device_types: Array of device types to query
+  query_purpose: Purpose of the query for context`
   },
 
   'personal-data': {
@@ -103,12 +103,12 @@ query_purpose: Purpose of the query for context`
     category: ToolCategory.PERSONAL_DATA,
     defaults: { action: 'retrieve' },
     responseType: 'PersonalDataResponse',
-    instructions: `action: Operation to perform - "store", "retrieve", or "search" (**THESE ARE THE ONLY 3 VALID ACTIONS**)
-content: Content to store or search for (required for store/search actions)
-category: Category of the data (**REQUIRED WHEN STORING**)
-categories: Array of data categories to retrieve (**REQUIRED FOR RETRIEVAL**)
-user_context: Context for the data request
-limit: Maximum results to return (number, default: 10)`
+    instructions: ` action: Operation to perform - "store", "retrieve", or "search" (**THESE ARE THE ONLY 3 VALID ACTIONS**)
+  content: Content to store or search for (required for store/search actions)
+  category: Category of the data (**REQUIRED WHEN STORING**)
+  categories: Array of data categories to retrieve (**REQUIRED FOR RETRIEVAL**)
+  user_context: Context for the data request
+  limit: Maximum results to return (number, default: 10)`
   }
 };
 

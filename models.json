@@ -1,11 +1,11 @@
 {
   "models": [
     {
-      "name": "llama3.2:3b-instruct-q8_0",
+      "name": "mistral-nemo:12b-instruct-2407-q2_K",
       "magi": "Balthazar"
     },
     {
-      "name": "gemma3:12b", 
+      "name": "gemma3:1b-it-fp16", 
       "magi": "Melchior"
     },
     {

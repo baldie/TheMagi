@@ -30,8 +30,7 @@ export type AgenticTool = { name: string; parameters: Record<string, unknown>};
 export interface AgenticResponse {
   thought: string;
   action: {
-    tool?: AgenticTool;
-    finalAnswer?: string;
+    tool: AgenticTool;
   }
 }
 
@@ -68,18 +67,19 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
 2. Evaluate your current goal:
    - Is it still relevant and actionable?
    - Have you learned something that changes what you should focus on?
-3. Define your next goal based on logical progression:
-   - If you found URLs, your goal should be to read the content from the most relevant URLs
-   - If you have enough information, your goal should be to provide the final answer
-   - If current approach isn't working, try a different strategy
+3. Define your next goal based on logical progression: (Search → Extract → Analyze → Answer)
+   - If you found URLs, your next goal should be to extract content from the most relevant URL(s) 3 URLs MAX
+   - If you have extracted content from URLs, your next goal should be to analyze that content
+   - If the existing research is sufficient to respond to the user's message, your next goal should be to present the analysis.
+4. - If current approach isn't working, try a different search strategy
     `,
     uniqueAgenticActionPriorities: `
 1. Internal Analysis First: Review the CURRENT GOAL and all provided context (DATA TO PROCESS, WHAT YOU KNOW) to determine if you have sufficient information.
 2. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information if needed.
 3. Follow Logical Progression:
-   - After search: Extract content from relevant URLs found
-   - After extraction: Analyze and synthesize information
-   - After analysis: Provide final answer
+   - After search results in URLs, extract content from relevant URLs found (3 URLs MAX)
+   - After content extraction, analyze and synthesize the DATA TO PROCESS and WHAT YOU KNOW
+   - After analysis, provide the final answer
 4. Ask User: Only if the query is too vague or you need specifics that your tools cannot provide
 5. Final Answer: When you have gathered and analyzed sufficient information`,
     options: { temperature: 0.4 },
@@ -181,8 +181,8 @@ export class Magi {
         .map(([name, type]) => `"${name}":"${type.replace(/"/g, '\\"')}"`)
         .join(',');
       
-      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\nUSAGE:\n${toolDefinition.instructions || 'Infer instructions based on parameter names'}`;
-    }).join('\n');
+      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\n  USAGE:\n ${toolDefinition.instructions || 'Infer instructions based on parameter names'}`;
+    }).join('\n\n');
   }
 
   /**
@@ -255,13 +255,15 @@ export class Magi {
   /**
    * Builds an analysis prompt for the analyze-data tool
    */
-  private buildAnalysisPrompt(focus: string, criteria: string, userMessage: string, synthesis: string): string {
-    return `
-TASK: Analyze the available information with focus on: ${focus}
+  private buildAnalysisPrompt(focus: string, criteria: string, userMessage: string, { synthesis, history }: AgenticLoopState): string {
+    return `TASK: Analyze the available information with focus on: ${focus}
 ${criteria ? `CRITERIA: ${criteria}` : ''}
 
-AVAILABLE INFORMATION:
+CURRENT SYNTHESIS:
 ${synthesis}
+
+DETAILED INFORMATION FROM RESEARCH:
+${history || 'No detailed research data available yet.'}
 
 USER'S ORIGINAL QUESTION: ${userMessage}
 
@@ -378,7 +380,7 @@ Latest User Message: "${userMessage}"
    */
   private addRepetitiveActionWarning(loopState: AgenticLoopState, toolName: string): void {
     logger.warn(`${this.name} detected repetitive use of ${toolName} - forcing progression`);
-    loopState.warnings.push(`You have used the '${toolName}' tool three times in a row. You MUST use a different tool or provide a final answer now. Do not use '${toolName}' again.`);
+    loopState.warnings.push(`You have used the '${toolName}' tool three times in a row. You MUST use a different tool or provide a final answer now. Use any tool that is not '${toolName}'.`);
   }
 
   /**
@@ -391,7 +393,10 @@ Latest User Message: "${userMessage}"
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
     const observation = await this.extractLatestObservation(loopState.history);
-    const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }\n- { "tool": { "name": "analyze-data", "description": "Process and analyze available information to draw conclusions and insights", "parameters": {"focus":"string (required) - What aspect to analyze (e.g., \'cost comparison\', \'safety ranking\', \'best options\')","criteria":"string (optional) - Any specific constraints or requirements"} } }\nUSAGE:\nfocus (required): What aspect to analyze - cost comparison, safety ranking, best options, trend analysis\ncriteria (optional): Specific constraints or requirements to apply';
+    const toolsWithClarification = this.toolsList + `
+- { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }
+- { "tool": { "name": "analyze-data", "description": "Process and analyze available information to draw conclusions and insights", "parameters": {"focus":"string (required) - What aspect to analyze (e.g., 'cost comparison', 'safety ranking', 'best options')","criteria":"string (optional) - Any specific constraints or requirements"} } }\n  USAGE:\n  focus (required): What aspect to analyze - cost comparison, safety ranking, best options, trend analysis\n  criteria (optional): Specific constraints or requirements to apply
+- { "tool": { "name": "answer-user", "description": "Answer the user with the results you have synthesized.", "parameters": { "answer": "string (required) - The final answer to provide to the user. This should be in conversatonal tone."} } }`;
 
     const warnings = loopState.warnings.join('\n');
     if (warnings) {
@@ -423,7 +428,7 @@ Example for asking the user a question:
 \`\`\`json
 {
   "thought": "I cannot proceed without knowing the user's budget.",
-"action": { "tool": { "name": "ask-user", "parameters": { "question": "<QUESTION_TO_ASK>" } } }
+  "action": { "tool": { "name": "ask-user", "parameters": { "question": "<QUESTION_TO_ASK>" } } }
 }
 \`\`\`
 
@@ -431,7 +436,7 @@ Example for a final answer:
 \`\`\`json
 {
   "thought": "I have all the information needed.",
-  "action": { "finalAnswer": "<FINAL_ANSWER>" }
+  "action": { "tool": { "name": "answer-user", "parameters": { "answer": "<FINAL_ANSWER_TEXT>" } } }
 }
 \`\`\`
 `.trim();
@@ -461,53 +466,14 @@ ${loopState.synthesis}
       return { response: "Sorry, I encountered an error processing my response and had to stop.", shouldBreak: true };
     }
     
-    const { tool, finalAnswer } = agenticResponse.action;
+    const { tool } = agenticResponse.action;
 
     if (tool) {
-      if (tool.name === 'ask-user') {
-        const response = tool.parameters.question as string;
-        logger.info(`${this.name} has a clarifying question: "${response}"`);
-        return { response, shouldBreak: true };
-      } else if (tool.name === 'analyze-data') {
-        const analysisPrompt = this.buildAnalysisPrompt(
-          tool.parameters.focus as string,
-          tool.parameters.criteria as string || '',
-          userMessage,
-          loopState.synthesis
-        );
-        
-        const analysisResult = await this.contactSimple(analysisPrompt);
-        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${analysisResult}${OBSERVATION_END_DELIMITER}\n\n`;
-        loopState.history += historyEntry;
-        
-        // Check for repetitive actions before adding to history
-        if (this.isRepetitiveAction(actionHistory, tool.name)) {
-          this.addRepetitiveActionWarning(loopState, tool.name);
-        }
-        
-        // Add action to history
-        actionHistory.push(tool.name);
-      } else {
-        const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
-        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${toolResponse}${OBSERVATION_END_DELIMITER}\n\n`;
-        loopState.history += historyEntry;
-        
-        // Check for repetitive actions before adding to history
-        if (this.isRepetitiveAction(actionHistory, tool.name)) {
-          this.addRepetitiveActionWarning(loopState, tool.name);
-        }
-        
-        // Add action to history
-        actionHistory.push(tool.name);
-      }
-    } else if (finalAnswer) {
-      return { response: finalAnswer, shouldBreak: true };
+      return await this.handleToolResponse(tool, agenticResponse, userMessage, loopState, actionHistory);
     } else {
-      logger.error(`Invalid results response from agentic loop:\n${JSON.stringify(agenticResponse)}`);
+      logger.error(`Invalid response from agentic loop, no tool supplied:\n${JSON.stringify(agenticResponse)}`);
       return { response: "Sorry, I received an invalid response and had to stop.", shouldBreak: true };
     }
-
-    return { shouldBreak: false };
   }
 
   public async contactAsAgent(userMessage: string): Promise<string> {
@@ -561,8 +527,109 @@ ${loopState.synthesis}
       });
     }
     
-    logger.debug(`🤖🤖🤖 Final response:\n${response}\n🤖🤖🤖`);
-    return response;
+    const finalResponse = await this.makeTTSReady(response);
+    logger.debug(`\n🤖🤖🤖 Final response:\n${finalResponse}\n🤖🤖🤖\n`);
+    return finalResponse;
+  }
+
+  
+  private async makeTTSReady(text: string): Promise<string> {
+    const systemPrompt = `PERSONA
+You are also a skilled Vocal Synthesizer able to take a text passage, and rewrite it into a clear, natural, and human-like script. The text must be ready for a Text-to-Speech (TTS) engine. Your goal is to ensure the final output sounds like a person speaking, not a computer reading a document.`;
+
+    const userPrompt = `
+INSTRUCTIONS
+Review the 'TEXT PASSAGE' provided below. Rewrite it completely into a 'SPOKEN SCRIPT' that is easy for a user to understand when heard. The meaning and core data must be preserved, but the language should be adapted for audio delivery.
+
+RULES
+
+EXPAND ALL ABBREVIATIONS: Never use abbreviations. 'e.g.' must become 'for example'. 'i.e.' must become 'that is'.
+
+VERBALIZE SYMBOLS AND NUMBERS: Write out all symbols and numbers as spoken words. '$515k' becomes 'five hundred and fifteen thousand dollars'. '52%' becomes 'fifty-two percent'.
+
+CLARIFY TECHNICAL JARGON AND URLS: Rephrase technical terms into simpler language. 'Redfin.com' should be written as 'Redfin dot com'.
+
+ENSURE CONVERSATIONAL FLOW: The script must flow like natural conversation. Use connecting phrases and break up long, complex sentences.
+
+PRESERVE KEY INFORMATION: Do not lose or alter the critical data points. The core facts must remain intact.
+
+EXAMPLES
+
+EXAMPLE 1:
+TEXT PASSAGE: User's query re: job relocation. Balthazar: logic dictates yes, citing lower COL & job proximity. Melchior: no, citing user's prev. social integration issues. Caspar: impasse. See UI for details. Data: new home ~1.5mi from office, rent ~$2,100/mo vs. current $2,800/mo.
+SPOKEN SCRIPT: Regarding your question about relocating for the new job, we have reached an impasse and your input is needed. Balthazar advises that the move is logical, highlighting a lower cost of living and the new home's convenient location, which is only about one point five miles from the office. He also notes the rent would be around twenty-one hundred dollars a month compared to your current twenty-eight hundred. However, Melchior has raised a significant concern, advising against the move. She references the difficulties you had finding friends and social support the last time you moved. Because of these strong opposing views, we recommend you review the full deliberation in the app to make the final decision.
+
+EXAMPLE 2:
+TEXT PASSAGE: Re: West Coast cities. Analysis: Eugene, OR is a strong contender. Data: median home price ~$350k, vs. West Coast avg. of $612,233. Other options e.g., Salem, OR, have higher crime (2.5 per capita) and unemployment (~4%). Stockton, CA is cheaper ($425k) but needs more analysis.
+SPOKEN SCRIPT: I have completed the analysis on the best cities to live in on the west coast based on a lower cost of living. The city of Eugene, Oregon appears to be a strong contender. Its median home price is approximately three hundred and fifty thousand dollars, which is significantly lower than the average of six hundred and twelve thousand, two hundred and thirty-three dollars across California, Oregon, and Washington. While other options exist, for example Salem, Oregon, they currently have higher rates for crime and unemployment. Stockton, California is also more affordable at four hundred and twenty-five thousand dollars, but I will need to conduct further research to give you a complete picture.
+
+YOUR TASK: Now, rewrite this input conclusion into a spoken script.
+
+TEXT PASSAGE:\n${text}
+
+SPOKEN SCRIPT:\n`
+
+    return await this.conduit.contact(userPrompt, this.withPersonality(systemPrompt), this.config.model, this.config.options)
+  }
+  
+  /**
+   * Handles tool response execution using a switch statement
+   */
+  private async handleToolResponse(
+    tool: AgenticTool,
+    agenticResponse: AgenticResponse,
+    userMessage: string,
+    loopState: AgenticLoopState,
+    actionHistory: string[]
+  ): Promise<{ response?: string; shouldBreak: boolean }> {
+    switch (tool.name) {
+      case 'ask-user': {
+        const response = tool.parameters.question as string;
+        logger.info(`${this.name} has a clarifying question: "${response}"`);
+        return { response, shouldBreak: true };
+      }
+
+      case 'analyze-data': {
+        const analysisPrompt = this.buildAnalysisPrompt(
+          tool.parameters.focus as string,
+          tool.parameters.criteria as string || '',
+          userMessage,
+          loopState
+        );
+        
+        const analysisResult = await this.contactSimple(analysisPrompt);
+        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${analysisResult}${OBSERVATION_END_DELIMITER}\n\n`;
+        loopState.history += historyEntry;
+        
+        // Check for repetitive actions before adding to history
+        if (this.isRepetitiveAction(actionHistory, tool.name)) {
+          this.addRepetitiveActionWarning(loopState, tool.name);
+        }
+        
+        // Add action to history
+        actionHistory.push(tool.name);
+        return { shouldBreak: false };
+      }
+
+      case 'answer-user': {
+        return { response: tool.parameters.answer as string, shouldBreak: true };
+      }
+
+      default: {
+        const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
+        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${toolResponse}${OBSERVATION_END_DELIMITER}\n\n`;
+        loopState.history += historyEntry;
+        
+        // Check for repetitive actions before adding to history
+        if (this.isRepetitiveAction(actionHistory, tool.name)) {
+          this.addRepetitiveActionWarning(loopState, tool.name);
+        }
+        
+        // Add action to history
+        actionHistory.push(tool.name);
+        return { shouldBreak: false };
+      }
+    }
   }
 
   /**

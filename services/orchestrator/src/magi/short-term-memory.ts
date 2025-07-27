@@ -72,7 +72,7 @@ Message: ${memory.message}
 ---`
     ).join('\n');
 
-    const systemPrompt = `PERSONA\nYou are a helpful assistant that creates concise extractive summaries.`;
+    const systemPrompt = `PERSONA\nYou ${this.magi.name}, are a helpful assistant that creates concise extractive summaries.`;
     const summarizationPrompt = `
 INSTRUCTIONS:
 Please provide an extractive summary of the following short-term memories for context.
@@ -81,7 +81,7 @@ Keep the summary concise but comprehensive:
 
 ${memoryText}
 
-Provide a clear, organized summary that captures the essential information from these memories. No other text`;
+Provide a clear, organized summary that captures the essential information from these memories. When referring to ${this.magi.name}, that is you so speak in the first person. No other text`;
 
     try {
       const summary = await this.magi.contactSimple(summarizationPrompt, systemPrompt);
