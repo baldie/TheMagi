@@ -194,7 +194,8 @@ describe('Magi contactAsAgent', () => {
       goal: "Keep working on the task"
     };
 
-    // Mock all 13 calls explicitly: 7 decisions + 6 synthesis calls
+    // Mock all 21 calls explicitly: 11 decisions + 10 synthesis calls (since loop runs steps 1-11)
+    // Step 1: Decision only, Steps 2-11: synthesis + decision
     mockContactForJSON
       .mockResolvedValueOnce(toolResponse)     // Step 1: Decision
       .mockResolvedValueOnce(synthesisResponse) // Step 2: Synthesis
@@ -208,15 +209,23 @@ describe('Magi contactAsAgent', () => {
       .mockResolvedValueOnce(synthesisResponse) // Step 6: Synthesis
       .mockResolvedValueOnce(toolResponse)     // Step 6: Decision
       .mockResolvedValueOnce(synthesisResponse) // Step 7: Synthesis
-      .mockResolvedValueOnce(toolResponse);    // Step 7: Decision
+      .mockResolvedValueOnce(toolResponse)     // Step 7: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 8: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 8: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 9: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 9: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 10: Synthesis
+      .mockResolvedValueOnce(toolResponse)     // Step 10: Decision
+      .mockResolvedValueOnce(synthesisResponse) // Step 11: Synthesis
+      .mockResolvedValueOnce(toolResponse);    // Step 11: Decision
     
     mockExecuteAgenticTool.mockResolvedValue("Tool executed");
 
     const result = await magi.contactAsAgent("Never ending task");
 
     expect(result).toBe("Sorry, I seem to have gotten stuck in a loop. Here is what I found:\nI have executed some tools but not found a complete answer");
-    expect(mockContactForJSON).toHaveBeenCalledTimes(13); // (MAX_STEPS - 1) * 2 - 1 = 13 (7 decisions + 6 synthesis)
-    expect(mockExecuteAgenticTool).toHaveBeenCalledTimes(7);
+    expect(mockContactForJSON).toHaveBeenCalledTimes(21); // 11 decisions + 10 synthesis calls
+    expect(mockExecuteAgenticTool).toHaveBeenCalledTimes(11); // MAX_STEPS - 1 = 11
   });
 
   it('should handle invalid JSON response', async () => {

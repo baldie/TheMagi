@@ -58,7 +58,7 @@ export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country
 export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   'tavily-search': {
     name: 'tavily-search',
-    description: 'Search the web using Tavily API for current information',
+    description: 'Search the web for current information',
     category: ToolCategory.WEB_SEARCH,
     defaults: {
       search_depth: 'basic',
@@ -66,7 +66,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     },
     responseType: 'WebSearchResponse',
     instructions: `query (required): The search query string
-auto_parameters: Auto-configure search parameters (boolean, default: false)
+auto_parameters: false
 topic: Search category "general" or "news" (string, default: "general")
 max_results: Maximum results to return 0-10 (number, default: 5)
 include_answer: Include LLM-generated answer (boolean, default: false)`
@@ -74,14 +74,15 @@ include_answer: Include LLM-generated answer (boolean, default: false)`
 
   'tavily-extract': {
     name: 'tavily-extract',
-    description: 'Extract content from web pages using Tavily API',
+    description: 'Gets the content from web pages. Use this tool if you have URLs from a previous search.',
     category: ToolCategory.WEB_EXTRACT,
     defaults: {
       extract_depth: 'basic',
       raw_content_format: 'markdown'
     },
     responseType: 'WebExtractResponse',
-    instructions: `urls (required): URL or array of URLs to extract content from (3 max).
+    instructions: `urls (required): URL or array of URLs to extract content from (3 URLS MAXIMUM)
+topic: 'general' or 'news' (string, default: 'general')
 include_images: Include extracted images (boolean, default: false)
 timeout: Request timeout in seconds (number, default: 60)`
   },

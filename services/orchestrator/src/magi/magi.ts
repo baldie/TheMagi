@@ -4,10 +4,13 @@ import { logger } from '../logger';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { MagiName } from '../types/magi-types';
-import { EXCLUDED_TOOL_PARAMS } from '../mcp/tools/tool-registry';
+import { EXCLUDED_TOOL_PARAMS, TOOL_REGISTRY } from '../mcp/tools/tool-registry';
 import { MagiErrorHandler } from './error-handler';
 import { ShortTermMemory } from './short-term-memory';
 export { MagiName };
+
+const OBSERVATION_START_DELIMITER = '<<<OBSERVATION_START>>>';
+const OBSERVATION_END_DELIMITER = '<<<OBSERVATION_END>>>';
 
 /**
  * Interface for the configuration of a single Magi persona.
@@ -36,6 +39,7 @@ interface AgenticLoopState {
   synthesis: string;
   goal: string;
   history: string;
+  warnings: string[];
 }
 
 interface StateUpdateResponse {
@@ -53,7 +57,7 @@ interface GoalObject {
 /**
  * Configuration for each Magi persona.
  */
-const MAX_STEPS = 8;
+const MAX_STEPS = 12;
 
 export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
@@ -62,29 +66,22 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     uniqueAgenticInstructions: `
 1. Update your synthesis based on the latest observation
 2. Evaluate your current goal:
-   - Is it still relevant to the user?
+   - Is it still relevant and actionable?
    - Have you learned something that changes what you should focus on?
-   - Are you getting stuck in a loop or pursuing an unproductive path?
 3. Define your next goal based on logical progression:
-   - If you just searched and found URLs: Extract content from the most relevant URLs
-   - If you just extracted content: Analyze and prepare final answer
-   - If you have enough information: Provide the final answer
-   - If you need more specific data: Search with refined query
-   - If current approach isn't working: Try a different strategy
+   - If you found URLs, your goal should be to read the content from the most relevant URLs
+   - If you have enough information, your goal should be to provide the final answer
+   - If current approach isn't working, try a different strategy
     `,
     uniqueAgenticActionPriorities: `
-1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
-2. Follow Logical Progression:
+1. Internal Analysis First: Review the CURRENT GOAL and all provided context (DATA TO PROCESS, WHAT YOU KNOW) to determine if you have sufficient information.
+2. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information if needed.
+3. Follow Logical Progression:
    - After search: Extract content from relevant URLs found
    - After extraction: Analyze and synthesize information
    - After analysis: Provide final answer
-3. Ask User: Only if the query is too vague or you need specific personal constraints that your tools cannot provide
-4. Final Answer: When you have gathered and analyzed sufficient information
-
-IMPORTANT: 
-- If you have URLs from a search, use tavily-extract to get detailed content
-- Don't repeat the same search with slight variations
-- Progress towards answering the user's question`,
+4. Ask User: Only if the query is too vague or you need specifics that your tools cannot provide
+5. Final Answer: When you have gathered and analyzed sufficient information`,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
@@ -102,8 +99,7 @@ IMPORTANT:
    - If current goal is no longer relevant: Pivot to what the user actually needs
    - If the user's message reveals personal preferences, emotional states, personal details, or other information relevant to your role, you should save this information using your tool(s). Consider choosing a category that will make it easy to find this data in the future.
    - If the user asks a question about their personal information, your plan should first retrieve the data using your tool(s).`,
-    uniqueAgenticActionPriorities: `
-1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
+    uniqueAgenticActionPriorities: `1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
 2. Ask User: Only if the query is too vague or you need specific personal constraints that your tools cannot provide
 3. Final Answer: When you have gathered sufficient information using your available resources`,
     options: { temperature: 0.6 },
@@ -121,8 +117,7 @@ IMPORTANT:
    - If current goal is still valid: Continue with the logical next step
    - If current goal is complete: Move to the next phase or provide final answer
    - If current goal is no longer relevant: Pivot to what the user actually needs`,
-    uniqueAgenticActionPriorities:  `
-1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
+    uniqueAgenticActionPriorities:  `1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
 2. Ask User: Only if the query is too vague or you need specific personal constraints that your tools cannot provide
 3. Final Answer: When you have gathered sufficient information using your available resources`,
     options: { temperature: 0.5 },
@@ -155,16 +150,38 @@ export class Magi {
     
     const tools = await this.toolUser.getAvailableTools();
     this.toolsList = tools.map(t => {
-      // Extract actual parameter names and types from JSON Schema
-      const parameters = this.toolUser.extractParameterDetails(t.inputSchema);
-      
-      // Format parameters as readable string instead of object
+      const toolDefinition = TOOL_REGISTRY[t.name];
+      if (!toolDefinition) return '';
+
+      const instructions = toolDefinition.instructions || '';
+      const parameters = instructions.split('\n')
+        .filter(line => line.trim())
+        .reduce((acc, line) => {
+          const trimmedLine = line.trim();
+          const firstColonIndex = trimmedLine.indexOf(':');
+
+          if (firstColonIndex > 0) {
+            const key = trimmedLine.substring(0, firstColonIndex).trim();
+            const value = trimmedLine.substring(firstColonIndex + 1).trim();
+            
+            const parenIndex = key.indexOf(' (');
+            if (parenIndex > 0) {
+                const name = key.substring(0, parenIndex);
+                const details = key.substring(parenIndex);
+                acc[name] = `${details} ${value}`.trim();
+            } else {
+                acc[key] = value;
+            }
+          }
+          return acc;
+        }, {} as Record<string, string>);
+
       const paramString = Object.entries(parameters)
         .filter(([name]) => !EXCLUDED_TOOL_PARAMS.has(name))
-        .map(([name, type]) => `"${name}":"${type}"`)
+        .map(([name, type]) => `"${name}":"${type.replace(/"/g, '\\"')}"`)
         .join(',');
       
-      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\nUSAGE:\n${t.instructions || 'Infer instructions based on parameter names'}`;
+      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\nUSAGE:\n${toolDefinition.instructions || 'Infer instructions based on parameter names'}`;
     }).join('\n');
   }
 
@@ -236,24 +253,54 @@ export class Magi {
   }
 
   /**
+   * Builds an analysis prompt for the analyze-data tool
+   */
+  private buildAnalysisPrompt(focus: string, criteria: string, userMessage: string, synthesis: string): string {
+    return `
+TASK: Analyze the available information with focus on: ${focus}
+${criteria ? `CRITERIA: ${criteria}` : ''}
+
+AVAILABLE INFORMATION:
+${synthesis}
+
+USER'S ORIGINAL QUESTION: ${userMessage}
+
+Provide a structured analysis addressing the user's needs. Be thorough but concise. Focus on drawing actionable conclusions from the information you already have.
+    `.trim();
+  }
+
+  /**
    * Extracts the most recent observation from the loop history
    */
-  private extractLatestObservation(history: string): string {
+  private async extractLatestObservation(history: string): Promise<string> {
     if (!history.trim()) {
       return "No previous actions taken yet.";
     }
 
-    const lastObservationIndex = history.lastIndexOf('Observation: ');
-    if (lastObservationIndex !== -1) {
-      const observationStart = lastObservationIndex;
-      const restOfHistory = history.substring(observationStart);
-      const observationParts = restOfHistory.split('\n\n');
-      const observation = observationParts[0] || "No observation found.";
-      logger.debug(`${this.name} extracted observation: ${observation}`);
-      return observation;
+    const lastObservationStartIndex = history.lastIndexOf(OBSERVATION_START_DELIMITER);
+    if (lastObservationStartIndex === -1) {
+      return "Previous actions taken but no observation found.";
+    }
+
+    const lastObservationEndIndex = history.lastIndexOf(OBSERVATION_END_DELIMITER);
+    if (lastObservationEndIndex === -1 || lastObservationEndIndex < lastObservationStartIndex) {
+        // This case should not happen if delimiters are used correctly
+        return "Could not find end of last observation.";
     }
     
-    return "Previous actions taken but no observation found.";
+    const observationStart = lastObservationStartIndex + OBSERVATION_START_DELIMITER.length;
+    let observation = history.substring(observationStart, lastObservationEndIndex);
+    
+    // Add length limits and summarization
+    const MAX_OBSERVATION_LENGTH = 10000;
+    if (observation.length > MAX_OBSERVATION_LENGTH) {
+      logger.warn(`${this.name} observation is too long (${observation.length} chars), summarizing...`);
+      const summaryPrompt = `Summarize the following text in a few sentences and only respond with the summary:\n\n${observation}`;
+      const summary = await this.contactSimple(summaryPrompt, 'You are a summarization assistant.');
+      return `[Summarized]: ${summary}`;
+    }
+
+    return observation;
   }
 
   /**
@@ -264,20 +311,19 @@ export class Magi {
     userMessage: string, 
     actionHistory: string[]
   ): Promise<void> {
-    const observation = this.extractLatestObservation(loopState.history);
+    const observation = await this.extractLatestObservation(loopState.history);
     
     const systemInstructionsPrompt = `
 Your job is to synthesize information and define the next goal for yourself.
 
 INSTRUCTIONS:
 ${this.config.uniqueAgenticInstructions}
-
 TASK:
 Review all information to update the "synthesis" of what you know.
 Define the single next "goal" based on your evaluation.
 Format response as a single JSON object with no other text.
 
-Example format:
+EXAMPLE FORMAT:
 \`\`\`json
 {
   "synthesis": "Updated summary of what you now know...",
@@ -332,7 +378,7 @@ Latest User Message: "${userMessage}"
    */
   private addRepetitiveActionWarning(loopState: AgenticLoopState, toolName: string): void {
     logger.warn(`${this.name} detected repetitive use of ${toolName} - forcing progression`);
-    loopState.synthesis += `\n\nWARNING: You have used ${toolName} three times in a row. You must progress to a different action type.`;
+    loopState.warnings.push(`You have used the '${toolName}' tool three times in a row. You MUST use a different tool or provide a final answer now. Do not use '${toolName}' again.`);
   }
 
   /**
@@ -344,16 +390,24 @@ Latest User Message: "${userMessage}"
     workingMemory: string,
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
-    const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }';
+    const observation = await this.extractLatestObservation(loopState.history);
+    const toolsWithClarification = this.toolsList + '\n- { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }\n- { "tool": { "name": "analyze-data", "description": "Process and analyze available information to draw conclusions and insights", "parameters": {"focus":"string (required) - What aspect to analyze (e.g., \'cost comparison\', \'safety ranking\', \'best options\')","criteria":"string (optional) - Any specific constraints or requirements"} } }\nUSAGE:\nfocus (required): What aspect to analyze - cost comparison, safety ranking, best options, trend analysis\ncriteria (optional): Specific constraints or requirements to apply';
+
+    const warnings = loopState.warnings.join('\n');
+    if (warnings) {
+        loopState.warnings = []; // Clear warnings after use
+    }
 
     const systemPrompt = `
-Your job is to decide the single next step to achieve your current goal. Think step by step.
+Your immediate task is to decide the single next step to achieve your current goal. Think step by step.
 
-Available tools:
+${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}AVAILABLE TOOLS:
 ${toolsWithClarification}
 
-ACTION PRIORITIES:
-${this.config.uniqueAgenticActionPriorities}
+DATA TO PROCESS:
+${observation}
+
+ACTION PRIORITIES:${this.config.uniqueAgenticActionPriorities}
 
 Format your response as JSON only:
 
@@ -361,7 +415,7 @@ Example for a tool call:
 \`\`\`json
 {
   "thought": "I will use a tool to get information.",
-  "action": { "tool": { "name": "tool-name", "parameters": { "query": "..." } } }
+  "action": { "tool": { "name": "<TOOL_NAME>", "parameters": { "<TOOL_PARAMETER_NAME>": "<TOOL_PARAMETER_VALUE>" } } }
 }
 \`\`\`
 
@@ -369,7 +423,7 @@ Example for asking the user a question:
 \`\`\`json
 {
   "thought": "I cannot proceed without knowing the user's budget.",
-  "action": { "tool": { "name": "ask-user", "parameters": { "question": "What is your budget for this project?" } } }
+"action": { "tool": { "name": "ask-user", "parameters": { "question": "<QUESTION_TO_ASK>" } } }
 }
 \`\`\`
 
@@ -377,7 +431,7 @@ Example for a final answer:
 \`\`\`json
 {
   "thought": "I have all the information needed.",
-  "action": { "finalAnswer": "Here is the final answer..." }
+  "action": { "finalAnswer": "<FINAL_ANSWER>" }
 }
 \`\`\`
 `.trim();
@@ -385,14 +439,15 @@ Example for a final answer:
     const reasonPrompt = `
 ${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
 
+NOTE: Your goal is in reference to the user's latest message:
+"${userMessage}"
+
 CURRENT GOAL:
 ${loopState.goal}
 
 WHAT YOU KNOW:
 ${loopState.synthesis}
 
-USER'S LATEST MESSAGE:
-"${userMessage}"
 `.trim();
 
     let agenticResponse: AgenticResponse;
@@ -413,9 +468,28 @@ USER'S LATEST MESSAGE:
         const response = tool.parameters.question as string;
         logger.info(`${this.name} has a clarifying question: "${response}"`);
         return { response, shouldBreak: true };
+      } else if (tool.name === 'analyze-data') {
+        const analysisPrompt = this.buildAnalysisPrompt(
+          tool.parameters.focus as string,
+          tool.parameters.criteria as string || '',
+          userMessage,
+          loopState.synthesis
+        );
+        
+        const analysisResult = await this.contactSimple(analysisPrompt);
+        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${analysisResult}${OBSERVATION_END_DELIMITER}\n\n`;
+        loopState.history += historyEntry;
+        
+        // Check for repetitive actions before adding to history
+        if (this.isRepetitiveAction(actionHistory, tool.name)) {
+          this.addRepetitiveActionWarning(loopState, tool.name);
+        }
+        
+        // Add action to history
+        actionHistory.push(tool.name);
       } else {
         const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
-        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${toolResponse}\n\n`;
+        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${toolResponse}${OBSERVATION_END_DELIMITER}\n\n`;
         loopState.history += historyEntry;
         
         // Check for repetitive actions before adding to history
@@ -445,7 +519,8 @@ USER'S LATEST MESSAGE:
       const loopState: AgenticLoopState = {
         synthesis: "Nothing is known yet.",
         goal: "Formulate a plan to address the user's message.",
-        history: ""
+        history: "",
+        warnings: []
       };
       const actionHistory: string[] = [];
 

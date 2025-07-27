@@ -24,106 +24,32 @@ interface JsonSchema {
 }
 
 /**
- * First-pass prompt to isolate the main body of content from a raw, markdown-formatted webpage extract.
- * Its only job is to remove in-content promotional material, unrelated article links, and other boilerplate.
+ * A single prompt that takes the raw text from a webpage, and extracts the content that is relevant to the user's original query
  */
-export function getCoreContentPrompt(rawToolResponse: string): string {
+export function getRelevantContentFromRawText(userMessage: string, rawToolResponse: string): string {
   return `
-  PERSONA:
-  You are an expert content extraction AI. Your specialty is parsing pre-processed text from webpages to distinguish the primary content (like an article) from surrounding promotional text, boilerplate, and unrelated links, even when they are mixed together.
+  INSTRUCTIONS
+  - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
+  - Extract Verbatim: Pull out the main content's text exactly as it is, preserving all original sentences, paragraphs, and their order. Do not summarize or add any text.
 
-  INSTRUCTIONS:
-  1.  Analyze the RAW TEXT provided below.
-  2.  Your sole mission is to identify and extract the main, primary article or content.
-  3.  DELETE any text that is promotional, an advertisement, or a call-to-action for a different service (e.g., text about a moving company in an article about cities).
-  4.  DELETE lists of "Recent Posts," "Related Articles," or similar sections.
-  5.  DELETE social media links and contact information that is not part of the core content.
-  6.  DO NOT summarize, edit, or alter the main content. Preserve its original wording and paragraphs.
-  7.  Respond ONLY with the cleaned main content.
+  EXCLUSION CRITERIA
+  You MUST remove all of the following non-essential elements:
+  - Promotional Content: Advertisements, sponsored links, affiliate marketing, and calls-to-action (e.g., "Sign up," "Download our guide").
+  - Website Navigation: Headers, footers, sidebars, menus, and breadcrumbs.
+  - Related Links: Lists or grids of "Related Articles," "Recent Posts," "Popular Stories," or "You might also like."
+  - Metadata and Threading: Author bios, user signatures, post dates, comment sections, and any replies or comments that follow the main post.
+  - Off-topic Text: Any content that is not directly part of the main content's central topic.
 
-  EXAMPLE:
-  ---
-  RAW TEXT:
-  "**The Best Cities to Live in on the East Coast**
+  OUTPUT
+  Respond ONLY with the cleaned text
 
-  Are you considering moving to the East Coast? With its rich history, diverse culture, and exciting lifestyle, it's no wonder why many people make this region their home. But with so many great cities to choose from, which one is right for you?
+  USER'S TOPIC/QUESTION:
+  "${userMessage}"
 
-  Here are some of the best cities to live in on the East Coast:
-
-  1. **New York City**: The Big Apple offers an unparalleled urban experience, with world-class museums, restaurants, and entertainment options.
-  2. **Washington D.C.**: Our nation's capital is a hub of politics, culture, and history, with plenty of opportunities for career advancement and personal growth.
-  3. **Boston**: Known for its prestigious universities and rich history, Boston is a great place to live for students and professionals alike.
-  4. **Orlando**: With its theme parks, beautiful beaches, and vibrant nightlife, Orlando is a top destination for families and young adults.
-  5. **Jacksonville**: This affordable city on the Atlantic coast offers a relaxed lifestyle, with plenty of outdoor activities and cultural attractions.
-
-  **Why Choose Georgetown Moving?**
-
-  At Georgetown Moving, we understand the importance of making your move as stress-free as possible. That's why we offer:
-
-  * **Affordable prices**: We strive to provide the best value for our customers without sacrificing quality.
-  * **Professional crews**: Our team is dedicated to delivering a smooth and efficient moving experience.
-  * **State-of-the-art equipment**: We use only the latest technology to ensure your belongings are handled with care.
-
-  **Get a Free Estimate Today!**
-
-  Ready to start planning your move? Contact us online or call (703) 889-8899 to learn more about our services, including storage solutions. Don't wait – get a free estimate today and take the first step towards making your East Coast dream a reality!
-
-  **Recent Posts**
-
-  * **How to Prepare for a Stress-Free Local Move in Washington, D.C.**
-  * **Long-Distance Moves Made Easy: How to Prepare and What to Expect**
-  * **The Ultimate Guide To Stress-Free Moving: Tips And Tricks For A Smooth Transition**
-
-  **Get Social!**
-
-  Follow us on social media to stay up-to-date on the latest moving tips and trends:
-
-  * [Facebook](https://www.facebook.com/georgetownmoving)
-  * [Instagram](https://www.instagram.com/georgetownmoving)
-  * [Twitter](https://twitter.com/georgetownmoving)"
-
-  CLEANED CORE CONTENT:
-  "**The Best Cities to Live in on the East Coast**
-
-  Are you considering moving to the East Coast? With its rich history, diverse culture, and exciting lifestyle, it's no wonder why many people make this region their home. But with so many great cities to choose from, which one is right for you?
-
-  Here are some of the best cities to live in on the East Coast:
-
-  1. **New York City**: The Big Apple offers an unparalleled urban experience, with world-class museums, restaurants, and entertainment options.
-  2. **Washington D.C.**: Our nation's capital is a hub of politics, culture, and history, with plenty of opportunities for career advancement and personal growth.
-  3. **Boston**: Known for its prestigious universities and rich history, Boston is a great place to live for students and professionals alike.
-  4. **Orlando**: With its theme parks, beautiful beaches, and vibrant nightlife, Orlando is a top destination for families and young adults.
-  5. **Jacksonville**: This affordable city on the Atlantic coast offers a relaxed lifestyle, with plenty of outdoor activities and cultural attractions."
-  ---
-
-  Now, perform this task on the following text.
+  Now, perform this task on the following raw text.
 
   RAW TEXT:
   ${rawToolResponse}
-  `
-}
-
-/**
- * Second-pass prompt that takes the *cleaned* content and extracts
- * only the text relevant to the user's original query.
- */
-export function getRelevantExtractFromCoreContentPrompt(userMessage: string, coreContent: string): string {
-  return `
-  PERSONA:
-  You are a research assistant AI. You are adept at reading a body of text and extracting the specific passages that are directly relevant to a topic or question.
-
-  CONTEXT:
-  Consider the following topic/question: "${userMessage}"
-
-  INSTRUCTIONS:
-  I will now share with you a body of text. Your job is to extract only the sentences and paragraphs that are directly associated with the topic/question.
-  -   Do not summarize the text; return it verbatim.
-  -   Filter out any parts of the text that are off-topic.
-  -   If multiple passages are relevant, include them all in the order they appeared.
-  -   Only respond with the resulting relevant text.
-
-  BODY OF TEXT:
-  ${coreContent}
   `
 }
 
@@ -162,13 +88,21 @@ export class ToolUser {
     try {
       // Initialize MCP client manager if needed
       await mcpClientManager.initialize();
+
+      if (toolName == 'tavily-search' || toolName == 'tavily-extract') {
+        toolArguments.exclude_domains = ["youtube.com"];
+      }
       
       // Execute the tool with Magi-determined arguments
       const toolResult = await mcpClientManager.executeTool(this.magi.name, toolName, toolArguments);
       
       // Extract the text from the typed response object
       const toolResponse = this.extractToolOutput(toolResult);
-      logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n🛠️🛠️🛠️`);
+      
+      if (toolName != 'tavily-extract'){
+        logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n🛠️🛠️🛠️`);
+      }
+      
       return toolResponse;
     } catch (error) {
       return MagiErrorHandler.handleToolError(error, {
@@ -240,14 +174,18 @@ export class ToolUser {
       output += `Answer: ${response.answer}\n\n`;
     }
     
-    output += `Found ${response.results.length} result(s):\n\n`;
+    output += `Found ${response.results.length} result(s):\n`;
+    const MAX_CONTENT_LENGTH = 5000;
+
     response.results.forEach((result, index) => {
+      let content = result.content || result.raw_content || '';
+      if (content.length > MAX_CONTENT_LENGTH) {
+        content = content.substring(0, MAX_CONTENT_LENGTH) + '...';
+      }
+
       output += `${index + 1}. ${result.title}\n`;
       output += `   URL: ${result.url}\n`;
-      output += `   Score: ${result.score}\n`;
-      output += `   Content: ${result.content}\n`;
-      output += `   Raw Content: ${result.raw_content}\n`;
-      output += '\n';
+      output += `   Content: ${content}\n`;
     });
     
     // Show auto parameters if present
@@ -262,27 +200,26 @@ export class ToolUser {
    * Format web extract response for display (Tavily extract API format)
    */
   private formatWebExtractResponse(response: WebExtractResponse): string {
-    let output = `Web Content Extraction Results (${response.response_time}s):\n\n`;
+    let output = `Web Content Extraction Results (${response.response_time}s):\n`;
     
     // Display successful extractions
     if (response.results.length > 0) {
-      output += `Successfully extracted ${response.results.length} URL(s):\n\n`;
+      output += `Successfully extracted ${response.results.length} URL(s):\n`;
       
       response.results.forEach((result, index) => {
         output += `${index + 1}. ${result.url}\n`;
         output += `   Content: ${result.raw_content}\n`;
-        output += '\n';
       });
     } else {
-      output += 'No URLs were successfully extracted.\n\n';
+      output += 'No URLs were successfully extracted.\n';
     }
     
     // Display failed extractions
     if (response.failed_results.length > 0) {
-      output += `Failed to extract ${response.failed_results.length} URL(s):\n\n`;
+      output += `Failed to extract ${response.failed_results.length} URL(s):\n`;
       response.failed_results.forEach((failed, index) => {
         output += `${index + 1}. ${failed.url}\n`;
-        output += `   Error: ${failed.error}\n\n`;
+        output += `   Error: ${failed.error}\n`;
       });
     }
     
@@ -293,7 +230,7 @@ export class ToolUser {
    * Format smart home response for display
    */
   private formatSmartHomeResponse(response: SmartHomeResponse): string {
-    let output = `Smart Home Status (${response.timestamp}):\n\n`;
+    let output = `Smart Home Status (${response.timestamp}):\n`;
     
     response.devices.forEach((device, index) => {
       output += `${index + 1}. ${device.name} (${device.type})\n`;
@@ -302,7 +239,6 @@ export class ToolUser {
       if (device.data) {
         output += `   Data: ${JSON.stringify(device.data, null, 2)}\n`;
       }
-      output += '\n';
     });
     
     return output;
@@ -383,13 +319,8 @@ export class ToolUser {
 
     // Web pages can have a lot of noise that throw off the magi, so lets clean it
     if (tool.name == 'tavily-extract'){
-      logger.debug(`☑️☑️☑️Raw web-extract retreived:\n${toolResponse}`);
-      const contentOnlyPrompt = getCoreContentPrompt(toolResponse);
-      toolResponse = await this.magi.contactSimple(contentOnlyPrompt);
-      logger.debug(`☑️☑️☑️Content reduced to:\n${toolResponse}`);
-      const relevantTextOnlyPrompt = getRelevantExtractFromCoreContentPrompt(userMessage, toolResponse);
-      toolResponse = await this.magi.contactSimple(relevantTextOnlyPrompt);
-      logger.debug(`☑️☑️☑️Further refined for relevancy:\n${toolResponse}`);
+      const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolResponse);
+      toolResponse = await this.magi.contactSimple(relevantContentPrompt, "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.");
     }
 
     // Summarize the data we recieved back in human readable form.

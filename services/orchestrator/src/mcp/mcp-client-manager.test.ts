@@ -151,7 +151,7 @@ describe('McpClientManager', () => {
               query: { type: 'string' }
             }
           },
-          instructions: 'query (required): The search query string\nauto_parameters: Auto-configure search parameters (boolean, default: false)\ntopic: Search category "general" or "news" (string, default: "general")\nmax_results: Maximum results to return 0-10 (number, default: 5)\ninclude_answer: Include LLM-generated answer (boolean, default: false)'
+          instructions: 'query (required): The search query string\nauto_parameters: false\ntopic: Search category "general" or "news" (string, default: "general")\nmax_results: Maximum results to return 0-10 (number, default: 5)\ninclude_answer: Include LLM-generated answer (boolean, default: false)'
         },
         {
           name: 'tavily-extract',
@@ -162,7 +162,7 @@ describe('McpClientManager', () => {
               urls: { type: 'array' }
             }
           },
-          instructions: 'urls (required): URL or array of URLs to extract content from (3 max).\ninclude_images: Include extracted images (boolean, default: false)\ntimeout: Request timeout in seconds (number, default: 60)'
+          instructions: 'urls (required): URL or array of URLs to extract content from (3 URLS MAXIMUM)\ntopic: \'general\' or \'news\' (string, default: \'general\')\ninclude_images: Include extracted images (boolean, default: false)\ntimeout: Request timeout in seconds (number, default: 60)'
         }
       ]);
     });
