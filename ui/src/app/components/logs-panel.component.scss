@@ -1,0 +1,143 @@
+.advanced-panel {
+  width: 100%;
+  background: rgba(255, 165, 0, 0.1);
+  border: 1px solid #ffa500;
+  padding: 10px;
+  overflow: hidden;
+  opacity: 0;
+  height: 0;
+  transition: all 0.3s ease-out;
+  box-sizing: border-box;
+  
+  &.visible {
+    opacity: 1;
+    height: 100%;
+  }
+  
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+
+  h3 {
+    margin: 0;
+    color: #ffa500;
+    font-size: 0.9rem;
+  }
+  
+  .logs-container {
+    height: calc(100% - 25px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #ffa500 rgba(255, 165, 0, 0.2);
+    
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: rgba(255, 165, 0, 0.1);
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #ffa500;
+      border-radius: 3px;
+    }
+    
+    &::-webkit-scrollbar-thumb:hover {
+      background: #ffb732;
+    }
+  }
+
+  .log-row {
+    color: #ddd;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &:hover {
+      background-color: rgba(255, 165, 0, 0.1);
+      border-left-color: rgba(255, 165, 0, 0.3);
+    }
+
+    &.selected {
+      background-color: rgba(255, 165, 0, 0.2);
+      border-left-color: #ffa500;
+      color: #fff;
+    }
+
+    .log-time {
+      color: #888;
+      font-size: 0.75rem;
+      min-width: 100px;
+      flex-shrink: 0;
+    }
+
+    .log-level {
+      font-weight: bold;
+      font-size: 0.7rem;
+      min-width: 50px;
+      text-align: center;
+      padding: 1px 4px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .log-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    // Log type specific styles
+    &.log-type-info {
+      .log-level {
+        background-color: rgba(0, 170, 255, 0.3);
+        color: #00aaff;
+      }
+    }
+
+    &.log-type-debug {
+      .log-level {
+        background-color: rgba(128, 128, 128, 0.3);
+        color: #888;
+      }
+    }
+
+    &.log-type-warn {
+      .log-level {
+        background-color: rgba(255, 193, 7, 0.3);
+        color: #ffc107;
+      }
+    }
+
+    &.log-type-error {
+      .log-level {
+        background-color: rgba(220, 53, 69, 0.3);
+        color: #dc3545;
+      }
+    }
+  }
+}
+
+.clear-logs-btn {
+  background: transparent;
+  border: 1px solid #ffa500;
+  color: #ffa500;
+  padding: 2px 8px;
+  font-family: 'Courier New', Courier, monospace;
+  cursor: pointer;
+  font-size: 0.7rem;
+  &:hover {
+    background: rgba(255, 165, 0, 0.2);
+  }
+}

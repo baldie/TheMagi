@@ -1,4 +1,4 @@
-<div class="magi-container" [class.expanded]="displayLogs">
+<div class="magi-container" [class.expanded]="displayLogs" [class.with-detail-panel]="showLogDetail">
   <svg [attr.viewBox]="'0 0 1200 ' + (displayLogs ? '1200' : '800')" preserveAspectRatio="xMidYMid meet">
     <!-- Defs for patterns and gradients -->
     <defs>
@@ -78,18 +78,20 @@
 
     <!-- Logs Panel -->
     <foreignObject x="100" [attr.y]="displayLogs ? '710' : '710'" width="1000" [attr.height]="displayLogs ? '450' : '150'">
-      <div class="advanced-panel" [class.visible]="displayLogs">
-        <div class="panel-header">
-          <h3>Server Logs</h3>
-          <button class="clear-logs-btn" (click)="clearLogs()">Clear Logs</button>
-        </div>
-        <div class="logs-container" 
-             #logsContainer
-             (scroll)="onLogsScroll($event)">
-          <pre>{{ serverLogs.join('\n') }}</pre>
-        </div>
-      </div>
+      <app-logs-panel
+        [displayLogs]="displayLogs"
+        [serverLogs]="serverLogs"
+        (clearLogsEvent)="clearLogs()"
+        (logSelected)="onLogSelected($event)">
+      </app-logs-panel>
     </foreignObject>
 
   </svg>
 </div>
+
+<!-- Log Detail Panel -->
+<app-log-detail-panel
+  [selectedLog]="selectedLogEntry"
+  [isVisible]="showLogDetail"
+  (closePanel)="closeLogDetail()">
+</app-log-detail-panel>

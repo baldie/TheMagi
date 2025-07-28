@@ -39,6 +39,8 @@ interface AgenticLoopState {
   goal: string;
   history: string;
   warnings: string[];
+  originalUserMessage: string;
+  completedSteps: string[];
 }
 
 interface StateUpdateResponse {
@@ -81,7 +83,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
    - After content extraction, analyze and synthesize the DATA TO PROCESS and WHAT YOU KNOW
    - After analysis, provide the final answer
 4. Ask User: Only if the query is too vague or you need specifics that your tools cannot provide
-5. Final Answer: When you have gathered and analyzed sufficient information`,
+5. Answer user: When you have gathered and analyzed sufficient information`,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
@@ -313,13 +315,23 @@ Provide a structured analysis addressing the user's needs. Be thorough but conci
     userMessage: string, 
     actionHistory: string[]
   ): Promise<void> {
-    const observation = await this.extractLatestObservation(loopState.history);
+    const { history, originalUserMessage, synthesis, goal, completedSteps } = loopState;
+    const observation = await this.extractLatestObservation(history);
     
     const systemInstructionsPrompt = `
-Your job is to synthesize information and define the next goal for yourself.
+Your job is to synthesize information and define the next goal for yourself. Focus on responding to the user's original message: "${loopState.originalUserMessage}"
 
 INSTRUCTIONS:
 ${this.config.uniqueAgenticInstructions}
+
+FOCUS CHECK: Before setting your next goal, ask yourself:
+- Does this goal help answer "${originalUserMessage}"?
+- Am I going down a rabbit hole that doesn't serve the user?
+- Do I have enough information to provide a useful answer?
+
+COMPLETED STEPS: ${completedSteps.join(', ') || 'None yet'}
+AVOID REPETITION: Don't repeat actions you've already completed.
+
 TASK:
 Review all information to update the "synthesis" of what you know.
 Define the single next "goal" based on your evaluation.
@@ -337,12 +349,12 @@ EXAMPLE FORMAT:
     const synthesisPrompt = `
 CONTEXT:
 What you know so far:
-${loopState.synthesis}
+${synthesis}
 
 Your previous goal was:
-${loopState.goal}
+${goal}
 
-OBSERVATION:
+YOUR LATEST FINDINGS:
 ${observation}
 
 ACTIONS TAKEN SO FAR:
@@ -396,7 +408,7 @@ Latest User Message: "${userMessage}"
     const toolsWithClarification = this.toolsList + `
 - { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }
 - { "tool": { "name": "analyze-data", "description": "Process and analyze available information to draw conclusions and insights", "parameters": {"focus":"string (required) - What aspect to analyze (e.g., 'cost comparison', 'safety ranking', 'best options')","criteria":"string (optional) - Any specific constraints or requirements"} } }\n  USAGE:\n  focus (required): What aspect to analyze - cost comparison, safety ranking, best options, trend analysis\n  criteria (optional): Specific constraints or requirements to apply
-- { "tool": { "name": "answer-user", "description": "Answer the user with the results you have synthesized.", "parameters": { "answer": "string (required) - The final answer to provide to the user. This should be in conversatonal tone."} } }`;
+- { "tool": { "name": "answer-user", "description": "Answer the user with the results you have synthesized, or directly if it is a simple inquiry.", "parameters": { "answer": "string (required) - The final answer to provide to the user. This should be in conversatonal tone."} } }`;
 
     const warnings = loopState.warnings.join('\n');
     if (warnings) {
@@ -444,15 +456,17 @@ Example for a final answer:
     const reasonPrompt = `
 ${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
 
-NOTE: Your goal is in reference to the user's latest message:
-"${userMessage}"
-
-CURRENT GOAL:
-${loopState.goal}
-
 WHAT YOU KNOW:
 ${loopState.synthesis}
 
+ORIGINAL USER MESSAGE: "${loopState.originalUserMessage}"
+FOCUS: Ensure your goal moves you closer to a response to this message.
+
+ACTIONS TAKEN: ${actionHistory.join(' → ') || 'None yet'}
+COMPLETED STEPS: ${loopState.completedSteps.join(', ') || 'None yet'}
+
+CURRENT GOAL:
+${loopState.goal}
 `.trim();
 
     let agenticResponse: AgenticResponse;
@@ -486,7 +500,9 @@ ${loopState.synthesis}
         synthesis: "Nothing is known yet.",
         goal: "Formulate a plan to address the user's message.",
         history: "",
-        warnings: []
+        warnings: [],
+        originalUserMessage: userMessage,
+        completedSteps: []
       };
       const actionHistory: string[] = [];
 
@@ -526,7 +542,7 @@ ${loopState.synthesis}
         operation: 'agentic loop'
       });
     }
-    
+
     const finalResponse = await this.makeTTSReady(response);
     logger.debug(`\n🤖🤖🤖 Final response:\n${finalResponse}\n🤖🤖🤖\n`);
     return finalResponse;
@@ -627,6 +643,13 @@ SPOKEN SCRIPT:\n`
         
         // Add action to history
         actionHistory.push(tool.name);
+        
+        // Track completed steps to avoid repetition
+        const stepDescription = `${tool.name}: ${JSON.stringify(tool.parameters)}`;
+        if (!loopState.completedSteps.includes(stepDescription)) {
+          loopState.completedSteps.push(stepDescription);
+        }
+        
         return { shouldBreak: false };
       }
     }

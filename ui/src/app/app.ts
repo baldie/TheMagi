@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { WebsocketService } from './websocket.service';
 import { AudioService } from './audio.service';
@@ -9,6 +9,8 @@ import { FormsModule } from '@angular/forms';
 import { BalthasarComponent } from './components/balthasar.component';
 import { CasperComponent } from './components/casper.component';
 import { MelchiorComponent } from './components/melchior.component';
+import { LogsPanelComponent, LogEntry } from './components/logs-panel.component';
+import { LogDetailPanelComponent } from './components/log-detail-panel.component';
 
 const DO_NOT_START_MAGI = false;
 
@@ -17,20 +19,19 @@ const DO_NOT_START_MAGI = false;
   templateUrl: './app.html',
   styleUrls: ['./app.css'],
   standalone: true,
-  imports: [CommonModule, FormsModule, BalthasarComponent, CasperComponent, MelchiorComponent]
+  imports: [CommonModule, FormsModule, BalthasarComponent, CasperComponent, MelchiorComponent, LogsPanelComponent, LogDetailPanelComponent]
 })
 
-export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
-  @ViewChild('logsContainer') logsContainer!: ElementRef<HTMLDivElement>;
+export class AppComponent implements OnInit, OnDestroy {
   
   balthasarStatus: MagiStatus = 'offline';
   casperStatus: MagiStatus = 'offline';
   melchiorStatus: MagiStatus = 'offline';
   displayLogs = false;
   isMagiStarting = false;
-  private isUserScrolling = false;
-  private shouldAutoScroll = true;
-  serverLogs: string[] = [];
+  serverLogs: LogEntry[] = [];
+  selectedLogEntry: LogEntry | null = null;
+  showLogDetail = false;
   userInquiry = '';
   isOrchestratorAvailable = false;
   orchestratorStatus: 'available' | 'busy' | 'error' = 'error';
@@ -45,13 +46,13 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   ngOnInit(): void {
     // Subscribe to all WebSocket service observables
     this.subscriptions.add(this.websocketService.isProcessRunning$.subscribe(isRunning => this.isMagiStarting = isRunning));
-    this.subscriptions.add(this.websocketService.logs$.subscribe(log => this.serverLogs.push(log)));
+    this.subscriptions.add(this.websocketService.logs$.subscribe(log => this.serverLogs.push(this.createLogEntry(log))));
     this.subscriptions.add(this.websocketService.audio$.subscribe(audioMessage => this.audioService.playAudioMessage(audioMessage)));
     this.subscriptions.add(timer(0, 5000).subscribe(() => this.performHealthCheck()));
   }
 
   private connectWebSocket(): void {
-    this.serverLogs.push('[CLIENT] Initiating WebSocket connection to Orchestrator...');
+    this.serverLogs.push(this.createLogEntry('[CLIENT] Initiating WebSocket connection to Orchestrator...'));
     this.websocketService.startConnecting(DO_NOT_START_MAGI);
   }
 
@@ -71,14 +72,14 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  private updateHealthStatusOnError(error: any): void {
+  private updateHealthStatusOnError(error: Error): void {
     // Set everything to offline/error state
     this.isOrchestratorAvailable = false;
     this.orchestratorStatus = 'error';
     this.balthasarStatus = this.casperStatus = this.melchiorStatus = 'offline';
     
     this.websocketService.disconnect();
-    this.serverLogs.push(`[CLIENT] Orchestrator health check failed: ${error.message || 'Unknown error'}`);
+    this.serverLogs.push(this.createLogEntry(`[CLIENT] Orchestrator health check failed: ${error.message || 'Unknown error'}`));
   }
 
   private handleWebSocketConnection(): void {
@@ -110,7 +111,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
   async startMagi(): Promise<void> {
     // Check if orchestrator is available
     if (!this.isOrchestratorAvailable) {
-      this.serverLogs.push('[CLIENT] Cannot start Magi: Orchestrator is not available');
+      this.serverLogs.push(this.createLogEntry('[CLIENT] Cannot start Magi: Orchestrator is not available'));
       return;
     }
     
@@ -125,7 +126,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.audioService.resetAudioQueue();
     
     this.isMagiStarting = true;
-    this.serverLogs.push(`[CLIENT] Starting Magi with inquiry: ${this.userInquiry || 'none'}`);
+    this.serverLogs.push(this.createLogEntry(`[CLIENT] Starting Magi with inquiry: ${this.userInquiry || 'none'}`));
     this.websocketService.startConnecting(true, this.userInquiry);
     this.userInquiry = ''; // Clear the input field
     
@@ -139,45 +140,62 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   toggleDisplayLogs() {
     this.displayLogs = !this.displayLogs;
+    // Close log detail panel when hiding logs
+    if (!this.displayLogs) {
+      this.closeLogDetail();
+    }
+  }
+
+  onLogSelected(log: LogEntry) {
+    this.selectedLogEntry = log;
+    this.showLogDetail = true;
+  }
+
+  closeLogDetail() {
+    this.selectedLogEntry = null;
+    this.showLogDetail = false;
   }
 
   clearLogs() {
     this.serverLogs = [];
   }
 
-  ngAfterViewChecked() {
-    if (this.shouldAutoScroll && this.displayLogs && this.logsContainer) {
-      this.scrollToBottom();
+  private createLogEntry(message: string): LogEntry {
+    // Extract log level from message if present
+    let logType: 'INFO' | 'DEBUG' | 'ERROR' | 'WARN' = 'INFO';
+    
+    if (message.includes('[ERROR]') || message.toLowerCase().includes('error')) {
+      logType = 'ERROR';
+    } else if (message.includes('[WARN]') || message.toLowerCase().includes('warn')) {
+      logType = 'WARN';
+    } else if (message.includes('[DEBUG]') || message.toLowerCase().includes('debug')) {
+      logType = 'DEBUG';
     }
-  }
 
-  onLogsScroll(event: Event) {
-    if (!this.logsContainer) return;
+    // Clean the message by removing timestamp and log level markers
+    let cleanMessage = message;
     
-    const element = this.logsContainer.nativeElement;
-    const tolerance = 10; // Allow small tolerance for scroll position
+    // Remove ISO timestamp pattern [2025-07-28T02:22:48.764Z]
+    cleanMessage = cleanMessage.replace(/^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\]\s*/, '');
     
-    // Check if user is near the bottom
-    const isNearBottom = element.scrollTop + element.clientHeight >= element.scrollHeight - tolerance;
+    // Remove other common timestamp patterns (e.g., "2024-01-01 12:34:56" or "[12:34:56]")
+    cleanMessage = cleanMessage.replace(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}[.\d]*\s*/, '');
+    cleanMessage = cleanMessage.replace(/^\[\d{2}:\d{2}:\d{2}[.\d]*\]\s*/, '');
     
-    // Enable auto-scroll if user scrolled to bottom, disable if they scrolled up
-    this.shouldAutoScroll = isNearBottom;
+    // Remove log level markers
+    cleanMessage = cleanMessage.replace(/^\[?(INFO|DEBUG|ERROR|WARN)\]?\s*:?\s*/i, '');
     
-    // Reset user scrolling flag after a delay
-    this.isUserScrolling = true;
-    setTimeout(() => {
-      this.isUserScrolling = false;
-    }, 150);
-  }
+    // Trim any remaining whitespace
+    cleanMessage = cleanMessage.trim();
 
-  private scrollToBottom() {
-    if (!this.logsContainer || this.isUserScrolling) return;
-    
-    try {
-      const element = this.logsContainer.nativeElement;
-      element.scrollTop = element.scrollHeight;
-    } catch (err) {
-      // Ignore scroll errors
-    }
+    // Create title (first 100 characters with ellipsis)
+    const title = cleanMessage.length > 100 ? cleanMessage.substring(0, 100) + '...' : cleanMessage;
+
+    return {
+      title,
+      fullText: message,
+      timeStamp: new Date(),
+      logType
+    };
   }
 }

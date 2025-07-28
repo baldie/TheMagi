@@ -1,0 +1,25 @@
+<div class="log-detail-panel" [class.visible]="isVisible">
+  <div class="panel-header">
+    <div class="log-meta" *ngIf="selectedLog">
+      <span class="log-time">{{ formatTime(selectedLog.timeStamp) }}</span>
+      <span class="log-level" [class]="'log-type-' + selectedLog.logType.toLowerCase()">
+        {{ selectedLog.logType }}
+      </span>
+    </div>
+    <button class="close-btn" (click)="onClose()" aria-label="Close panel">
+      ×
+    </button>
+  </div>
+  
+  <div class="panel-content" *ngIf="selectedLog">
+    <div class="log-title-section">
+      <h3>Log Entry</h3>
+      <div class="log-title">{{ selectedLog.title }}</div>
+    </div>
+    
+    <div class="log-fulltext-section">
+      <h4>Full Text</h4>
+      <pre class="log-fulltext">{{ selectedLog.fullText }}</pre>
+    </div>
+  </div>
+</div>

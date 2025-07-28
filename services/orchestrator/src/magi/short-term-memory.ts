@@ -1,6 +1,5 @@
 import { Magi } from './magi';
 import { MagiName } from '../types/magi-types';
-import { sys } from 'node_modules/typescript/lib/typescript';
 
 export interface Memory {
   scratchpad: string;

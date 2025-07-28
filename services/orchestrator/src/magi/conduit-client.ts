@@ -105,25 +105,19 @@ export class ConduitClient {
    * @returns Parsed JSON object
    */
   private parseJsonResponse(jsonResponse: string): any {
-    try {
-      // Try to extract JSON from the response if it's wrapped in markdown or other text
-      let cleanedJSON = jsonResponse.trim();
-      
-      // Remove markdown code blocks if present
-      const jsonBlockMatch = cleanedJSON.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (jsonBlockMatch) {
-        cleanedJSON = jsonBlockMatch[1].trim();
-        logger.debug(`${this.magiName} extracted JSON from code block:\n${cleanedJSON}`);
-      }
-      
-      const parsedData = JSON.parse(cleanedJSON);
-      logger.debug(`${this.magiName} successfully parsed JSON data:\n${JSON.stringify(parsedData)}`);
-      return parsedData;
-      
-    } catch (error) {
-      // Throw the error so it can be handled by the calling method
-      throw error;
+    // Try to extract JSON from the response if it's wrapped in markdown or other text
+    let cleanedJSON = jsonResponse.trim();
+    
+    // Remove markdown code blocks if present
+    const jsonBlockMatch = cleanedJSON.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonBlockMatch) {
+      cleanedJSON = jsonBlockMatch[1].trim();
+      logger.debug(`${this.magiName} extracted JSON from code block:\n${cleanedJSON}`);
     }
+    
+    const parsedData = JSON.parse(cleanedJSON);
+    logger.debug(`${this.magiName} successfully parsed JSON data:\n${JSON.stringify(parsedData)}`);
+    return parsedData;
   }
 
   /**

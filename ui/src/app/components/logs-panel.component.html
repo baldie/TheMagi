@@ -1,0 +1,19 @@
+<div class="advanced-panel" [class.visible]="displayLogs">
+  <div class="panel-header">
+    <h3>Server Logs</h3>
+    <button class="clear-logs-btn" (click)="clearLogs()">Clear Logs</button>
+  </div>
+  <div class="logs-container" 
+       #logsContainer
+       (scroll)="onLogsScroll($event)">
+    <div class="log-row" 
+         *ngFor="let log of serverLogs; let i = index"
+         [class.selected]="selectedLogIndex === i"
+         [class]="'log-type-' + log.logType.toLowerCase()"
+         (click)="selectLog(i)">
+      <span class="log-time">{{ formatTime(log.timeStamp) }}</span>
+      <span class="log-level">{{ log.logType }}</span>
+      <span class="log-title">{{ log.title }}</span>
+    </div>
+  </div>
+</div>
