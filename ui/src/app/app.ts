@@ -158,6 +158,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   clearLogs() {
     this.serverLogs = [];
+
+    if (!this.displayLogs) {
+      this.closeLogDetail();
+    }
   }
 
   private createLogEntry(message: string): LogEntry {

@@ -65,16 +65,15 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
     uniqueAgenticInstructions: `
-1. Update your synthesis based on the latest observation
-2. Evaluate your current goal:
-   - Is it still relevant and actionable?
-   - Have you learned something that changes what you should focus on?
-3. Define your next goal based on logical progression: (Search → Extract → Analyze → Answer)
-   - If you found URLs, your next goal should be to extract content from the most relevant URL(s) 3 URLs MAX
-   - If you have extracted content from URLs, your next goal should be to analyze that content
-   - If the existing research is sufficient to respond to the user's message, your next goal should be to present the analysis.
-4. - If current approach isn't working, try a different search strategy
-    `,
+1. Update your synthesis based on the latest findings.
+2. Define your next goal by following this progression:
+   A. If more info is needed, the goal is to SEARCH.
+   B. After a search, you MUST evaluate the results.
+    - IF RESULTS ARE RELEVANT: Goal is to EXTRACT from the best URL(s).
+    - IF RESULTS ARE IRRELEVANT: Goal is to perform a new, more specific SEARCH.
+   C. After extraction, your goal is to ANALYZE the collected data.
+    - IF RESULTS ARE IRRELEVANT: go back to step A.
+4. You may only perform a maximum of three consecutive searches. Check the COMPLETED STEPS to track your search count.`,
     uniqueAgenticActionPriorities: `
 1. Internal Analysis First: Review the CURRENT GOAL and all provided context (DATA TO PROCESS, WHAT YOU KNOW) to determine if you have sufficient information.
 2. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information if needed.
@@ -82,15 +81,15 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
    - After search results in URLs, extract content from relevant URLs found (3 URLs MAX)
    - After content extraction, analyze and synthesize the DATA TO PROCESS and WHAT YOU KNOW
    - After analysis, provide the final answer
-4. Ask User: Only if the query is too vague or you need specifics that your tools cannot provide
-5. Answer user: When you have gathered and analyzed sufficient information`,
+4. Ask User: Only if the query is too vague or you need specifics that your tools cannot provide.
+5. Answer user: When you have gathered and analyzed sufficient information or if the question is straightforward an doesn't require research.`,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
     uniqueAgenticInstructions: `
-1. Update your synthesis based on the latest observation
+1. Update your synthesis based on the latest findings.
 2. Evaluate your current goal:
    - Is it still relevant to the user?
    - Have you learned something that changes what you should focus on?
@@ -102,26 +101,25 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
    - If the user's message reveals personal preferences, emotional states, personal details, or other information relevant to your role, you should save this information using your tool(s). Consider choosing a category that will make it easy to find this data in the future.
    - If the user asks a question about their personal information, your plan should first retrieve the data using your tool(s).`,
     uniqueAgenticActionPriorities: `1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
-2. Ask User: Only if the query is too vague or you need specific personal constraints that your tools cannot provide
-3. Final Answer: When you have gathered sufficient information using your available resources`,
+2. Ask User: Only if the query is too vague or you need specific personal data that your tools could not provide.
+3. Answer user: When you have gathered and analyzed sufficient information OR if the question is straightforward an doesn't require research.`,
     options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
     uniqueAgenticInstructions: `
-1. Update your synthesis based on the latest observation
-2. Evaluate your current goal:
-   - Is it still relevant to the user?
-   - Have you learned something that changes what you should focus on?
-   - Are you getting stuck in a loop or pursuing an unproductive path?
-3. Define your next goal:
-   - If current goal is still valid: Continue with the logical next step
-   - If current goal is complete: Move to the next phase or provide final answer
-   - If current goal is no longer relevant: Pivot to what the user actually needs`,
-    uniqueAgenticActionPriorities:  `1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
-2. Ask User: Only if the query is too vague or you need specific personal constraints that your tools cannot provide
-3. Final Answer: When you have gathered sufficient information using your available resources`,
+1. Update your synthesis based on the latest findings.
+2. Define your next goal by following this progression:
+   - If a response to the user's message is straightforward, then your goal is to provide your answer directly.
+   - If the user's message to you requires accessing a tool (like a smart home device), your goal is to use a tool.
+   - If you've recieved information from one of your tools, then your goal is to analyze that data.
+   - If your analysis has provided you with sufficient information to address the user's message, your goal is to provide your answer.
+   - If you really need more context from the user in order to respond, your goal is to ask the user a clarifying question.
+    `,
+    uniqueAgenticActionPriorities:  `1. Use Available Tools: Leverage your tool(s) to gather relevant information.
+2. Ask User: If a clarifying question is needed, ask the user.
+3. Answer user: When you have gathered and analyzed sufficient information OR if the question is straightforward an doesn't require research.`,
     options: { temperature: 0.5 },
   },
 };
@@ -317,6 +315,11 @@ Provide a structured analysis addressing the user's needs. Be thorough but conci
   ): Promise<void> {
     const { history, originalUserMessage, synthesis, goal, completedSteps } = loopState;
     const observation = await this.extractLatestObservation(history);
+    
+    // Fix contradiction: if synthesis is still default but we have meaningful observation data
+    if (synthesis === "Nothing is known yet." && observation && observation !== "No previous actions taken yet." && observation !== "Previous actions taken but no observation found.") {
+      loopState.synthesis = `Beginning analysis based on findings from recent tool execution.`;
+    }
     
     const systemInstructionsPrompt = `
 Your job is to synthesize information and define the next goal for yourself. Focus on responding to the user's original message: "${loopState.originalUserMessage}"
@@ -579,7 +582,7 @@ EXAMPLE 2:
 TEXT PASSAGE: Re: West Coast cities. Analysis: Eugene, OR is a strong contender. Data: median home price ~$350k, vs. West Coast avg. of $612,233. Other options e.g., Salem, OR, have higher crime (2.5 per capita) and unemployment (~4%). Stockton, CA is cheaper ($425k) but needs more analysis.
 SPOKEN SCRIPT: I have completed the analysis on the best cities to live in on the west coast based on a lower cost of living. The city of Eugene, Oregon appears to be a strong contender. Its median home price is approximately three hundred and fifty thousand dollars, which is significantly lower than the average of six hundred and twelve thousand, two hundred and thirty-three dollars across California, Oregon, and Washington. While other options exist, for example Salem, Oregon, they currently have higher rates for crime and unemployment. Stockton, California is also more affordable at four hundred and twenty-five thousand dollars, but I will need to conduct further research to give you a complete picture.
 
-YOUR TASK: Now, rewrite this input conclusion into a spoken script.
+YOUR TASK: Now, rewrite this TEXT PASSAGE into a spoken script. Only respond with the spoken script.
 
 TEXT PASSAGE:\n${text}
 
