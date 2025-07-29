@@ -300,6 +300,6 @@ describe('Magi contactAsAgent', () => {
     // Check that the synthesis call includes the previous state  
     const synthesisCallArgs = mockContactForJSON.mock.calls[1][0];
     expect(synthesisCallArgs).toContain("What you know so far:");
-    expect(synthesisCallArgs).toContain("Nothing is known yet.");
+    expect(synthesisCallArgs).toContain("Just started looking into the user's message, see findings.");
   });
 });

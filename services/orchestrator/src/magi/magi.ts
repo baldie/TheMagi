@@ -18,8 +18,8 @@ const OBSERVATION_END_DELIMITER = '<<<OBSERVATION_END>>>';
 interface MagiConfig {
   model: ModelType;
   personalitySource: string;
-  uniqueAgenticInstructions: string;
-  uniqueAgenticActionPriorities: string;
+  setNewGoalPrompt: string;
+  executeGoalPrompt: string;
   options: {
     temperature: number;
   };
@@ -64,31 +64,33 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
-    uniqueAgenticInstructions: `
-1. Update your synthesis based on the latest findings.
-2. Define your next goal by following this progression:
-   A. If more info is needed, the goal is to SEARCH.
-   B. After a search, you MUST evaluate the results.
-    - IF RESULTS ARE RELEVANT: Goal is to EXTRACT from the best URL(s).
-    - IF RESULTS ARE IRRELEVANT: Goal is to perform a new, more specific SEARCH.
-   C. After extraction, your goal is to ANALYZE the collected data.
-    - IF RESULTS ARE IRRELEVANT: go back to step A.
-4. You may only perform a maximum of three consecutive searches. Check the COMPLETED STEPS to track your search count.`,
-    uniqueAgenticActionPriorities: `
-1. Internal Analysis First: Review the CURRENT GOAL and all provided context (DATA TO PROCESS, WHAT YOU KNOW) to determine if you have sufficient information.
-2. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information if needed.
-3. Follow Logical Progression:
-   - After search results in URLs, extract content from relevant URLs found (3 URLs MAX)
-   - After content extraction, analyze and synthesize the DATA TO PROCESS and WHAT YOU KNOW
-   - After analysis, provide the final answer
-4. Ask User: Only if the query is too vague or you need specifics that your tools cannot provide.
-5. Answer user: When you have gathered and analyzed sufficient information or if the question is straightforward an doesn't require research.`,
+    // This one should set the goal
+    setNewGoalPrompt: `
+SYNTHESIS INSTRUCTIONS:
+* Think about YOUR LATEST FINDINGS and "what you know so far", and synthesize it in reference to the user's original message.
+
+GOAL INSTRUCTIONS:
+* If you have sufficient information your goal must be to ANSWER the user
+* If YOUR LATEST FINDINGS are Search Results, your goal should be to EXTRACT web content from the most relevant URL
+* If you have insufficient information, your goal is to either SEARCH or ASK.
+    - If the info you need is on the web, your goal must be to SEARCH for the missing info
+    - If only the user has the info you need, your goal must be to ASK the user.
+* Your goal should include 1 of the keywords ANSWER, EXTRACT, SEARCH, or ASK`,
+    // this one should execute on the goal    
+    executeGoalPrompt: `
+Review your CURRENT GOAL to determine what tool to use.
+* ANALYZE: Use your analyze-data tool to synthesize the data from the web page content as it pertains to the user's message.
+* ANSWER USER: Use your answer-user to respond with a synthesis of WHAT YOU KNOW and FINDINGS.
+* SEARCH: Use your tavily-search tool with a relevant search query
+* EXTRACT: Use your tavily-extract tool to view the web page content for the URLs (3 max)
+* ASK: Use your ask-user tool to gather any necessary context that is needed to respond to the user's original message.
+`,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
-    uniqueAgenticInstructions: `
+    setNewGoalPrompt: `
 1. Update your synthesis based on the latest findings.
 2. Evaluate your current goal:
    - Is it still relevant to the user?
@@ -100,7 +102,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
    - If current goal is no longer relevant: Pivot to what the user actually needs
    - If the user's message reveals personal preferences, emotional states, personal details, or other information relevant to your role, you should save this information using your tool(s). Consider choosing a category that will make it easy to find this data in the future.
    - If the user asks a question about their personal information, your plan should first retrieve the data using your tool(s).`,
-    uniqueAgenticActionPriorities: `1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
+    executeGoalPrompt: `1. Use Available Tools: Leverage your unique capabilities and data access to gather relevant information
 2. Ask User: Only if the query is too vague or you need specific personal data that your tools could not provide.
 3. Answer user: When you have gathered and analyzed sufficient information OR if the question is straightforward an doesn't require research.`,
     options: { temperature: 0.6 },
@@ -108,7 +110,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Caspar]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
-    uniqueAgenticInstructions: `
+    setNewGoalPrompt: `
 1. Update your synthesis based on the latest findings.
 2. Define your next goal by following this progression:
    - If a response to the user's message is straightforward, then your goal is to provide your answer directly.
@@ -117,7 +119,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
    - If your analysis has provided you with sufficient information to address the user's message, your goal is to provide your answer.
    - If you really need more context from the user in order to respond, your goal is to ask the user a clarifying question.
     `,
-    uniqueAgenticActionPriorities:  `1. Use Available Tools: Leverage your tool(s) to gather relevant information.
+    executeGoalPrompt:  `1. Use Available Tools: Leverage your tool(s) to gather relevant information.
 2. Ask User: If a clarifying question is needed, ask the user.
 3. Answer user: When you have gathered and analyzed sufficient information OR if the question is straightforward an doesn't require research.`,
     options: { temperature: 0.5 },
@@ -310,60 +312,51 @@ Provide a structured analysis addressing the user's needs. Be thorough but conci
    */
   private async synthesizeState(
     loopState: AgenticLoopState, 
-    userMessage: string, 
-    actionHistory: string[]
+    userMessage: string
   ): Promise<void> {
     const { history, originalUserMessage, synthesis, goal, completedSteps } = loopState;
     const observation = await this.extractLatestObservation(history);
     
     // Fix contradiction: if synthesis is still default but we have meaningful observation data
-    if (synthesis === "Nothing is known yet." && observation && observation !== "No previous actions taken yet." && observation !== "Previous actions taken but no observation found.") {
-      loopState.synthesis = `Beginning analysis based on findings from recent tool execution.`;
+    if (synthesis === "Nothing is known yet." && observation) {
+      loopState.synthesis = `Just started looking into the user's message, see findings.`;
     }
     
-    const systemInstructionsPrompt = `
-Your job is to synthesize information and define the next goal for yourself. Focus on responding to the user's original message: "${loopState.originalUserMessage}"
-
-INSTRUCTIONS:
-${this.config.uniqueAgenticInstructions}
-
-FOCUS CHECK: Before setting your next goal, ask yourself:
-- Does this goal help answer "${originalUserMessage}"?
-- Am I going down a rabbit hole that doesn't serve the user?
-- Do I have enough information to provide a useful answer?
-
-COMPLETED STEPS: ${completedSteps.join(', ') || 'None yet'}
-AVOID REPETITION: Don't repeat actions you've already completed.
-
-TASK:
-Review all information to update the "synthesis" of what you know.
-Define the single next "goal" based on your evaluation.
-Format response as a single JSON object with no other text.
-
-EXAMPLE FORMAT:
-\`\`\`json
-{
-  "synthesis": "Updated summary of what you now know...",
-  "goal": "The single next goal to pursue..."
-}
-\`\`\`
-`.trim();
-
+    const systemInstructionsPrompt = `You are able to synthesize lots of information and think step by step.`;
     const synthesisPrompt = `
+Your task is to synthesize the information you've gathered so far, and define the next goal for yourself while focusing on the user's original message: "${originalUserMessage}".
+
 CONTEXT:
 What you know so far:
-${synthesis}
+${loopState.synthesis}
 
-Your previous goal was:
+Your previous goal:
 ${goal}
 
 YOUR LATEST FINDINGS:
 ${observation}
 
-ACTIONS TAKEN SO FAR:
-${actionHistory.join(' → ') || 'None yet'}
+COMPLETED STEPS: ${completedSteps.join(',\n') || 'None yet'}
+AVOID REPETITION: Only take actions that you have not yet completed.
 
-Latest User Message: "${userMessage}"
+INSTRUCTIONS:
+${this.config.setNewGoalPrompt}
+
+FOCUS CHECK: Before setting your next goal, ask yourself these two questions:
+- "Will this new goal help me respond to the user's original message?" If no, set a different goal.
+- "Do I already have enough information to provide a useful answer?" If yes, don't start a new search.
+
+Format response as a single JSON object with no other text.
+
+EXAMPLE FORMAT:
+\`\`\`json
+{
+  "synthesis": "Updated summary of what I now know...",
+  "goal": "The single next goal I will pursue..."
+}
+\`\`\`
+
+${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessage}\""}
 `.trim();
 
     try {
@@ -418,16 +411,30 @@ Latest User Message: "${userMessage}"
         loopState.warnings = []; // Clear warnings after use
     }
 
-    const systemPrompt = `
-Your immediate task is to decide the single next step to achieve your current goal. Think step by step.
+    const systemPrompt = `You are an action oriented artificial intelligence agent adept at carrying out actions.`;
+    const reasonPrompt = `
 
-${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}AVAILABLE TOOLS:
+${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
+
+WHAT YOU KNOW:
+${loopState.synthesis}
+
+ORIGINAL USER MESSAGE: "${loopState.originalUserMessage}"
+
+ACTIONS TAKEN: ${actionHistory.join(' → ') || 'None yet'}
+${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}
+
+AVAILABLE TOOLS:
 ${toolsWithClarification}
 
 DATA TO PROCESS:
 ${observation}
 
-ACTION PRIORITIES:${this.config.uniqueAgenticActionPriorities}
+YOUR CURRENT GOAL:
+${loopState.goal}
+
+INSTRUCTIONS:
+${this.config.executeGoalPrompt}
 
 Format your response as JSON only:
 
@@ -454,22 +461,6 @@ Example for a final answer:
   "action": { "tool": { "name": "answer-user", "parameters": { "answer": "<FINAL_ANSWER_TEXT>" } } }
 }
 \`\`\`
-`.trim();
-
-    const reasonPrompt = `
-${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
-
-WHAT YOU KNOW:
-${loopState.synthesis}
-
-ORIGINAL USER MESSAGE: "${loopState.originalUserMessage}"
-FOCUS: Ensure your goal moves you closer to a response to this message.
-
-ACTIONS TAKEN: ${actionHistory.join(' → ') || 'None yet'}
-COMPLETED STEPS: ${loopState.completedSteps.join(', ') || 'None yet'}
-
-CURRENT GOAL:
-${loopState.goal}
 `.trim();
 
     let agenticResponse: AgenticResponse;
@@ -512,7 +503,7 @@ ${loopState.goal}
       for (let step = 1; step < MAX_STEPS; step++) {
         // PHASE 1: SYNTHESIZE STATE
         if (step > 1) {
-          await this.synthesizeState(loopState, userMessage, actionHistory);
+          await this.synthesizeState(loopState, userMessage);
         }
 
         // PHASE 2: DECIDE ACTION

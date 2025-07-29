@@ -174,25 +174,14 @@ export class ToolUser {
     if (response.answer) {
       output += `Answer: ${response.answer}\n\n`;
     }
-    
-    output += `Found ${response.results.length} result(s):\n`;
     const MAX_CONTENT_LENGTH = 5000;
+    output += response.results[0].content;
 
-    response.results.forEach((result, index) => {
-      let content = result.content || result.raw_content || '';
-      if (content.length > MAX_CONTENT_LENGTH) {
-        content = content.substring(0, MAX_CONTENT_LENGTH) + '...';
-      }
-
-      output += `${index + 1}. ${result.title}\n`;
-      output += `   URL: ${result.url}\n`;
-      output += `   Content: ${content}\n`;
-    });
-    
-    // Show auto parameters if present
-    if (response.auto_parameters) {
-      output += `Auto Parameters: ${JSON.stringify(response.auto_parameters)}\n`;
+    if (output.length > MAX_CONTENT_LENGTH) {
+      output = output.substring(0, MAX_CONTENT_LENGTH) + '...';
     }
+
+    output = output.replace("Detailed Results:", "Search Results:");
     
     return output;
   }
