@@ -13,7 +13,8 @@ export enum ToolCategory {
   WEB_EXTRACT = 'web_extract', 
   SMART_HOME = 'smart_home',
   PERSONAL_DATA = 'personal_data',
-  ANALYSIS = 'analysis'
+  ANALYSIS = 'analysis',
+  DEFAULT_AGENTIC_TOOL = "default_agentic_tool"
 }
 
 /**
@@ -109,6 +110,33 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   categories: Array of data categories to retrieve (**REQUIRED FOR RETRIEVAL**)
   user_context: Context for the data request
   limit: Maximum results to return (number, default: 10)`
+  },
+
+  // Default agentic tools
+  'ask-user': {
+    name: 'ask-user',
+    description: 'Ask the user a clarifying question if more information is needed.',
+    category: ToolCategory.DEFAULT_AGENTIC_TOOL,
+    defaults: {},
+    responseType: 'TextResponse',
+    instructions: ` question (required): The question to ask the user.`
+  },
+  'analyze-data': {
+    name: 'analyze-data',
+    description: 'Process and analyze available information to draw conclusions and insights',
+    category: ToolCategory.DEFAULT_AGENTIC_TOOL,
+    defaults: {},
+    responseType: 'TextResponse',
+    instructions: ` focus (required): What aspect to analyze (e.g., 'cost comparison', 'safety ranking', 'best options')
+  criteria (optional): Any specific constraints or requirements`
+  },
+  'answer-user': {
+    name: 'answer-user',
+    description: 'Answer the user with the results you have synthesized, or directly if it is a simple inquiry.',
+    category: ToolCategory.DEFAULT_AGENTIC_TOOL,
+    defaults: {},
+    responseType: 'TextResponse',
+    instructions: ` answer (required): The final answer to provide to the user. This should be in conversatonal tone.`
   }
 };
 

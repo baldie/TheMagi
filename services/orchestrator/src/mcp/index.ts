@@ -241,7 +241,57 @@ export class McpClientManager {
       }
     }
     
+    // Add DEFAULT_AGENTIC_TOOL tools that don't require MCP servers
+    const myTools = getToolAssigmentsForAllMagi()[magiName];
+    const defaultAgenticTools = myTools
+      .map(toolName => TOOL_REGISTRY[toolName])
+      .filter(toolDef => toolDef?.category === 'default_agentic_tool')
+      .map(toolDef => ({
+        name: toolDef.name,
+        description: toolDef.description,
+        inputSchema: this.createInputSchemaForDefaultTool(toolDef),
+        instructions: toolDef.instructions
+      }));
+    
+    allTools.push(...defaultAgenticTools);
+    
     return allTools;
+  }
+
+  /**
+   * Create a basic input schema for default agentic tools
+   */
+  private createInputSchemaForDefaultTool(toolDef: any): Record<string, any> {
+    // Basic schema structure for default tools
+    const schema = {
+      type: 'object',
+      properties: {} as Record<string, any>,
+      required: [] as string[]
+    };
+
+    // Parse instructions to determine required parameters
+    if (toolDef.instructions) {
+      const lines = toolDef.instructions.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.includes('(required)')) {
+          const paramMatch = trimmed.match(/^\s*(\w+)\s*\(required\)/);
+          if (paramMatch) {
+            const paramName = paramMatch[1];
+            schema.properties[paramName] = { type: 'string' };
+            schema.required.push(paramName);
+          }
+        } else if (trimmed.includes('(optional)')) {
+          const paramMatch = trimmed.match(/^\s*(\w+)\s*\(optional\)/);
+          if (paramMatch) {
+            const paramName = paramMatch[1];
+            schema.properties[paramName] = { type: 'string' };
+          }
+        }
+      }
+    }
+
+    return schema;
   }
 
   /**
@@ -297,8 +347,40 @@ export class McpClientManager {
       }
     }
 
+    // Check if this is a DEFAULT_AGENTIC_TOOL that doesn't require an MCP server
+    const toolDef = TOOL_REGISTRY[toolName];
+    if (toolDef?.category === 'default_agentic_tool') {
+      logger.debug(`Executing default agentic tool ${toolName} for ${magiName}`);
+      return this.executeDefaultAgenticTool(toolName, toolArguments) as GetToolResponse<T>;
+    }
+
     logger.warn(`Tool ${toolName} (mapped to ${toolName}) not found in any MCP server for ${magiName}`);
     return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;
+  }
+
+  /**
+   * Execute a default agentic tool that doesn't require an MCP server
+   */
+  private executeDefaultAgenticTool(toolName: string, toolArguments: Record<string, any>): GetToolResponse<string> {
+    logger.debug(`Executing default agentic tool: ${toolName} with arguments:`, toolArguments);
+    
+    // Default agentic tools are essentially pass-through operations
+    // They're designed to be processed by the Magi's agentic logic
+    const toolDef = TOOL_REGISTRY[toolName];
+    
+    // Create a response that includes the tool execution details
+    const response = {
+      tool: toolName,
+      description: toolDef?.description || 'Default agentic tool',
+      arguments: toolArguments,
+      executed: true,
+      timestamp: new Date().toISOString()
+    };
+    
+    return {
+      data: { text: JSON.stringify(response, null, 2) },
+      isError: false
+    };
   }
 
   /**

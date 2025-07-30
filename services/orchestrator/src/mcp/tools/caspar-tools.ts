@@ -5,16 +5,17 @@ import { McpServerConfig } from '../index';
 /**
  * Caspar's practical tools - focused on smart home devices, system status, and integration data
  * 
- * Tools assigned: smart-home-devices
+ * Tools assigned: smart-home-devices, ask-user, analyze-data, answer-user
  * - Query and control smart home devices
  * - System status and environmental monitoring
+ * - Core agentic tools for user interaction and analysis
  */
 
 /**
  * Get Caspar's tool assignments from the registry
  */
 export function getCasparToolAssignments(): string[] {
-  return [];
+  return ['smart-home-devices', 'ask-user', 'analyze-data', 'answer-user'];
 }
 
 /**

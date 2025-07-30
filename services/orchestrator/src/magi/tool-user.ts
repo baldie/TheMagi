@@ -190,27 +190,18 @@ export class ToolUser {
    * Format web extract response for display (Tavily extract API format)
    */
   private formatWebExtractResponse(response: WebExtractResponse): string {
-    let output = `Web Content Extraction Results (${response.response_time}s):\n`;
-    
-    // Display successful extractions
-    if (response.results.length > 0) {
-      output += `Successfully extracted ${response.results.length} URL(s):\n`;
-      
-      response.results.forEach((result, index) => {
-        output += `${index + 1}. ${result.url}\n`;
-        output += `   Content: ${result.raw_content}\n`;
-      });
-    } else {
-      output += 'No URLs were successfully extracted.\n';
-    }
+    logger.debug(`Web Content Extraction Results (${response.response_time}s)`);
     
     // Display failed extractions
+    let output = ``
     if (response.failed_results.length > 0) {
       output += `Failed to extract ${response.failed_results.length} URL(s):\n`;
       response.failed_results.forEach((failed, index) => {
         output += `${index + 1}. ${failed.url}\n`;
         output += `   Error: ${failed.error}\n`;
       });
+    } else{
+      output = response.results[0].raw_content
     }
     
     return output;

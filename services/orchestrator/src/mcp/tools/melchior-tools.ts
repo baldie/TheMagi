@@ -5,16 +5,17 @@ import { McpServerConfig } from '../index';
 /**
  * Melchior's intuitive tools - focused on personal data about the user
  * 
- * Tools assigned: personal-data
+ * Tools assigned: personal-data, ask-user, analyze-data, answer-user
  * - Access user personal data and preferences
  * - User context and behavioral insights
+ * - Core agentic tools for user interaction and analysis
  */
 
 /**
  * Get Melchior's tool assignments from the registry
  */
 export function getMelchiorToolAssignments(): string[] {
-  return ['personal-data'];
+  return ['personal-data', 'ask-user', 'analyze-data', 'answer-user'];
 }
 
 /**

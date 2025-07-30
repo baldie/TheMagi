@@ -303,3 +303,104 @@ describe('Magi contactAsAgent', () => {
     expect(synthesisCallArgs).toContain("Just started looking into the user's message, see findings.");
   });
 });
+
+describe('Magi getToolForGoal', () => {
+  let magi: Magi;
+
+  beforeEach(async () => {
+    magi = new Magi(MagiName.Balthazar, PERSONAS_CONFIG[MagiName.Balthazar]);
+    
+    // Mock getAvailableTools to return both MCP tools and default tools (as they would come from tool assignments)
+    const mockGetAvailableTools = jest.spyOn(magi['toolUser'], 'getAvailableTools');
+    mockGetAvailableTools.mockResolvedValue([
+      { name: 'tavily-search', description: 'Search the web for information', inputSchema: { query: 'string' } },
+      { name: 'tavily-extract', description: 'Extract content from URLs', inputSchema: { urls: 'string[]' } },
+      { name: 'ask-user', description: 'Ask the user a clarifying question if more information is needed.', inputSchema: { question: 'string' } },
+      { name: 'analyze-data', description: 'Process and analyze available information to draw conclusions and insights', inputSchema: { focus: 'string', criteria: 'string' } },
+      { name: 'answer-user', description: 'Answer the user with the results you have synthesized, or directly if it is a simple inquiry.', inputSchema: { answer: 'string' } }
+    ]);
+    
+    await magi.initialize("You are Balthazar, a logical AI assistant.");
+  });
+
+  it('should return analyze-data tool for ANALYZE goal', () => {
+    const result = magi['getToolForGoal']('ANALYZE the data');
+    
+    expect(result).toContain('analyze-data');
+    expect(result).toContain('Process and analyze available information');
+    expect(result).not.toContain('tavily-search');
+    expect(result).not.toContain('ask-user');
+    expect(result).not.toContain('answer-user');
+  });
+
+  it('should return answer-user tool for ANSWER goal', () => {
+    const result = magi['getToolForGoal']('ANSWER the user');
+    
+    expect(result).toContain('answer-user');
+    expect(result).toContain('Answer the user with the results');
+    expect(result).not.toContain('analyze-data');
+    expect(result).not.toContain('tavily-search');
+    expect(result).not.toContain('ask-user');
+  });
+
+  it('should return ask-user tool for ASK goal', () => {
+    const result = magi['getToolForGoal']('ASK the user for clarification');
+    
+    expect(result).toContain('ask-user');
+    expect(result).toContain('Ask the user a clarifying question');
+    expect(result).not.toContain('analyze-data');
+    expect(result).not.toContain('tavily-search');
+    expect(result).not.toContain('answer-user');
+  });
+
+  it('should return tavily-search tool for SEARCH goal', () => {
+    const result = magi['getToolForGoal']('SEARCH for keyword');
+    
+    expect(result).toContain('tavily-search');
+    expect(result).toContain('Search the web for information');
+    expect(result).not.toContain('analyze-data');
+    expect(result).not.toContain('ask-user');
+    expect(result).not.toContain('answer-user');
+  });
+
+  it('should return tavily-extract tool for EXTRACT goal', () => {
+    const result = magi['getToolForGoal']('EXTRACT content from URLs');
+    
+    expect(result).toContain('tavily-extract');
+    expect(result).toContain('Extract content from URLs');
+    expect(result).not.toContain('analyze-data');
+    expect(result).not.toContain('ask-user');
+    expect(result).not.toContain('answer-user');
+  });
+
+  it('should return all tools when goal is empty', () => {
+    const result = magi['getToolForGoal']('');
+    
+    expect(result).toContain('tavily-search');
+    expect(result).toContain('tavily-extract');
+    expect(result).toContain('analyze-data');
+    expect(result).toContain('ask-user');
+    expect(result).toContain('answer-user');
+  });
+
+  it('should return all tools when goal is whitespace only', () => {
+    const result = magi['getToolForGoal']('   ');
+    
+    expect(result).toContain('tavily-search');
+    expect(result).toContain('tavily-extract');
+    expect(result).toContain('analyze-data');
+    expect(result).toContain('ask-user');
+    expect(result).toContain('answer-user');
+  });
+
+  it('should return other tools for unknown goal types', () => {
+    const result = magi['getToolForGoal']('UNKNOWN goal type');
+    
+    // Should exclude the known core tools and include others
+    expect(result).toContain('tavily-search');
+    expect(result).toContain('tavily-extract');
+    expect(result).not.toContain('analyze-data');
+    expect(result).not.toContain('ask-user');
+    expect(result).not.toContain('answer-user');
+  });
+});

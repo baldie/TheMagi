@@ -5,16 +5,17 @@ import { McpServerConfig } from '../index';
 /**
  * Balthazar's analytical tools - focused on data gathering, analysis, and fact-checking
  * 
- * Tools assigned: tavily-search, tavily-extract
+ * Tools assigned: tavily-search, tavily-extract, ask-user, analyze-data, answer-user
  * - Web search for current information and fact-checking
  * - Content extraction from URLs for detailed analysis
+ * - Core agentic tools for user interaction and analysis
  */
 
 /**
  * Get Balthazar's tool assignments
  */
 export function getBalthazarToolAssignments(): string[] {
-  return ['tavily-search', 'tavily-extract'];
+  return ['tavily-search', 'tavily-extract', 'ask-user', 'analyze-data', 'answer-user'];
 }
 
 /**

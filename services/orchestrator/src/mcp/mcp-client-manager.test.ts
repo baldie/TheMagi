@@ -140,36 +140,41 @@ describe('McpClientManager', () => {
     it('should return tools from MCP servers for Balthazar', async () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Balthazar);
 
-      expect(tools).toHaveLength(2); // Two tools from the server
-      expect(tools).toEqual([
-        {
-          name: 'tavily-search',
-          description: undefined,
-          inputSchema: {
-            type: 'object',
-            properties: {
-              query: { type: 'string' }
-            }
-          },
-          instructions: ' query (required): The search query string\n  auto_parameters: false\n  topic: Search category "general" or "news" (string, default: "general")\n  max_results: Maximum results to return 0-10 (number, default: 5)\n  include_answer: Include LLM-generated answer (boolean, default: false)'
+      expect(tools).toHaveLength(5); // Two MCP tools + three default agentic tools
+      
+      // Check that both MCP server tools are present
+      const mcpTools = tools.filter(tool => ['tavily-search', 'tavily-extract'].includes(tool.name));
+      expect(mcpTools).toHaveLength(2);
+      
+      // Check that default agentic tools are present
+      const agenticTools = tools.filter(tool => ['ask-user', 'analyze-data', 'answer-user'].includes(tool.name));
+      expect(agenticTools).toHaveLength(3);
+      
+      // Verify the structure of the tavily-search tool
+      const searchTool = tools.find(tool => tool.name === 'tavily-search');
+      expect(searchTool).toEqual({
+        name: 'tavily-search',
+        description: undefined,
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' }
+          }
         },
-        {
-          name: 'tavily-extract',
-          description: undefined,
-          inputSchema: {
-            type: 'object',
-            properties: {
-              urls: { type: 'array' }
-            }
-          },
-          instructions: ' urls (required): URL or array of URLs to extract content from (3 URLS MAXIMUM)\n  topic: \'general\' or \'news\' (string, default: \'general\')\n  include_images: Include extracted images (boolean, default: false)\n  timeout: Request timeout in seconds (number, default: 60)'
-        }
-      ]);
+        instructions: ' query (required): The search query string\n  auto_parameters: false\n  topic: Search category "general" or "news" (string, default: "general")\n  max_results: Maximum results to return 0-10 (number, default: 5)\n  include_answer: Include LLM-generated answer (boolean, default: false)'
+      });
     });
 
-    it('should return empty array for Magi without MCP client', async () => {
+    it('should return only default agentic tools for Magi without MCP client', async () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Caspar);
-      expect(tools).toEqual([]);
+      
+      // Caspar should get 4 tools: smart-home-devices, ask-user, analyze-data, answer-user
+      // But since smart-home-devices requires an MCP server that's not configured in tests,
+      // only the 3 default agentic tools should be returned
+      expect(tools).toHaveLength(3);
+      
+      const toolNames = tools.map(tool => tool.name);
+      expect(toolNames).toEqual(expect.arrayContaining(['ask-user', 'analyze-data', 'answer-user']));
     });
 
     it('should handle listTools errors gracefully', async () => {
@@ -177,7 +182,11 @@ describe('McpClientManager', () => {
       mockClient.listTools.mockRejectedValue(new Error('List tools failed'));
 
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Balthazar);
-      expect(tools).toEqual([]);
+      
+      // Should still return the default agentic tools even if MCP server fails
+      expect(tools).toHaveLength(3);
+      const toolNames = tools.map(tool => tool.name);
+      expect(toolNames).toEqual(expect.arrayContaining(['ask-user', 'analyze-data', 'answer-user']));
     });
   });
 

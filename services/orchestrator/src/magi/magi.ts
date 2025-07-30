@@ -7,6 +7,7 @@ import { MagiName } from '../types/magi-types';
 import { EXCLUDED_TOOL_PARAMS, TOOL_REGISTRY } from '../mcp/tools/tool-registry';
 import { MagiErrorHandler } from './error-handler';
 import { ShortTermMemory } from './short-term-memory';
+import { McpToolInfo } from 'src/mcp';
 export { MagiName };
 
 const OBSERVATION_START_DELIMITER = '<<<OBSERVATION_START>>>';
@@ -66,21 +67,20 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
     // This one should set the goal
     setNewGoalPrompt: `
-SYNTHESIS INSTRUCTIONS:
-* Think about YOUR LATEST FINDINGS and "what you know so far", and synthesize it in reference to the user's original message.
+* Think about YOUR LATEST FINDINGS and "What you know so far", and synthesize it in reference to the user's original message.
 
 GOAL INSTRUCTIONS:
-* If you have sufficient information your goal must be to ANSWER the user
-* If YOUR LATEST FINDINGS are Search Results, your goal should be to EXTRACT web content from the most relevant URL
-* If you have insufficient information, your goal is to either SEARCH or ASK.
-    - If the info you need is on the web, your goal must be to SEARCH for the missing info
-    - If only the user has the info you need, your goal must be to ASK the user.
-* Your goal should include 1 of the keywords ANSWER, EXTRACT, SEARCH, or ASK`,
+Your goal must be 1 of these keywords: ANALYZE, ANSWER, EXTRACT, ASK, or SEARCH.
+Choose the first applicable goal from this progression:
+1. If I have enough information to provide a direct respond to the user's original message I must ANSWER the user.
+2. Otherwise if I have enough information but it needs analysis, then your goal should be to ANALYZE the information.
+3. Otherwise if YOUR LATEST FINDINGS are Search Results, your goal should be to EXTRACT web content from the most relevant URL.
+4. Otherwise if I am missing essential information that can be found on the web, your goal should be to SEARCH for the missing info
+5. Otherwise if I am missing essential information that only the user has, your goal should be to ASK the user.`,
     // this one should execute on the goal    
     executeGoalPrompt: `
-Review your CURRENT GOAL to determine what tool to use.
-* ANALYZE: Use your analyze-data tool to synthesize the data from the web page content as it pertains to the user's message.
-* ANSWER USER: Use your answer-user to respond with a synthesis of WHAT YOU KNOW and FINDINGS.
+* ANALYZE: Use your analyze-data tool to synthesize the data from the web page content as it pertains to the user's original message.
+* ANSWER: Use your answer-user to respond with a synthesis of WHAT YOU KNOW and FINDINGS.
 * SEARCH: Use your tavily-search tool with a relevant search query
 * EXTRACT: Use your tavily-extract tool to view the web page content for the URLs (3 max)
 * ASK: Use your ask-user tool to gather any necessary context that is needed to respond to the user's original message.
@@ -134,7 +134,7 @@ export class Magi {
   private personalityPrompt: string = '';
   private status: 'available' | 'busy' | 'offline' = 'offline';
   private toolUser: ToolUser;
-  private toolsList: string = '';
+  private toolsList: McpToolInfo[] = [];
   private conduit: ConduitClient;
   private shortTermMemory: ShortTermMemory;
   
@@ -149,42 +149,44 @@ export class Magi {
    */
   async initialize(prompt: string): Promise<void> {
     this.personalityPrompt = prompt;
-    
-    const tools = await this.toolUser.getAvailableTools();
-    this.toolsList = tools.map(t => {
-      const toolDefinition = TOOL_REGISTRY[t.name];
-      if (!toolDefinition) return '';
+    this.toolsList = await this.toolUser.getAvailableTools();
+  }
 
-      const instructions = toolDefinition.instructions || '';
-      const parameters = instructions.split('\n')
-        .filter(line => line.trim())
-        .reduce((acc, line) => {
-          const trimmedLine = line.trim();
-          const firstColonIndex = trimmedLine.indexOf(':');
+  getToolDescriptionForPrompt(t: McpToolInfo): string {
+    if (!t.name) return '';
 
-          if (firstColonIndex > 0) {
-            const key = trimmedLine.substring(0, firstColonIndex).trim();
-            const value = trimmedLine.substring(firstColonIndex + 1).trim();
-            
-            const parenIndex = key.indexOf(' (');
-            if (parenIndex > 0) {
-                const name = key.substring(0, parenIndex);
-                const details = key.substring(parenIndex);
-                acc[name] = `${details} ${value}`.trim();
-            } else {
-                acc[key] = value;
-            }
+    const toolDefinition = TOOL_REGISTRY[t.name];
+    if (!toolDefinition) return '';
+
+    const instructions = toolDefinition.instructions || '';
+    const parameters = instructions.split('\n')
+      .filter(line => line.trim())
+      .reduce((acc, line) => {
+        const trimmedLine = line.trim();
+        const firstColonIndex = trimmedLine.indexOf(':');
+
+        if (firstColonIndex > 0) {
+          const key = trimmedLine.substring(0, firstColonIndex).trim();
+          const value = trimmedLine.substring(firstColonIndex + 1).trim();
+          
+          const parenIndex = key.indexOf(' (');
+          if (parenIndex > 0) {
+              const name = key.substring(0, parenIndex);
+              const details = key.substring(parenIndex);
+              acc[name] = `${details} ${value}`.trim();
+          } else {
+              acc[key] = value;
           }
-          return acc;
-        }, {} as Record<string, string>);
+        }
+        return acc;
+      }, {} as Record<string, string>);
 
-      const paramString = Object.entries(parameters)
-        .filter(([name]) => !EXCLUDED_TOOL_PARAMS.has(name))
-        .map(([name, type]) => `"${name}":"${type.replace(/"/g, '\\"')}"`)
-        .join(',');
-      
-      return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\n  USAGE:\n ${toolDefinition.instructions || 'Infer instructions based on parameter names'}`;
-    }).join('\n\n');
+    const paramString = Object.entries(parameters)
+      .filter(([name]) => !EXCLUDED_TOOL_PARAMS.has(name))
+      .map(([name, type]) => `"${name}":"${type.replace(/"/g, '\\"')}"`)
+      .join(',');
+    
+    return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\n  USAGE:\n ${toolDefinition.instructions || 'Infer instructions based on parameter names'}`;
   }
 
   /**
@@ -322,9 +324,9 @@ Provide a structured analysis addressing the user's needs. Be thorough but conci
       loopState.synthesis = `Just started looking into the user's message, see findings.`;
     }
     
-    const systemInstructionsPrompt = `You are able to synthesize lots of information and think step by step.`;
-    const synthesisPrompt = `
-Your task is to synthesize the information you've gathered so far, and define the next goal for yourself while focusing on the user's original message: "${originalUserMessage}".
+    const systemInstructionsPrompt = `You are an expert at synthesizing information you've gathered, and defining the next goal for yourself. You are currently focusing on the user's original message`;
+    const synthesisPrompt = `User's original message:
+"${originalUserMessage}"
 
 CONTEXT:
 What you know so far:
@@ -339,16 +341,10 @@ ${observation}
 COMPLETED STEPS: ${completedSteps.join(',\n') || 'None yet'}
 AVOID REPETITION: Only take actions that you have not yet completed.
 
-INSTRUCTIONS:
+SYNTHESIS INSTRUCTIONS:
 ${this.config.setNewGoalPrompt}
 
-FOCUS CHECK: Before setting your next goal, ask yourself these two questions:
-- "Will this new goal help me respond to the user's original message?" If no, set a different goal.
-- "Do I already have enough information to provide a useful answer?" If yes, don't start a new search.
-
-Format response as a single JSON object with no other text.
-
-EXAMPLE FORMAT:
+Format your response as JSON only:
 \`\`\`json
 {
   "synthesis": "Updated summary of what I now know...",
@@ -392,6 +388,52 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
   }
 
   /**
+   * Filters tools based on the goal type
+   */
+  private getToolForGoal(goal: string): string {
+    const goalUpper = goal.toUpperCase() + ' ';
+    const goalType = goalUpper.split(' ')[0];
+    const filteredTools = [];
+    
+    // If goal is empty, return all tools
+    if (!goal.trim()) {
+      return this.toolsList.map(tool => this.getToolDescriptionForPrompt(tool)).join('\n\n');
+    }
+    
+    for (const tool of this.toolsList) {
+      if (!tool.name) continue;
+      
+      let shouldInclude = false;
+      switch (goalType) {
+        case 'ANALYZE':
+          shouldInclude = tool.name === 'analyze-data';
+          break;
+        case 'ANSWER':
+          shouldInclude = tool.name === 'answer-user';
+          break;
+        case 'ASK':
+          shouldInclude = tool.name === 'ask-user';
+          break;
+        case 'SEARCH':
+          shouldInclude = tool.name === 'tavily-search';
+          break;
+        case 'EXTRACT':
+          shouldInclude = tool.name === 'tavily-extract';
+          break;
+        default:
+          shouldInclude = !['analyze-data', 'ask-user', 'answer-user'].includes(tool.name);
+          break;
+      }
+      
+      if (shouldInclude) {
+        filteredTools.push(tool);
+      }
+    }
+
+    return filteredTools.map(tool => this.getToolDescriptionForPrompt(tool)).join('\n\n');
+  }
+
+  /**
    * Decides next action and executes it, returning result and whether to continue loop
    */
   private async decideNextAction(
@@ -401,31 +443,24 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
     const observation = await this.extractLatestObservation(loopState.history);
-    const toolsWithClarification = this.toolsList + `
-- { "tool": { "name": "ask-user", "description": "Ask the user a clarifying question if more information is needed.", "parameters": {"question":"string (required) - The question to ask the user."} } }
-- { "tool": { "name": "analyze-data", "description": "Process and analyze available information to draw conclusions and insights", "parameters": {"focus":"string (required) - What aspect to analyze (e.g., 'cost comparison', 'safety ranking', 'best options')","criteria":"string (optional) - Any specific constraints or requirements"} } }\n  USAGE:\n  focus (required): What aspect to analyze - cost comparison, safety ranking, best options, trend analysis\n  criteria (optional): Specific constraints or requirements to apply
-- { "tool": { "name": "answer-user", "description": "Answer the user with the results you have synthesized, or directly if it is a simple inquiry.", "parameters": { "answer": "string (required) - The final answer to provide to the user. This should be in conversatonal tone."} } }`;
 
     const warnings = loopState.warnings.join('\n');
     if (warnings) {
         loopState.warnings = []; // Clear warnings after use
     }
 
-    const systemPrompt = `You are an action oriented artificial intelligence agent adept at carrying out actions.`;
+    const systemPrompt = `You are an action oriented artificial intelligence agent adept at specifying the tool use for ${loopState.goal}.`;
     const reasonPrompt = `
-
 ${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
 
 WHAT YOU KNOW:
 ${loopState.synthesis}
 
-ORIGINAL USER MESSAGE: "${loopState.originalUserMessage}"
+ORIGINAL USER MESSAGE:
+"${loopState.originalUserMessage}"
 
 ACTIONS TAKEN: ${actionHistory.join(' → ') || 'None yet'}
 ${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}
-
-AVAILABLE TOOLS:
-${toolsWithClarification}
 
 DATA TO PROCESS:
 ${observation}
@@ -433,32 +468,17 @@ ${observation}
 YOUR CURRENT GOAL:
 ${loopState.goal}
 
+AVAILABLE TOOLS:
+${this.getToolForGoal(loopState.goal)}
+
 INSTRUCTIONS:
 ${this.config.executeGoalPrompt}
 
 Format your response as JSON only:
-
-Example for a tool call:
 \`\`\`json
 {
-  "thought": "I will use a tool to get information.",
+  "thought": "I will use a tool because...",
   "action": { "tool": { "name": "<TOOL_NAME>", "parameters": { "<TOOL_PARAMETER_NAME>": "<TOOL_PARAMETER_VALUE>" } } }
-}
-\`\`\`
-
-Example for asking the user a question:
-\`\`\`json
-{
-  "thought": "I cannot proceed without knowing the user's budget.",
-  "action": { "tool": { "name": "ask-user", "parameters": { "question": "<QUESTION_TO_ASK>" } } }
-}
-\`\`\`
-
-Example for a final answer:
-\`\`\`json
-{
-  "thought": "I have all the information needed.",
-  "action": { "tool": { "name": "answer-user", "parameters": { "answer": "<FINAL_ANSWER_TEXT>" } } }
 }
 \`\`\`
 `.trim();
