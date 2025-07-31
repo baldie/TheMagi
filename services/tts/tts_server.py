@@ -33,6 +33,11 @@ warnings.filterwarnings(
     "ignore", category=FutureWarning, message=".*LoRACompatibleLinear.*"
 )
 
+# Suppress PyTorch CUDA SDP kernel deprecation warning
+warnings.filterwarnings(
+    "ignore", category=FutureWarning, message=".*torch.backends.cuda.sdp_kernel.*"
+)
+
 
 # Monkey patch tqdm to redirect to null
 class NullTqdm:

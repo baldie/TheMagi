@@ -2,7 +2,7 @@ import { Magi } from './magi';
 import { MagiName } from '../types/magi-types';
 
 export interface Memory {
-  scratchpad: string;
+  thought: string;
   speaker: MagiName | 'user';
   message: string;
 }
@@ -24,7 +24,7 @@ export class ShortTermMemory {
     message: string
   ): void {
     const memory: Memory = {
-      scratchpad,
+      thought: scratchpad,
       speaker,
       message
     };
@@ -50,7 +50,39 @@ export class ShortTermMemory {
     this.lastSummaryHash = '';
   }
 
-  public async summarize(): Promise<string> {
+  public async determineTopic(userMessage: string): Promise<string | null> {
+    if (this.memories.length === 0) {
+      return null;
+    }
+
+    if (userMessage.trim() == '')
+      return null;
+
+    const memoryText = `Conversation History:` +
+      this.memories.map((memory) => `
+Speaker: ${memory.speaker}
+Message: ${memory.message}
+`
+    ).join('\n');
+
+    const systemPrompt = `PERSONA\nYou are an expert at analyzing conversational flow. Your task is to identify the precise subject of the user's latest message in the context of the preceding discussion.`;
+    const topicDetectionPrompt = `${memoryText}
+Speaker: User
+Message: ${userMessage}
+
+INSTRUCTIONS:
+What is the user's last message focused on? Identify what aspect or characteristic is being discussed and about whom/what. Format as "The [aspect] of [subject]".`;
+
+    try {
+      const topic = await this.magi.contactSimple(topicDetectionPrompt, systemPrompt);
+      
+      return topic;
+    } catch (error) {
+      return `Error summarizing memories: ${error}`;
+    }
+  }
+
+  public async summarize(forTopic: string | null): Promise<string> {
     const memories = this.memories;
     
     if (memories.length === 0) {
@@ -63,24 +95,20 @@ export class ShortTermMemory {
       return this.lastSummary;
     }
 
-    const memoryText = memories.map((memory, index) => 
-      `Memory ${index + 1}:
-Speaker: ${memory.speaker}
-Scratchpad: ${memory.scratchpad}
-Message: ${memory.message}
----`
+    const memoryText = memories.map((memory) => 
+      `Speaker: ${memory.speaker}
+Scratchpad: ${memory.thought}
+Message: ${memory.message}`
     ).join('\n');
 
     const systemPrompt = `PERSONA\nYou ${this.magi.name}, are a helpful assistant that creates concise extractive summaries.`;
-    const summarizationPrompt = `
-INSTRUCTIONS:
-Please provide an extractive summary of the following short-term memories for context.
-Focus on key information, decisions, and ongoing tasks.
-Keep the summary concise but comprehensive:
-
+    const summarizationPrompt = `CONTEXT:
 ${memoryText}
-
-Provide a clear, organized summary that captures the essential information from these memories. When referring to ${this.magi.name}, that is you so speak in the first person. No other text`;
+    
+INSTRUCTIONS:
+Provide an extractive summary of the CONTEXT entries${forTopic ? ' only if they are related to "' + forTopic + '"': ''}.
+Focus on key information, decisions, and ongoing tasks.
+Keep the summary concise but comprehensive:`;
 
     try {
       const summary = await this.magi.contactSimple(summarizationPrompt, systemPrompt);

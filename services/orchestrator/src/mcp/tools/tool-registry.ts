@@ -136,7 +136,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
     responseType: 'TextResponse',
-    instructions: ` answer (required): The final answer to provide to the user. This should be in conversatonal tone.`
+    instructions: ` answer (required): The final answer to provide to the user. This should be in conversational tone.`
   }
 };
 

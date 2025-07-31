@@ -51,7 +51,7 @@ export class ConduitClient {
   ): Promise<string> {
     const requestData = this.buildRequestData(userPrompt, systemPrompt, model, options, format);
     
-    logger.debug(`✅✅✅\n\n${systemPrompt}\n\n${userPrompt}\n\n✅✅✅\n\n`);
+    logger.debug(`➡️🤖\n\n${systemPrompt}\n\n${userPrompt}\n\n`);
 
     return MagiErrorHandler.withErrorHandling(
       async () => {
@@ -61,7 +61,7 @@ export class ConduitClient {
           { timeout: 60000 } // 1-minute timeout
         );
 
-        logger.debug(`☑️☑️☑️\n\n${response.data.response}\n\n☑️☑️☑️\n\n`);
+        logger.debug(`⬅️🤖\n\n${response.data.response}\n\n`);
         return response.data.response;
       },
       {

@@ -36,6 +36,7 @@ export interface AgenticResponse {
 }
 
 interface AgenticLoopState {
+  currentTopic: string;
   synthesis: string;
   goal: string;
   history: string;
@@ -67,16 +68,16 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
     // This one should set the goal
     setNewGoalPrompt: `
-* Think about YOUR LATEST FINDINGS and "What you know so far", and synthesize it in reference to the user's original message.
+* Think about YOUR LATEST FINDINGS and "What you know so far", and synthesize it in reference to the CURRENT TOPIC.
 
 GOAL INSTRUCTIONS:
 Your goal must be 1 of these keywords: ANALYZE, ANSWER, EXTRACT, ASK, or SEARCH.
 Choose the first applicable goal from this progression:
-1. If I have enough information to provide a direct respond to the user's original message I must ANSWER the user.
-2. Otherwise if I have enough information but it needs analysis, then your goal should be to ANALYZE the information.
-3. Otherwise if YOUR LATEST FINDINGS are Search Results, your goal should be to EXTRACT web content from the most relevant URL.
-4. Otherwise if I am missing essential information that can be found on the web, your goal should be to SEARCH for the missing info
-5. Otherwise if I am missing essential information that only the user has, your goal should be to ASK the user.`,
+1. If you have enough information to provide a direct respond to the user's original message I must ANSWER the user.
+2. If you have enough information but it needs analysis, then your goal should be to ANALYZE the information.
+3. If YOUR LATEST FINDINGS are Search Results, your goal should be to EXTRACT web content from the most relevant URL.
+4. If you are missing essential information that can be found on the web, your goal should be to SEARCH for the missing info
+5. If you are missing essential information that only the user has, your goal should be to ASK the user.`,
     // this one should execute on the goal    
     executeGoalPrompt: `
 * ANALYZE: Use your analyze-data tool to synthesize the data from the web page content as it pertains to the user's original message.
@@ -212,7 +213,8 @@ export class Magi {
    * @returns The AI's response text.
    */
   async contact(userPrompt: string): Promise<string> {
-    const workingMemory = await this.shortTermMemory.summarize();
+    const currentTopic = await this.shortTermMemory.determineTopic(userPrompt);
+    const workingMemory = await this.shortTermMemory.summarize(currentTopic);
     const promptWithContext = workingMemory + '\n' + userPrompt;
     const response = await this.executeWithStatusManagement(() => 
       this.conduit.contact(promptWithContext, this.withPersonality(''), this.config.model, this.config.options)
@@ -259,19 +261,20 @@ export class Magi {
   /**
    * Builds an analysis prompt for the analyze-data tool
    */
-  private buildAnalysisPrompt(focus: string, criteria: string, userMessage: string, { synthesis, history }: AgenticLoopState): string {
-    return `TASK: Analyze the available information with focus on: ${focus}
+  private buildAnalysisPrompt(focus: string, criteria: string, { synthesis, history, originalUserMessage, currentTopic }: AgenticLoopState): string {
+    return `CURRENT TOPIC:\n${currentTopic}
+
 ${criteria ? `CRITERIA: ${criteria}` : ''}
 
-CURRENT SYNTHESIS:
-${synthesis}
+CURRENT SYNTHESIS:\n${synthesis}
 
-DETAILED INFORMATION FROM RESEARCH:
-${history || 'No detailed research data available yet.'}
+DETAILED INFORMATION FROM RESEARCH:\n${history || 'No detailed research data available yet.'}
 
-USER'S ORIGINAL QUESTION: ${userMessage}
+USER'S ORIGINAL QUESTION:\n${originalUserMessage}
 
-Provide a structured analysis addressing the user's needs. Be thorough but concise. Focus on drawing actionable conclusions from the information you already have.
+INSTRUCTIONS:
+1. Analyze the available information with focus on: ${focus}
+2. Provide a structured analysis. Be thorough but concise. Focus on drawing logical conclusions from the information.
     `.trim();
   }
 
@@ -438,7 +441,6 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
    */
   private async decideNextAction(
     loopState: AgenticLoopState,
-    userMessage: string,
     workingMemory: string,
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
@@ -449,7 +451,7 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
         loopState.warnings = []; // Clear warnings after use
     }
 
-    const systemPrompt = `You are an action oriented artificial intelligence agent adept at specifying the tool use for ${loopState.goal}.`;
+    const systemPrompt = `You are an action oriented AI agent adept at specifying the tool use for ${loopState.goal}.`;
     const reasonPrompt = `
 ${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
 
@@ -459,20 +461,20 @@ ${loopState.synthesis}
 ORIGINAL USER MESSAGE:
 "${loopState.originalUserMessage}"
 
-ACTIONS TAKEN: ${actionHistory.join(' → ') || 'None yet'}
+ACTIONS TAKEN:\n${actionHistory.join(' → ') || 'None yet'}
 ${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}
 
 DATA TO PROCESS:
 ${observation}
+
+INSTRUCTIONS:
+${this.config.executeGoalPrompt}
 
 YOUR CURRENT GOAL:
 ${loopState.goal}
 
 AVAILABLE TOOLS:
 ${this.getToolForGoal(loopState.goal)}
-
-INSTRUCTIONS:
-${this.config.executeGoalPrompt}
 
 Format your response as JSON only:
 \`\`\`json
@@ -497,10 +499,84 @@ Format your response as JSON only:
     const { tool } = agenticResponse.action;
 
     if (tool) {
-      return await this.handleToolResponse(tool, agenticResponse, userMessage, loopState, actionHistory);
+      return await this.handleToolResponse(tool, agenticResponse, loopState, actionHistory);
     } else {
       logger.error(`Invalid response from agentic loop, no tool supplied:\n${JSON.stringify(agenticResponse)}`);
       return { response: "Sorry, I received an invalid response and had to stop.", shouldBreak: true };
+    }
+  }
+
+  /**
+   * Initialize the agentic loop with memory context and initial state
+   */
+  private async initializeAgenticLoop(userMessage: string): Promise<{
+    workingMemory: string;
+    loopState: AgenticLoopState;
+    actionHistory: string[];
+  }> {
+    const currentTopic = await this.shortTermMemory.determineTopic(userMessage);
+    const workingMemory = await this.shortTermMemory.summarize(currentTopic);
+    const loopState: AgenticLoopState = {
+      currentTopic: currentTopic ? currentTopic : userMessage,
+      synthesis: "Nothing is known yet.",
+      goal: "Formulate a plan to address the user's message.",
+      history: "",
+      warnings: [],
+      originalUserMessage: userMessage,
+      completedSteps: []
+    };
+    const actionHistory: string[] = [];
+    
+    return { workingMemory, loopState, actionHistory };
+  }
+
+  /**
+   * Execute the main agentic loop with synthesis and action phases
+   */
+  private async executeAgenticLoop(
+    loopState: AgenticLoopState,
+    workingMemory: string,
+    actionHistory: string[],
+    userMessage: string
+  ): Promise<string | null> {
+    for (let step = 1; step < MAX_STEPS; step++) {
+      // PHASE 1: SYNTHESIZE STATE
+      if (step > 1) {
+        await this.synthesizeState(loopState, userMessage);
+      }
+
+      // PHASE 2: DECIDE ACTION
+      const actionResult = await this.decideNextAction(loopState, workingMemory, actionHistory);
+      if (actionResult.shouldBreak) {
+        return actionResult.response || '';
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Generate fallback response when loop completes without final answer
+   */
+  private generateFallbackResponse(loopState: AgenticLoopState): string {
+    logger.warn(`${this.name} agentic loop completed ${MAX_STEPS - 1} steps without reaching final answer`);
+    return `Sorry, I seem to have gotten stuck in a loop. Here is what I found:\n${loopState.synthesis}`;
+  }
+
+  /**
+   * Store interaction in short-term memory with proper error handling
+   */
+  private async storeInteractionMemory(
+    userMessage: string,
+    synthesis: string,
+    response: string
+  ): Promise<void> {
+    if (response) {
+      try {
+        this.shortTermMemory.remember('user', 'User message', userMessage);
+        this.shortTermMemory.remember(this.name, synthesis, response);
+      } catch (memoryError) {
+        logger.warn(`Failed to store agentic memory for ${this.name}: ${memoryError}`);
+      }
     }
   }
 
@@ -509,46 +585,12 @@ Format your response as JSON only:
     try {
       logger.info(`${this.name} beginning agentic loop...`);
 
-      const workingMemory = await this.shortTermMemory.summarize();
-      const loopState: AgenticLoopState = {
-        synthesis: "Nothing is known yet.",
-        goal: "Formulate a plan to address the user's message.",
-        history: "",
-        warnings: [],
-        originalUserMessage: userMessage,
-        completedSteps: []
-      };
-      const actionHistory: string[] = [];
+      const { workingMemory, loopState, actionHistory } = await this.initializeAgenticLoop(userMessage);
 
-      for (let step = 1; step < MAX_STEPS; step++) {
-        // PHASE 1: SYNTHESIZE STATE
-        if (step > 1) {
-          await this.synthesizeState(loopState, userMessage);
-        }
+      response = await this.executeAgenticLoop(loopState, workingMemory, actionHistory, userMessage) || 
+                 this.generateFallbackResponse(loopState);
 
-        // PHASE 2: DECIDE ACTION
-        const actionResult = await this.decideNextAction(loopState, userMessage, workingMemory, actionHistory);
-        if (actionResult.shouldBreak) {
-          response = actionResult.response || '';
-          break;
-        }
-      }
-      
-      // Handle loop completion without final answer
-      if (!response) {
-        logger.warn(`${this.name} agentic loop completed ${MAX_STEPS - 1} steps without reaching final answer`);
-        response = `Sorry, I seem to have gotten stuck in a loop. Here is what I found:\n${loopState.synthesis}`;
-      }
-
-      // Store the interaction in short-term memory
-      if (response) {
-        try {
-          this.shortTermMemory.remember('user', 'User message', userMessage);
-          this.shortTermMemory.remember(this.name, loopState.synthesis, response);
-        } catch (memoryError) {
-          logger.warn(`Failed to store agentic memory for ${this.name}: ${memoryError}`);
-        }
-      }
+      await this.storeInteractionMemory(userMessage, loopState.synthesis, response);
     } catch (error) {
       logger.error(`ERROR: ${error}`);
       throw MagiErrorHandler.createContextualError(error, {
@@ -558,7 +600,7 @@ Format your response as JSON only:
     }
 
     const finalResponse = await this.makeTTSReady(response);
-    logger.debug(`\n🤖🤖🤖 Final response:\n${finalResponse}\n🤖🤖🤖\n`);
+    logger.debug(`\n🤖🔊\n${finalResponse}`);
     return finalResponse;
   }
 
@@ -608,10 +650,10 @@ SPOKEN SCRIPT:\n`
   private async handleToolResponse(
     tool: AgenticTool,
     agenticResponse: AgenticResponse,
-    userMessage: string,
     loopState: AgenticLoopState,
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
+    const { originalUserMessage } = loopState;
     switch (tool.name) {
       case 'ask-user': {
         const response = tool.parameters.question as string;
@@ -623,7 +665,6 @@ SPOKEN SCRIPT:\n`
         const analysisPrompt = this.buildAnalysisPrompt(
           tool.parameters.focus as string,
           tool.parameters.criteria as string || '',
-          userMessage,
           loopState
         );
         
@@ -646,7 +687,7 @@ SPOKEN SCRIPT:\n`
       }
 
       default: {
-        const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
+        const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, originalUserMessage);
         const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${toolResponse}${OBSERVATION_END_DELIMITER}\n\n`;
         loopState.history += historyEntry;
         

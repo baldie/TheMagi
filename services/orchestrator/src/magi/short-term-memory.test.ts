@@ -10,6 +10,7 @@ describe('ShortTermMemory', () => {
 
   beforeEach(() => {
     mockMagi = {
+      name: 'TestMagi',
       contactSimple: jest.fn().mockResolvedValue('Test summary')
     } as any;
     memory = new ShortTermMemory(mockMagi);
@@ -22,7 +23,7 @@ describe('ShortTermMemory', () => {
       const memories = memory.getMemories();
       expect(memories).toHaveLength(1);
       expect(memories[0]).toEqual({
-        scratchpad: 'test scratchpad',
+        thought: 'test scratchpad',
         speaker: 'user',
         message: 'test message'
       });
@@ -75,7 +76,7 @@ describe('ShortTermMemory', () => {
   describe('summarize method', () => {
 
     it('should return empty string when no memories exist', async () => {
-      const summary = await memory.summarize();
+      const summary = await memory.summarize(null);
       expect(summary).toBe('');
       expect(mockMagi.contactSimple).not.toHaveBeenCalled();
     });
@@ -83,10 +84,10 @@ describe('ShortTermMemory', () => {
     it('should call magi with proper parameters when memories exist', async () => {
       memory.remember('user', 'test scratchpad', 'test message');
       
-      const summary = await memory.summarize();
+      const summary = await memory.summarize(null);
       
       expect(mockMagi.contactSimple).toHaveBeenCalledWith(
-        expect.stringContaining('Please provide an extractive summary'),
+        expect.stringContaining('Provide an extractive summary'),
         expect.stringContaining('PERSONA')
       );
       expect(summary).toBe('Test summary');
@@ -96,7 +97,7 @@ describe('ShortTermMemory', () => {
       memory.remember('user', 'test scratchpad', 'test message');
       mockMagi.contactSimple = jest.fn().mockRejectedValue(new Error('Connection failed'));
       
-      const summary = await memory.summarize();
+      const summary = await memory.summarize(null);
       
       expect(summary).toContain('Error summarizing memories');
     });
@@ -105,16 +106,14 @@ describe('ShortTermMemory', () => {
       memory.remember('user', 'user scratchpad', 'user message');
       memory.remember(MagiName.Melchior, 'magi scratchpad', 'magi message');
       
-      await memory.summarize();
+      await memory.summarize(null);
       
       const callArgs = mockMagi.contactSimple.mock.calls[0];
       const prompt = callArgs[0];
       
-      expect(prompt).toContain('Memory 1:');
       expect(prompt).toContain('Speaker: user');
       expect(prompt).toContain('Scratchpad: user scratchpad');
       expect(prompt).toContain('Message: user message');
-      expect(prompt).toContain('Memory 2:');
       expect(prompt).toContain('Speaker: Melchior');
       expect(prompt).toContain('Scratchpad: magi scratchpad');
       expect(prompt).toContain('Message: magi message');

@@ -34,6 +34,9 @@ jest.mock('./short-term-memory', () => ({
     async summarize() {
       return '';
     }
+    async determineTopic() {
+      return null;
+    }
     remember() {}
     forget() {}
   }
