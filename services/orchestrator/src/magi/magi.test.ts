@@ -319,19 +319,17 @@ describe('Magi getToolForGoal', () => {
       { name: 'tavily-search', description: 'Search the web for information', inputSchema: { query: 'string' } },
       { name: 'tavily-extract', description: 'Extract content from URLs', inputSchema: { urls: 'string[]' } },
       { name: 'ask-user', description: 'Ask the user a clarifying question if more information is needed.', inputSchema: { question: 'string' } },
-      { name: 'analyze-data', description: 'Process and analyze available information to draw conclusions and insights', inputSchema: { focus: 'string', criteria: 'string' } },
       { name: 'answer-user', description: 'Answer the user with the results you have synthesized, or directly if it is a simple inquiry.', inputSchema: { answer: 'string' } }
     ]);
     
     await magi.initialize("You are Balthazar, a logical AI assistant.");
   });
 
-  it('should return analyze-data tool for ANALYZE goal', () => {
+  it('should return tavily-extract tool for ANALYZE goal (since analyze-data is not available)', () => {
     const result = magi['getToolForGoal']('ANALYZE the data');
     
-    expect(result).toContain('analyze-data');
-    expect(result).toContain('Process and analyze available information');
-    expect(result).not.toContain('tavily-search');
+    expect(result).toContain('tavily-extract');
+    expect(result).toContain('Extract content from URLs');
     expect(result).not.toContain('ask-user');
     expect(result).not.toContain('answer-user');
   });
@@ -341,7 +339,6 @@ describe('Magi getToolForGoal', () => {
     
     expect(result).toContain('answer-user');
     expect(result).toContain('Answer the user with the results');
-    expect(result).not.toContain('analyze-data');
     expect(result).not.toContain('tavily-search');
     expect(result).not.toContain('ask-user');
   });
@@ -351,7 +348,6 @@ describe('Magi getToolForGoal', () => {
     
     expect(result).toContain('ask-user');
     expect(result).toContain('Ask the user a clarifying question');
-    expect(result).not.toContain('analyze-data');
     expect(result).not.toContain('tavily-search');
     expect(result).not.toContain('answer-user');
   });
@@ -361,7 +357,6 @@ describe('Magi getToolForGoal', () => {
     
     expect(result).toContain('tavily-search');
     expect(result).toContain('Search the web for information');
-    expect(result).not.toContain('analyze-data');
     expect(result).not.toContain('ask-user');
     expect(result).not.toContain('answer-user');
   });
@@ -371,7 +366,6 @@ describe('Magi getToolForGoal', () => {
     
     expect(result).toContain('tavily-extract');
     expect(result).toContain('Extract content from URLs');
-    expect(result).not.toContain('analyze-data');
     expect(result).not.toContain('ask-user');
     expect(result).not.toContain('answer-user');
   });
@@ -381,7 +375,6 @@ describe('Magi getToolForGoal', () => {
     
     expect(result).toContain('tavily-search');
     expect(result).toContain('tavily-extract');
-    expect(result).toContain('analyze-data');
     expect(result).toContain('ask-user');
     expect(result).toContain('answer-user');
   });
@@ -391,7 +384,6 @@ describe('Magi getToolForGoal', () => {
     
     expect(result).toContain('tavily-search');
     expect(result).toContain('tavily-extract');
-    expect(result).toContain('analyze-data');
     expect(result).toContain('ask-user');
     expect(result).toContain('answer-user');
   });
@@ -402,7 +394,6 @@ describe('Magi getToolForGoal', () => {
     // Should exclude the known core tools and include others
     expect(result).toContain('tavily-search');
     expect(result).toContain('tavily-extract');
-    expect(result).not.toContain('analyze-data');
     expect(result).not.toContain('ask-user');
     expect(result).not.toContain('answer-user');
   });

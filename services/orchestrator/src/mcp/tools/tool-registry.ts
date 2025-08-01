@@ -121,15 +121,6 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     responseType: 'TextResponse',
     instructions: ` question (required): The question to ask the user.`
   },
-  'analyze-data': {
-    name: 'analyze-data',
-    description: 'Process and analyze available information to draw conclusions and insights',
-    category: ToolCategory.DEFAULT_AGENTIC_TOOL,
-    defaults: {},
-    responseType: 'TextResponse',
-    instructions: ` focus (required): What aspect to analyze (e.g., 'cost comparison', 'safety ranking', 'best options')
-  criteria (optional): Any specific constraints or requirements`
-  },
   'answer-user': {
     name: 'answer-user',
     description: 'Answer the user with the results you have synthesized, or directly if it is a simple inquiry.',

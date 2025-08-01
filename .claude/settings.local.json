@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Bash(npm run build:*)",
@@ -84,7 +85,11 @@
       "Bash(git check-ignore:*)",
       "Bash(git rm:*)",
       "Bash(pkill:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(OLLAMA_MODELS=\"$(pwd)/.models\" ./services/conduit/CUDA/bin/ollama list)",
+      "Bash(OLLAMA_MODELS=\"$(pwd)/.models\" OLLAMA_HOST=\"127.0.0.1:11434\" ./services/conduit/CUDA/bin/ollama list)",
+      "Bash(ollama:*)",
+      "Bash(printenv:*)"
     ],
     "deny": []
   },

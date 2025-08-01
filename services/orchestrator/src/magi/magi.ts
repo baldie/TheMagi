@@ -71,16 +71,14 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
 * Think about YOUR LATEST FINDINGS and "What you know so far", and synthesize it in reference to the CURRENT TOPIC.
 
 GOAL INSTRUCTIONS:
-Your goal must be 1 of these keywords: ANALYZE, ANSWER, EXTRACT, ASK, or SEARCH.
-Choose the first applicable goal from this progression:
-1. If you have enough information to provide a direct respond to the user's original message I must ANSWER the user.
-2. If you have enough information but it needs analysis, then your goal should be to ANALYZE the information.
-3. If YOUR LATEST FINDINGS are Search Results, your goal should be to EXTRACT web content from the most relevant URL.
-4. If you are missing essential information that can be found on the web, your goal should be to SEARCH for the missing info
-5. If you are missing essential information that only the user has, your goal should be to ASK the user.`,
+Your goal must be 1 of these keywords: ANSWER, EXTRACT, ASK, or SEARCH.
+Choose the first applicable goal by following this progression:
+1. If you have enough information to provide a direct respond to the user's original message you must ANSWER the user.
+2. If YOUR LATEST FINDINGS are <SEARCH_RESULTS>, you must EXTRACT web content from the most relevant URL.
+3. If you are missing essential information that can be found on the web, your goal should be to SEARCH for the missing info
+4. If you are missing essential information that only the user has, your goal should be to ASK the user.`,
     // this one should execute on the goal    
     executeGoalPrompt: `
-* ANALYZE: Use your analyze-data tool to synthesize the data from the web page content as it pertains to the user's original message.
 * ANSWER: Use your answer-user to respond with a synthesis of WHAT YOU KNOW and FINDINGS.
 * SEARCH: Use your tavily-search tool with a relevant search query
 * EXTRACT: Use your tavily-extract tool to view the web page content for the URLs (3 max)
@@ -252,31 +250,22 @@ export class Magi {
     
     if (typeof goal === 'object' && goal !== null) {
       const goalObj = goal as GoalObject;
+      
+      // Check for action-based goal objects like {"answer": "..."}
+      const actionKeys = ['answer', 'search', 'extract', 'ask'];
+      for (const actionKey of actionKeys) {
+        if (goalObj[actionKey] !== undefined) {
+          return actionKey.toUpperCase();
+        }
+      }
+      
+      // Fall back to standard properties
       return goalObj.description || goalObj.task || goalObj.objective || JSON.stringify(goal);
     }
     
     return "Continue with current objective";
   }
 
-  /**
-   * Builds an analysis prompt for the analyze-data tool
-   */
-  private buildAnalysisPrompt(focus: string, criteria: string, { synthesis, history, originalUserMessage, currentTopic }: AgenticLoopState): string {
-    return `CURRENT TOPIC:\n${currentTopic}
-
-${criteria ? `CRITERIA: ${criteria}` : ''}
-
-CURRENT SYNTHESIS:\n${synthesis}
-
-DETAILED INFORMATION FROM RESEARCH:\n${history || 'No detailed research data available yet.'}
-
-USER'S ORIGINAL QUESTION:\n${originalUserMessage}
-
-INSTRUCTIONS:
-1. Analyze the available information with focus on: ${focus}
-2. Provide a structured analysis. Be thorough but concise. Focus on drawing logical conclusions from the information.
-    `.trim();
-  }
 
   /**
    * Extracts the most recent observation from the loop history
@@ -408,9 +397,6 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
       
       let shouldInclude = false;
       switch (goalType) {
-        case 'ANALYZE':
-          shouldInclude = tool.name === 'analyze-data';
-          break;
         case 'ANSWER':
           shouldInclude = tool.name === 'answer-user';
           break;
@@ -424,7 +410,7 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
           shouldInclude = tool.name === 'tavily-extract';
           break;
         default:
-          shouldInclude = !['analyze-data', 'ask-user', 'answer-user'].includes(tool.name);
+          shouldInclude = !['ask-user', 'answer-user'].includes(tool.name);
           break;
       }
       
@@ -603,39 +589,62 @@ Format your response as JSON only:
     logger.debug(`\n🤖🔊\n${finalResponse}`);
     return finalResponse;
   }
-
   
   private async makeTTSReady(text: string): Promise<string> {
-    const systemPrompt = `PERSONA
-You are also a skilled Vocal Synthesizer able to take a text passage, and rewrite it into a clear, natural, and human-like script. The text must be ready for a Text-to-Speech (TTS) engine. Your goal is to ensure the final output sounds like a person speaking, not a computer reading a document.`;
+    const systemPrompt = `ROLE & GOAL
+You are a direct transcription and vocalization engine. Your sole function is to take a TEXT PASSAGE and convert it verbatim into a SPOKEN SCRIPT for a Text-to-Speech (TTS) engine. Your output must preserve the original text's structure and intent, simply making it readable for a voice synthesizer.
+`;
 
     const userPrompt = `
+COMPLETE PROMPT
+
 INSTRUCTIONS
-Review the 'TEXT PASSAGE' provided below. Rewrite it completely into a 'SPOKEN SCRIPT' that is easy for a user to understand when heard. The meaning and core data must be preserved, but the language should be adapted for audio delivery.
 
-RULES
+Receive the TEXT PASSAGE.
 
-EXPAND ALL ABBREVIATIONS: Never use abbreviations. 'e.g.' must become 'for example'. 'i.e.' must become 'that is'.
+Convert it directly into a SPOKEN SCRIPT.
 
-VERBALIZE SYMBOLS AND NUMBERS: Write out all symbols and numbers as spoken words. '$515k' becomes 'five hundred and fifteen thousand dollars'. '52%' becomes 'fifty-two percent'.
+The script must be ready for immediate TTS playback.
 
-CLARIFY TECHNICAL JARGON AND URLS: Rephrase technical terms into simpler language. 'Redfin.com' should be written as 'Redfin dot com'.
+Preserve the original meaning and all data points without adding, removing, or changing the core message.
 
-ENSURE CONVERSATIONAL FLOW: The script must flow like natural conversation. Use connecting phrases and break up long, complex sentences.
+CORE RULES
 
-PRESERVE KEY INFORMATION: Do not lose or alter the critical data points. The core facts must remain intact.
+CRITICAL RULE: DO NOT ANSWER OR RESPOND. Your task is to convert, not to have a conversation. Treat the TEXT PASSAGE as raw data to be transformed. If the passage is a question, convert the question. Do not answer it.
+
+Expand Abbreviations: Write out all abbreviations in full. e.g. becomes for example. est. becomes estimated.
+
+Verbalize All Numbers & Symbols: Convert all digits and symbols into words. $5.2M becomes five point two million dollars. 25% becomes twenty-five percent. Eris-1 becomes Eris one.
+
+Clarify URLs & Jargon: Spell out URLs and special characters. project-status.com/v2 becomes project dash status dot com slash v two.
 
 EXAMPLES
 
-EXAMPLE 1:
-TEXT PASSAGE: User's query re: job relocation. Balthazar: logic dictates yes, citing lower COL & job proximity. Melchior: no, citing user's prev. social integration issues. Caspar: impasse. See UI for details. Data: new home ~1.5mi from office, rent ~$2,100/mo vs. current $2,800/mo.
-SPOKEN SCRIPT: Regarding your question about relocating for the new job, we have reached an impasse and your input is needed. Balthazar advises that the move is logical, highlighting a lower cost of living and the new home's convenient location, which is only about one point five miles from the office. He also notes the rent would be around twenty-one hundred dollars a month compared to your current twenty-eight hundred. However, Melchior has raised a significant concern, advising against the move. She references the difficulties you had finding friends and social support the last time you moved. Because of these strong opposing views, we recommend you review the full deliberation in the app to make the final decision.
+Example 1:
 
-EXAMPLE 2:
-TEXT PASSAGE: Re: West Coast cities. Analysis: Eugene, OR is a strong contender. Data: median home price ~$350k, vs. West Coast avg. of $612,233. Other options e.g., Salem, OR, have higher crime (2.5 per capita) and unemployment (~4%). Stockton, CA is cheaper ($425k) but needs more analysis.
-SPOKEN SCRIPT: I have completed the analysis on the best cities to live in on the west coast based on a lower cost of living. The city of Eugene, Oregon appears to be a strong contender. Its median home price is approximately three hundred and fifty thousand dollars, which is significantly lower than the average of six hundred and twelve thousand, two hundred and thirty-three dollars across California, Oregon, and Washington. While other options exist, for example Salem, Oregon, they currently have higher rates for crime and unemployment. Stockton, California is also more affordable at four hundred and twenty-five thousand dollars, but I will need to conduct further research to give you a complete picture.
+TEXT PASSAGE: Analysis complete: Plan A is 15% cheaper (~$2k savings) but takes 3 wks longer. See details at results.com/plan-a.
 
-YOUR TASK: Now, rewrite this TEXT PASSAGE into a spoken script. Only respond with the spoken script.
+SPOKEN SCRIPT: The analysis is complete. Plan A is fifteen percent cheaper, with approximately two thousand dollars in savings, but it will take three weeks longer. See the details at results dot com slash plan a.
+
+Example 2:
+
+TEXT PASSAGE: Q2 report: Revenue at $1.8M (+7% QoQ). Key issue: supply chain delays, i.e., component shortages.
+
+SPOKEN SCRIPT: The second quarter report shows revenue at one point eight million dollars, a seven percent increase quarter-over-quarter. The key issue is supply chain delays; that is, component shortages.
+
+Example 3:
+
+TEXT PASSAGE: Weather alert for zip 94063: High winds expected ~8 PM. Wind speed: 30-40 mph. Source: noaa.gov.
+
+SPOKEN SCRIPT: There is a weather alert for the nine four zero six three zip code. High winds are expected at approximately eight P M, with wind speeds between thirty and forty miles per hour. The source is N O A A dot gov.
+
+Example 4:
+
+TEXT PASSAGE: Can you confirm the project ETA is still 9/1?
+
+SPOKEN SCRIPT: Can you confirm the project E T A is still September first?
+
+YOUR TASK: Now, rewrite the following TEXT PASSAGE into a spoken script. Only respond with the spoken script itself.
 
 TEXT PASSAGE:\n${text}
 
@@ -661,26 +670,6 @@ SPOKEN SCRIPT:\n`
         return { response, shouldBreak: true };
       }
 
-      case 'analyze-data': {
-        const analysisPrompt = this.buildAnalysisPrompt(
-          tool.parameters.focus as string,
-          tool.parameters.criteria as string || '',
-          loopState
-        );
-        
-        const analysisResult = await this.contactSimple(analysisPrompt);
-        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${analysisResult}${OBSERVATION_END_DELIMITER}\n\n`;
-        loopState.history += historyEntry;
-        
-        // Check for repetitive actions before adding to history
-        if (this.isRepetitiveAction(actionHistory, tool.name)) {
-          this.addRepetitiveActionWarning(loopState, tool.name);
-        }
-        
-        // Add action to history
-        actionHistory.push(tool.name);
-        return { shouldBreak: false };
-      }
 
       case 'answer-user': {
         return { response: tool.parameters.answer as string, shouldBreak: true };

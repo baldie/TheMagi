@@ -61,7 +61,7 @@ export class ConduitClient {
           { timeout: 60000 } // 1-minute timeout
         );
 
-        logger.debug(`⬅️🤖\n\n${response.data.response}\n\n`);
+        logger.debug(`🔙🤖\n\n${response.data.response}\n\n`);
         return response.data.response;
       },
       {

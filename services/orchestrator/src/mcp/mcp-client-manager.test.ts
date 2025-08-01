@@ -140,15 +140,15 @@ describe('McpClientManager', () => {
     it('should return tools from MCP servers for Balthazar', async () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Balthazar);
 
-      expect(tools).toHaveLength(5); // Two MCP tools + three default agentic tools
+      expect(tools).toHaveLength(4); // Two MCP tools + two default agentic tools
       
       // Check that both MCP server tools are present
       const mcpTools = tools.filter(tool => ['tavily-search', 'tavily-extract'].includes(tool.name));
       expect(mcpTools).toHaveLength(2);
       
       // Check that default agentic tools are present
-      const agenticTools = tools.filter(tool => ['ask-user', 'analyze-data', 'answer-user'].includes(tool.name));
-      expect(agenticTools).toHaveLength(3);
+      const agenticTools = tools.filter(tool => ['ask-user', 'answer-user'].includes(tool.name));
+      expect(agenticTools).toHaveLength(2);
       
       // Verify the structure of the tavily-search tool
       const searchTool = tools.find(tool => tool.name === 'tavily-search');
@@ -168,13 +168,13 @@ describe('McpClientManager', () => {
     it('should return only default agentic tools for Magi without MCP client', async () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Caspar);
       
-      // Caspar should get 4 tools: smart-home-devices, ask-user, analyze-data, answer-user
+      // Caspar should get 3 tools: smart-home-devices, ask-user, answer-user
       // But since smart-home-devices requires an MCP server that's not configured in tests,
-      // only the 3 default agentic tools should be returned
-      expect(tools).toHaveLength(3);
+      // only the 2 default agentic tools should be returned
+      expect(tools).toHaveLength(2);
       
       const toolNames = tools.map(tool => tool.name);
-      expect(toolNames).toEqual(expect.arrayContaining(['ask-user', 'analyze-data', 'answer-user']));
+      expect(toolNames).toEqual(expect.arrayContaining(['ask-user', 'answer-user']));
     });
 
     it('should handle listTools errors gracefully', async () => {
@@ -184,9 +184,9 @@ describe('McpClientManager', () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Balthazar);
       
       // Should still return the default agentic tools even if MCP server fails
-      expect(tools).toHaveLength(3);
+      expect(tools).toHaveLength(2);
       const toolNames = tools.map(tool => tool.name);
-      expect(toolNames).toEqual(expect.arrayContaining(['ask-user', 'analyze-data', 'answer-user']));
+      expect(toolNames).toEqual(expect.arrayContaining(['ask-user', 'answer-user']));
     });
   });
 

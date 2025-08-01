@@ -1,7 +1,7 @@
 {
   "models": [
     {
-      "name": "mistral-nemo:12b-instruct-2407-q2_K",
+      "name": "mistral:7b-instruct",
       "magi": "Balthazar"
     },
     {

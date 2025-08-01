@@ -55,6 +55,7 @@ async function ensureServiceReady(
   // Poll with exponential backoff for the service to become ready.
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      logger.info(`Pinging ${healthUrl}...}`);
       await axios.get(healthUrl, { timeout: 10000 }); // Increased timeout for health checks
       
       logger.info(`... ${serviceName} service is now ready!`);
@@ -85,8 +86,9 @@ async function pullModel(modelName: string): Promise<void> {
   logger.info(`Model "${modelName}" not found. Downloading model...`);
   logger.info(`⏳ This may take several minutes depending on model size and network speed.`);
   
-  // We execute the command within WSL
-  const command = `wsl ollama pull ${modelName}`;
+  // Use direct ollama command with correct models directory
+  const modelsDir = path.resolve(__dirname, '../../../.models');
+  const command = `OLLAMA_MODELS="${modelsDir}" ollama pull ${modelName}`;
   logger.debug(`Executing command: ${command}`);
 
   return new Promise<void>((resolve, reject) => {
@@ -162,7 +164,7 @@ async function ensureMagiConduitReady(): Promise<void> {
     5000  // Increase initial delay to 5 seconds
   );
 
-  // After service is confirmed running, verify models
+// After service is confirmed running, verify models
   logger.info('Verifying access to LLM models via Magi Conduit...');
   try {
     const response = await axios.get(`${MAGI_CONDUIT_API_BASE_URL}/api/tags`);

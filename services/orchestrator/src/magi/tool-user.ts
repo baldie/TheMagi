@@ -181,7 +181,7 @@ export class ToolUser {
       output = output.substring(0, MAX_CONTENT_LENGTH) + '...';
     }
 
-    output = output.replace("Detailed Results:", "Search Results:");
+    output = output.replace("Detailed Results:", "<SEARCH_RESULTS>");
     
     return output;
   }

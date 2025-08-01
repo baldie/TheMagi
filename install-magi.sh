@@ -402,7 +402,7 @@ fi
 if [ -f "$MODELS_CONFIG_FILE" ]; then
     # Get main models
     MAIN_MODELS=$(node -e "
-        const config = require('./' + process.argv[1]);
+        const config = require('$SCRIPT_DIR/' + process.argv[1]);
         config.models.forEach(model => {
             console.log(model.name + '|' + model.magi);
         });
@@ -410,7 +410,7 @@ if [ -f "$MODELS_CONFIG_FILE" ]; then
     
     # Get additional models  
     ADDITIONAL_MODELS=$(node -e "
-        const config = require('./' + process.argv[1]);
+        const config = require('$SCRIPT_DIR/' + process.argv[1]);
         if (config.additional_models) {
             config.additional_models.forEach(model => {
                 console.log(model.name);
@@ -455,7 +455,7 @@ echo "  - Cleaning up unwanted models (keeping only required models)..."
 
 # Get required models from JSON
 REQUIRED_MODELS_LIST=$(node -e "
-    const config = require('./' + process.argv[1]);
+    const config = require('$SCRIPT_DIR/' + process.argv[1]);
     const allModels = [...config.models.map(m => m.name)];
     if (config.additional_models) {
         allModels.push(...config.additional_models.map(m => m.name));
@@ -644,7 +644,7 @@ MODELS_OUTPUT=$($OLLAMA_BIN list 2>/dev/null)
 
 # Check each required model from JSON
 node -e "
-    const config = require('./' + process.argv[1]);
+    const config = require('$SCRIPT_DIR/' + process.argv[1]);
     const allModels = [...config.models, ...(config.additional_models || [])];
     allModels.forEach(model => {
         const modelName = model.name;
