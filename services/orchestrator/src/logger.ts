@@ -1,4 +1,5 @@
-import { LOG_LEVELS, LogLevel } from './config';
+import type { LogLevel } from './config';
+import { LOG_LEVELS } from './config';
 import { logStream } from './log-stream';
 import chalk from 'chalk';
 import fs from 'fs';

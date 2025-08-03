@@ -19,7 +19,7 @@ export async function ensureMagiConduitIsRunning() {
     await axios.get(MAGI_CONDUIT_URL);
     console.info('Magi Conduit service is already running.');
     serviceIsRunning = true;
-  } catch (error) {
+  } catch {
     console.info('Magi Conduit service not detected. Attempting to start it programmatically...');
   }
 

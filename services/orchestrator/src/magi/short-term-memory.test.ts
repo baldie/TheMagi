@@ -1,6 +1,6 @@
 import { ShortTermMemory } from './short-term-memory';
 import { MagiName } from '../types/magi-types';
-import { Magi } from './magi';
+import type { Magi } from './magi';
 
 jest.mock('./magi');
 
@@ -18,20 +18,19 @@ describe('ShortTermMemory', () => {
 
   describe('remember method', () => {
     it('should store a memory for a magi', () => {
-      memory.remember('user', 'test scratchpad', 'test message');
+      memory.remember('user', 'test message');
       
       const memories = memory.getMemories();
       expect(memories).toHaveLength(1);
       expect(memories[0]).toEqual({
-        thought: 'test scratchpad',
         speaker: 'user',
         message: 'test message'
       });
     });
 
     it('should store multiple memories for the same magi', () => {
-      memory.remember('user', 'first scratchpad', 'first message');
-      memory.remember(MagiName.Caspar, 'second scratchpad', 'second message');
+      memory.remember('user', 'first message');
+      memory.remember(MagiName.Caspar, 'second message');
       
       const memories = memory.getMemories();
       expect(memories).toHaveLength(2);
@@ -48,8 +47,8 @@ describe('ShortTermMemory', () => {
     });
 
     it('should return all memories for the instance', () => {
-      memory.remember('user', 'scratchpad1', 'message1');
-      memory.remember(MagiName.Melchior, 'scratchpad2', 'message2');
+      memory.remember('user', 'message1');
+      memory.remember(MagiName.Melchior, 'message2');
       
       const memories = memory.getMemories();
       expect(memories).toHaveLength(2);
@@ -60,8 +59,8 @@ describe('ShortTermMemory', () => {
       const casparMemory = new ShortTermMemory(mockMagi);
       const melchiorMemory = new ShortTermMemory(mockMagi2);
       
-      casparMemory.remember('user', 'caspar scratchpad', 'caspar message');
-      melchiorMemory.remember('user', 'melchior scratchpad', 'melchior message');
+      casparMemory.remember('user', 'caspar message');
+      melchiorMemory.remember('user', 'melchior message');
       
       const casparMemories = casparMemory.getMemories();
       const melchiorMemories = melchiorMemory.getMemories();
@@ -82,7 +81,7 @@ describe('ShortTermMemory', () => {
     });
 
     it('should call magi with proper parameters when memories exist', async () => {
-      memory.remember('user', 'test scratchpad', 'test message');
+      memory.remember('user', 'test message');
       
       const summary = await memory.summarize(null);
       
@@ -94,7 +93,7 @@ describe('ShortTermMemory', () => {
     });
 
     it('should handle magi errors gracefully', async () => {
-      memory.remember('user', 'test scratchpad', 'test message');
+      memory.remember('user', 'test message');
       mockMagi.contactSimple = jest.fn().mockRejectedValue(new Error('Connection failed'));
       
       const summary = await memory.summarize(null);
@@ -103,8 +102,8 @@ describe('ShortTermMemory', () => {
     });
 
     it('should format memories properly in the prompt', async () => {
-      memory.remember('user', 'user scratchpad', 'user message');
-      memory.remember(MagiName.Melchior, 'magi scratchpad', 'magi message');
+      memory.remember('user', 'user message');
+      memory.remember(MagiName.Melchior, 'magi message');
       
       await memory.summarize(null);
       
@@ -112,10 +111,8 @@ describe('ShortTermMemory', () => {
       const prompt = callArgs[0];
       
       expect(prompt).toContain('Speaker: user');
-      expect(prompt).toContain('Scratchpad: user scratchpad');
       expect(prompt).toContain('Message: user message');
       expect(prompt).toContain('Speaker: Melchior');
-      expect(prompt).toContain('Scratchpad: magi scratchpad');
       expect(prompt).toContain('Message: magi message');
     });
   });

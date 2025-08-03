@@ -143,25 +143,24 @@ describe('McpClientManager', () => {
       expect(tools).toHaveLength(4); // Two MCP tools + two default agentic tools
       
       // Check that both MCP server tools are present
-      const mcpTools = tools.filter(tool => ['tavily-search', 'tavily-extract'].includes(tool.name));
+      const mcpTools = tools.filter(tool => ['search-web', 'read-page'].includes(tool.name));
       expect(mcpTools).toHaveLength(2);
       
       // Check that default agentic tools are present
       const agenticTools = tools.filter(tool => ['ask-user', 'answer-user'].includes(tool.name));
       expect(agenticTools).toHaveLength(2);
       
-      // Verify the structure of the tavily-search tool
-      const searchTool = tools.find(tool => tool.name === 'tavily-search');
+      // Verify the structure of the search-web tool
+      const searchTool = tools.find(tool => tool.name === 'search-web');
       expect(searchTool).toEqual({
-        name: 'tavily-search',
+        name: 'search-web',
         description: undefined,
         inputSchema: {
           type: 'object',
           properties: {
             query: { type: 'string' }
           }
-        },
-        instructions: ' query (required): The search query string\n  auto_parameters: false\n  topic: Search category "general" or "news" (string, default: "general")\n  max_results: Maximum results to return 0-10 (number, default: 5)\n  include_answer: Include LLM-generated answer (boolean, default: false)'
+        }
       });
     });
 
@@ -199,7 +198,7 @@ describe('McpClientManager', () => {
       
       mockClient.connect.mockResolvedValue(undefined);
       // Mock listTools for initialization (2 calls) and then for tool execution lookups
-      // Note: The actual MCP tools are named 'tavily-search' and 'tavily-extract'
+      // Note: The actual MCP tools are named 'search-web' and 'read-page'
       mockClient.listTools.mockResolvedValue({
         tools: [
           {
@@ -237,11 +236,25 @@ describe('McpClientManager', () => {
         ]
       });
       
-      mockClient.callTool.mockImplementation(({ name }) => {
+      mockClient.callTool.mockImplementation(async ({ name }) => {
         if (name === 'tavily-search') {
           return Promise.resolve({
             content: [
-              { type: 'text', text: 'Search results for test query' }
+              { 
+                type: 'text', 
+                text: JSON.stringify({
+                  query: 'test query',
+                  results: [
+                    {
+                      title: 'Test Result',
+                      url: 'https://example.com',
+                      content: 'Search results for test query',
+                      score: 0.8
+                    }
+                  ],
+                  response_time: 100
+                })
+              }
             ],
             isError: false
           });
@@ -278,7 +291,7 @@ describe('McpClientManager', () => {
     it('should execute tool successfully', async () => {
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'tavily-search',
+        'search-web',
         { query: 'test query' }
       );
 
@@ -293,7 +306,7 @@ describe('McpClientManager', () => {
 
       const result = await mcpClientManager.executeTool(
         MagiName.Balthazar,
-        'tavily-search',
+        'search-web',
         { query: 'test query' }
       );
 

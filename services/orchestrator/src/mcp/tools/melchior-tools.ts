@@ -1,6 +1,6 @@
 import { MagiName } from '../../types/magi-types';
 import { ToolRegistry } from './tool-registry';
-import { McpServerConfig } from '../index';
+import type { McpServerConfig } from '../index';
 
 /**
  * Melchior's intuitive tools - focused on personal data about the user

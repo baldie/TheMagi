@@ -4,7 +4,6 @@
 
 import PersonalDataServer from './personal-data-server';
 import { LocalIndex } from 'vectra';
-import path from 'path';
 import fs from 'fs/promises';
 import axios from 'axios';
 

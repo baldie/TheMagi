@@ -1,5 +1,4 @@
 import { MagiName } from '../../types/magi-types';
-import { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse } from '../tool-response-types';
 import { getBalthazarToolAssignments } from './balthazar-tools';
 import { getCasparToolAssignments } from './caspar-tools';
 import { getMelchiorToolAssignments } from './melchior-tools';
@@ -13,8 +12,27 @@ export enum ToolCategory {
   WEB_EXTRACT = 'web_extract', 
   SMART_HOME = 'smart_home',
   PERSONAL_DATA = 'personal_data',
-  ANALYSIS = 'analysis',
   DEFAULT_AGENTIC_TOOL = "default_agentic_tool"
+}
+
+/**
+ * Parameter definition for structured tool parameters
+ */
+export interface ParameterDefinition {
+  /** Parameter type */
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  /** Human-readable description */
+  description: string;
+  /** Whether this parameter is required */
+  required?: boolean;
+  /** Allowed values for enum types */
+  enum?: string[];
+  /** Default value if not provided */
+  default?: any;
+  /** Item type for arrays */
+  items?: ParameterDefinition;
+  /** Properties for object types */
+  properties?: Record<string, ParameterDefinition>;
 }
 
 /**
@@ -31,8 +49,8 @@ export interface ToolDefinition {
   defaults: Record<string, any>;
   /** Expected response type */
   responseType: 'WebSearchResponse' | 'WebExtractResponse' | 'SmartHomeResponse' | 'PersonalDataResponse' | 'TextResponse';
-  /** Instructions for the LLM on how to use this tool */
-  instructions?: string;
+  /** Structured parameter definitions */
+  parameters: Record<string, ParameterDefinition>;
 }
 
 /**
@@ -51,41 +69,84 @@ export interface ToolServerConfig {
   provides: string[];
 }
 
-export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_raw_content', 'include_favicon']);
+export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_image_descriptions', 'include_raw_content', 'include_favicon', 'exclude_domains', 'include_domains']);
 
 /**
  * Central registry of all available tools
+ * Under instructions, each line should have 
  */
 export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
-  'tavily-search': {
-    name: 'tavily-search',
-    description: 'Search the web for current information',
+  'search-web': {
+    name: 'search-web',
+    description: 'When your goal is SEARCH, use this tool with a relevant search query to search the web.',
     category: ToolCategory.WEB_SEARCH,
     defaults: {
       search_depth: 'basic',
       include_raw_content: false
     },
     responseType: 'WebSearchResponse',
-    instructions: ` query (required): The search query string
-  auto_parameters: false
-  topic: Search category "general" or "news" (string, default: "general")
-  max_results: Maximum results to return 0-10 (number, default: 5)
-  include_answer: Include LLM-generated answer (boolean, default: false)`
+    parameters: {
+      query: {
+        type: 'string',
+        description: 'The search query string',
+        required: true
+      },
+      auto_parameters: {
+        type: 'boolean',
+        description: 'Auto-generate search parameters',
+        default: false
+      },
+      topic: {
+        type: 'string',
+        description: 'Search category',
+        enum: ['general', 'news'],
+        default: 'general'
+      },
+      max_results: {
+        type: 'number',
+        description: 'Maximum results to return (0-10)',
+        default: 5
+      },
+      include_answer: {
+        type: 'boolean',
+        description: 'Include an AI-generated answer. Set to true for straightforward inquiries.',
+        default: false
+      }
+    },
   },
 
-  'tavily-extract': {
-    name: 'tavily-extract',
-    description: 'Gets the content from web pages. Use this tool if you have URLs from a previous search.',
+  'read-page': {
+    name: 'read-page',
+    description: 'Gets the content from web pages. Use this tool if you have URLs from <SEARCH_RESULTS>.',
     category: ToolCategory.WEB_EXTRACT,
     defaults: {
       extract_depth: 'basic',
       raw_content_format: 'markdown'
     },
     responseType: 'WebExtractResponse',
-    instructions: ` urls (required): URL or array of URLs to extract content from (3 URLS MAXIMUM)
-  topic: 'general' or 'news' (string, default: 'general')
-  include_images: Include extracted images (boolean, default: false)
-  timeout: Request timeout in seconds (number, default: 60)`
+    parameters: {
+      urls: {
+        type: 'string',
+        description: 'URL or array of URLs to extract content from (3 URLS MAXIMUM)',
+        required: true
+      },
+      topic: {
+        type: 'string',
+        description: 'Content topic type',
+        enum: ['general', 'news'],
+        default: 'general'
+      },
+      include_images: {
+        type: 'boolean',
+        description: 'Include extracted images',
+        default: false
+      },
+      timeout: {
+        type: 'number',
+        description: 'Request timeout in seconds',
+        default: 60
+      }
+    },
   },
 
   'smart-home-devices': {
@@ -94,8 +155,16 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     category: ToolCategory.SMART_HOME,
     defaults: {},
     responseType: 'SmartHomeResponse',
-    instructions: ` device_types: Array of device types to query
-  query_purpose: Purpose of the query for context`
+    parameters: {
+      device_types: {
+        type: 'array',
+        description: 'Array of device types to query'
+      },
+      query_purpose: {
+        type: 'string',
+        description: 'Purpose of the query for context'
+      }
+    },
   },
 
   'personal-data': {
@@ -104,30 +173,65 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     category: ToolCategory.PERSONAL_DATA,
     defaults: { action: 'retrieve' },
     responseType: 'PersonalDataResponse',
-    instructions: ` action: Operation to perform - "store", "retrieve", or "search" (**THESE ARE THE ONLY 3 VALID ACTIONS**)
-  content: Content to store or search for (required for store/search actions)
-  category: Category of the data (**REQUIRED WHEN STORING**)
-  categories: Array of data categories to retrieve (**REQUIRED FOR RETRIEVAL**)
-  user_context: Context for the data request
-  limit: Maximum results to return (number, default: 10)`
+    parameters: {
+      action: {
+        type: 'string',
+        description: 'Operation to perform',
+        enum: ['store', 'retrieve', 'search'],
+        required: true
+      },
+      content: {
+        type: 'string',
+        description: 'Content to store or search for (required for store/search actions)'
+      },
+      category: {
+        type: 'string',
+        description: 'Category of the data (required when storing)'
+      },
+      categories: {
+        type: 'array',
+        description: 'Array of data categories to retrieve (required for retrieval)'
+      },
+      user_context: {
+        type: 'string',
+        description: 'Context for the data request'
+      },
+      limit: {
+        type: 'number',
+        description: 'Maximum results to return',
+        default: 10
+      }
+    },
   },
 
   // Default agentic tools
   'ask-user': {
     name: 'ask-user',
-    description: 'Ask the user a clarifying question if more information is needed.',
+    description: 'Use your ask-user tool to request any necessary context that is needed to respond to the user\'s original message',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
     responseType: 'TextResponse',
-    instructions: ` question (required): The question to ask the user.`
+    parameters: {
+      question: {
+        type: 'string',
+        description: 'The question to ask the user',
+        required: true
+      }
+    },
   },
   'answer-user': {
     name: 'answer-user',
-    description: 'Answer the user with the results you have synthesized, or directly if it is a simple inquiry.',
+    description: 'Use your answer-user tool to respond to the user with a synthesis of WHAT YOU KNOW and your FINDINGS',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
     responseType: 'TextResponse',
-    instructions: ` answer (required): The final answer to provide to the user. This should be in conversational tone.`
+    parameters: {
+      answer: {
+        type: 'string',
+        description: 'The final answer to provide to the user. This should be in conversational tone',
+        required: true
+      }
+    },
   }
 };
 
@@ -173,6 +277,17 @@ export class ToolRegistry {
   }
 
   /**
+   * Map friendly tool names back to MCP tool names for server lookup
+   */
+  private static mapToMcpToolName(friendlyName: string): string {
+    const mapping: Record<string, string> = {
+      'search-web': 'tavily-search',
+      'read-page': 'tavily-extract'
+    };
+    return mapping[friendlyName] || friendlyName;
+  }
+
+  /**
    * Get server configs needed for a Magi
    */
   static getServersForMagi(magi: MagiName): ToolServerConfig[] {
@@ -195,8 +310,10 @@ export class ToolRegistry {
     
     // Find which servers provide the tools this Magi needs
     for (const toolName of toolNames) {
+      // Map friendly name to MCP name for server lookup
+      const mcpToolName = this.mapToMcpToolName(toolName);
       for (const [serverName, serverConfig] of Object.entries(toolServers)) {
-        if (serverConfig.provides.includes(toolName)) {
+        if (serverConfig.provides.includes(mcpToolName)) {
           serverNames.add(serverName);
         }
       }
@@ -222,7 +339,7 @@ export class ToolRegistry {
   }
 
   /**
-   * Validate tool parameters with defaults
+   * Validate tool parameters with defaults and type checking
    */
   static validateAndApplyDefaults(name: string, parameters: Record<string, any>): Record<string, any> {
     const definition = this.getToolDefinition(name);
@@ -240,5 +357,75 @@ export class ToolRegistry {
     }
 
     return validated;
+  }
+
+  /**
+   * Validate parameters against structured parameter definitions
+   */
+  static validateParameters(name: string, parameters: Record<string, any>): { 
+    isValid: boolean; 
+    errors: string[]; 
+    validated: Record<string, any> 
+  } {
+    const definition = this.getToolDefinition(name);
+    if (!definition) {
+      return { isValid: false, errors: [`Unknown tool: ${name}`], validated: parameters };
+    }
+
+    const errors: string[] = [];
+    const validated = { ...parameters };
+
+    // Check required parameters
+    for (const [paramName, paramDef] of Object.entries(definition.parameters)) {
+      if (paramDef.required && (validated[paramName] === undefined || validated[paramName] === null)) {
+        errors.push(`Missing required parameter: ${paramName}`);
+      }
+
+      // Type validation
+      if (validated[paramName] !== undefined) {
+        const value = validated[paramName];
+        const expectedType = paramDef.type;
+
+        if (!this.isValidType(value, expectedType)) {
+          errors.push(`Parameter '${paramName}' expected ${expectedType}, got ${typeof value}`);
+        }
+
+        // Enum validation
+        if (paramDef.enum && !paramDef.enum.includes(value)) {
+          errors.push(`Parameter '${paramName}' must be one of: ${paramDef.enum.join(', ')}`);
+        }
+      }
+
+      // Apply defaults
+      if (validated[paramName] === undefined && paramDef.default !== undefined) {
+        validated[paramName] = paramDef.default;
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
+      validated
+    };
+  }
+
+  /**
+   * Check if a value matches the expected type
+   */
+  private static isValidType(value: any, expectedType: string): boolean {
+    switch (expectedType) {
+      case 'string':
+        return typeof value === 'string';
+      case 'number':
+        return typeof value === 'number' && !isNaN(value);
+      case 'boolean':
+        return typeof value === 'boolean';
+      case 'array':
+        return Array.isArray(value);
+      case 'object':
+        return typeof value === 'object' && value !== null && !Array.isArray(value);
+      default:
+        return true; // Unknown types pass validation
+    }
   }
 }

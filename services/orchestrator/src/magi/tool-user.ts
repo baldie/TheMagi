@@ -1,7 +1,8 @@
 import { logger } from '../logger';
-import { mcpClientManager, McpToolInfo } from '../mcp';
-import { Magi, AgenticTool } from './magi';
-import { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
+import type { MagiTool } from '../mcp';
+import { mcpClientManager } from '../mcp';
+import type { Magi, AgenticTool } from './magi';
+import type { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
 import { MagiErrorHandler } from './error-handler';
 
 /**
@@ -61,10 +62,22 @@ export class ToolUser {
   constructor(private magi: Magi) {}
 
   /**
+   * Map friendly tool names to actual MCP tool names
+   */
+  private mapToMcpToolName(toolName: string): string {
+    const mapping: Record<string, string> = {
+      'search-web': 'tavily-search',
+      'read-page': 'tavily-extract'
+    };
+    
+    return mapping[toolName] || toolName;
+  }
+
+  /**
    * Gets all the tools that are available for the current Magi persona.   
    * @returns The tool's MCP information
    */
-  async getAvailableTools(): Promise<McpToolInfo[]> {
+  async getAvailableTools(): Promise<MagiTool[]> {
     try {
       // Dynamically get tools from MCP servers
       return await mcpClientManager.getMCPToolInfoForMagi(this.magi.name);
@@ -90,18 +103,21 @@ export class ToolUser {
       // Initialize MCP client manager if needed
       await mcpClientManager.initialize();
 
-      if (toolName == 'tavily-search' || toolName == 'tavily-extract') {
+      if (toolName === 'search-web' || toolName === 'read-page') {
         toolArguments.exclude_domains = ["youtube.com"];
       }
       
+      // Map friendly tool names to MCP tool names
+      const mcpToolName = this.mapToMcpToolName(toolName);
+      
       // Execute the tool with Magi-determined arguments
-      const toolResult = await mcpClientManager.executeTool(this.magi.name, toolName, toolArguments);
+      const toolResult = await mcpClientManager.executeTool(this.magi.name, mcpToolName, toolArguments);
       
       // Extract the text from the typed response object
       const toolResponse = this.extractToolOutput(toolResult);
       
-      if (toolName != 'tavily-extract'){
-        logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n🛠️🛠️🛠️`);
+      if (toolName !== 'read-page'){
+        logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n`);
       }
       
       return toolResponse;
@@ -226,7 +242,7 @@ export class ToolUser {
   }
   
   /**
-   * Format personal data response for display
+   * Format personal data response for dispslay
    */
   private formatPersonalDataResponse(response: PersonalDataResponse): string {
     return JSON.stringify(response.data, null, 2);
@@ -299,13 +315,13 @@ export class ToolUser {
     );
 
     // Web pages can have a lot of noise that throw off the magi, so lets clean it
-    if (tool.name == 'tavily-extract'){
+    if (tool.name === 'read-page'){
       const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolResponse);
       toolResponse = await this.magi.contactSimple(relevantContentPrompt, "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.");
     }
 
     // Summarize the data we recieved back in human readable form.
-    if (tool.name == "personal-data") {
+    if (tool.name === "personal-data") {
       logger.debug(`Raw personal-data retreived: ${toolResponse}`);
       const summarize = `You have just completed the following task:\n${thought}\nThis resulted in:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language.When referring to ${this.magi.name}, speak in the first person.`;
       logger.debug(`Summary prompt:\n${summarize}`);

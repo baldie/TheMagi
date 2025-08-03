@@ -1,17 +1,14 @@
 import path from 'path';
-import { Model, ModelType } from '../config';
+import type { ModelType } from '../config';
+import { Model } from '../config';
 import { logger } from '../logger';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { MagiName } from '../types/magi-types';
-import { EXCLUDED_TOOL_PARAMS, TOOL_REGISTRY } from '../mcp/tools/tool-registry';
 import { MagiErrorHandler } from './error-handler';
 import { ShortTermMemory } from './short-term-memory';
-import { McpToolInfo } from 'src/mcp';
+import type { MagiTool } from 'src/mcp';
 export { MagiName };
-
-const OBSERVATION_START_DELIMITER = '<<<OBSERVATION_START>>>';
-const OBSERVATION_END_DELIMITER = '<<<OBSERVATION_END>>>';
 
 /**
  * Interface for the configuration of a single Magi persona.
@@ -35,14 +32,20 @@ export interface AgenticResponse {
   }
 }
 
+interface HistoryEntry {
+  thought: string;
+  action: AgenticTool;
+  observation: string;
+  timestamp: Date;
+  stepDescription: string;
+}
+
 interface AgenticLoopState {
   currentTopic: string;
   synthesis: string;
   goal: string;
-  history: string;
+  executionHistory: HistoryEntry[];
   warnings: string[];
-  originalUserMessage: string;
-  completedSteps: string[];
 }
 
 interface StateUpdateResponse {
@@ -68,22 +71,15 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
     // This one should set the goal
     setNewGoalPrompt: `
-* Think about YOUR LATEST FINDINGS and "What you know so far", and synthesize it in reference to the CURRENT TOPIC.
-
 GOAL INSTRUCTIONS:
-Your goal must be 1 of these keywords: ANSWER, EXTRACT, ASK, or SEARCH.
+Your goal must begin with one of these keywords: ANSWER, READ, SEARCH, or ASK.
 Choose the first applicable goal by following this progression:
-1. If you have enough information to provide a direct respond to the user's original message you must ANSWER the user.
-2. If YOUR LATEST FINDINGS are <SEARCH_RESULTS>, you must EXTRACT web content from the most relevant URL.
+1. If you have enough information to provide a direct respond to the user's message you must ANSWER the user.
+2. If YOUR LATEST FINDINGS are <SEARCH_RESULTS>, you must READ content from the most relevant URL.
 3. If you are missing essential information that can be found on the web, your goal should be to SEARCH for the missing info
 4. If you are missing essential information that only the user has, your goal should be to ASK the user.`,
     // this one should execute on the goal    
-    executeGoalPrompt: `
-* ANSWER: Use your answer-user to respond with a synthesis of WHAT YOU KNOW and FINDINGS.
-* SEARCH: Use your tavily-search tool with a relevant search query
-* EXTRACT: Use your tavily-extract tool to view the web page content for the URLs (3 max)
-* ASK: Use your ask-user tool to gather any necessary context that is needed to respond to the user's original message.
-`,
+    executeGoalPrompt: ``,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
@@ -133,7 +129,7 @@ export class Magi {
   private personalityPrompt: string = '';
   private status: 'available' | 'busy' | 'offline' = 'offline';
   private toolUser: ToolUser;
-  private toolsList: McpToolInfo[] = [];
+  private toolsList: MagiTool[] = [];
   private conduit: ConduitClient;
   private shortTermMemory: ShortTermMemory;
   
@@ -149,43 +145,6 @@ export class Magi {
   async initialize(prompt: string): Promise<void> {
     this.personalityPrompt = prompt;
     this.toolsList = await this.toolUser.getAvailableTools();
-  }
-
-  getToolDescriptionForPrompt(t: McpToolInfo): string {
-    if (!t.name) return '';
-
-    const toolDefinition = TOOL_REGISTRY[t.name];
-    if (!toolDefinition) return '';
-
-    const instructions = toolDefinition.instructions || '';
-    const parameters = instructions.split('\n')
-      .filter(line => line.trim())
-      .reduce((acc, line) => {
-        const trimmedLine = line.trim();
-        const firstColonIndex = trimmedLine.indexOf(':');
-
-        if (firstColonIndex > 0) {
-          const key = trimmedLine.substring(0, firstColonIndex).trim();
-          const value = trimmedLine.substring(firstColonIndex + 1).trim();
-          
-          const parenIndex = key.indexOf(' (');
-          if (parenIndex > 0) {
-              const name = key.substring(0, parenIndex);
-              const details = key.substring(parenIndex);
-              acc[name] = `${details} ${value}`.trim();
-          } else {
-              acc[key] = value;
-          }
-        }
-        return acc;
-      }, {} as Record<string, string>);
-
-    const paramString = Object.entries(parameters)
-      .filter(([name]) => !EXCLUDED_TOOL_PARAMS.has(name))
-      .map(([name, type]) => `"${name}":"${type.replace(/"/g, '\\"')}"`)
-      .join(',');
-    
-    return `- { "tool": { "name": "${t.name}", "description": "${t.description || ''}", "parameters": {${paramString}} } }\n  USAGE:\n ${toolDefinition.instructions || 'Infer instructions based on parameter names'}`;
   }
 
   /**
@@ -214,14 +173,14 @@ export class Magi {
     const currentTopic = await this.shortTermMemory.determineTopic(userPrompt);
     const workingMemory = await this.shortTermMemory.summarize(currentTopic);
     const promptWithContext = workingMemory + '\n' + userPrompt;
-    const response = await this.executeWithStatusManagement(() => 
+    const response = await this.executeWithStatusManagement(async () => 
       this.conduit.contact(promptWithContext, this.withPersonality(''), this.config.model, this.config.options)
     );
     
     // Store the interaction in short-term memory
     try {
-      this.shortTermMemory.remember('user', 'User prompt', userPrompt);
-      this.shortTermMemory.remember(this.name, 'Response', response);
+      this.shortTermMemory.remember('user', userPrompt);
+      this.shortTermMemory.remember(this.name, response);
     } catch (memoryError) {
       logger.warn(`Failed to store memory for ${this.name}: ${memoryError}`);
       // Continue execution - memory failure shouldn't break the response
@@ -231,7 +190,7 @@ export class Magi {
   }
 
   async contactSimple(userPrompt: string, systemPrompt?: string): Promise<string> {
-    return this.executeWithStatusManagement(() => 
+    return this.executeWithStatusManagement(async () => 
       this.conduit.contact(userPrompt, systemPrompt || '', this.config.model, this.config.options)
     );
   }
@@ -268,32 +227,24 @@ export class Magi {
 
 
   /**
-   * Extracts the most recent observation from the loop history
+   * Extracts the most recent observation from the execution history
    */
-  private async extractLatestObservation(history: string): Promise<string> {
-    if (!history.trim()) {
-      return "No previous actions taken yet.";
+  private async extractLatestObservation(executionHistory: HistoryEntry[], currentTopic?: string): Promise<string> {
+    if (executionHistory.length === 0) {
+      return "";
     }
 
-    const lastObservationStartIndex = history.lastIndexOf(OBSERVATION_START_DELIMITER);
-    if (lastObservationStartIndex === -1) {
-      return "Previous actions taken but no observation found.";
-    }
-
-    const lastObservationEndIndex = history.lastIndexOf(OBSERVATION_END_DELIMITER);
-    if (lastObservationEndIndex === -1 || lastObservationEndIndex < lastObservationStartIndex) {
-        // This case should not happen if delimiters are used correctly
-        return "Could not find end of last observation.";
-    }
-    
-    const observationStart = lastObservationStartIndex + OBSERVATION_START_DELIMITER.length;
-    let observation = history.substring(observationStart, lastObservationEndIndex);
+    const latestEntry = executionHistory[executionHistory.length - 1];
+    const observation = latestEntry.observation;
     
     // Add length limits and summarization
     const MAX_OBSERVATION_LENGTH = 10000;
     if (observation.length > MAX_OBSERVATION_LENGTH) {
       logger.warn(`${this.name} observation is too long (${observation.length} chars), summarizing...`);
-      const summaryPrompt = `Summarize the following text in a few sentences and only respond with the summary:\n\n${observation}`;
+      const summaryPrompt = `INSTRUCTIONS:
+Summarize the following text in a few sentences and only respond with the summary.
+${currentTopic ? `If the text has nothing to do with ${currentTopic} then do not include it.` : ''}
+TEXT TO SUMMARIZE:\n${observation}`;
       const summary = await this.contactSimple(summaryPrompt, 'You are a summarization assistant.');
       return `[Summarized]: ${summary}`;
     }
@@ -302,73 +253,111 @@ export class Magi {
   }
 
   /**
+   * Generates synthesis based on current state and observations
+   */
+  private async generateSynthesis(
+    newUserMessage: string,
+    synthesis: string,
+    currentTopic: string,
+    goal: string,
+    observation: string
+  ): Promise<string> {
+    const systemInstructionsPrompt = `You are an expert at synthesizing information you've gathered. You are currently focusing on the user's message`;
+    const synthesisPrompt = `
+USER'S MESSAGE:\n"${newUserMessage}"\n
+${synthesis ? `CONTEXT:\nWhat you know so far:\n${synthesis}` : ''}
+${currentTopic ? `\nCURRENT TOPIC:\n${currentTopic}` : ''}
+${goal ? `\nPREVIOUS GOAL:\n${goal}\n` : ''}${observation ? `\nYOUR LATEST FINDINGS:\n${observation}` : ''}
+SYNTHESIS INSTRUCTIONS:
+To determine your next step, first answer the following questions based on the user's message and the information you currently have. **Do not use your own general knowledge; only use the conversation history and previous tool outputs.**
+
+1.  User's Objective: What is the specific goal of the user's last message?
+2.  Information Check: Do you have all the information required to fully achieve this objective right now?
+3.  Next Requisite Action: If information is missing, what is the single most direct action I must take to get it?
+
+Combine your answers into a concise synthesis that explains your reasoning for the next goal you will select.
+\`\`\`json
+{
+  "synthesis": "Updated summary of what I now know...",
+}
+\`\`\``.trim();
+    
+    const synthesisResponse = await this.conduit.contactForJSON(synthesisPrompt, this.withPersonality(systemInstructionsPrompt), this.config.model, this.config.options);
+    return synthesisResponse.synthesis;
+  }
+
+  /**
+   * Determines the next goal based on current state and synthesis
+   */
+  private async determineNextGoal(
+    newUserMessage: string,
+    synthesis: string,
+    currentTopic: string,
+    goal: string,
+    observation: string,
+    completedSteps: string[]
+  ): Promise<string | GoalObject> {
+    const systemInstructionsPrompt = `You are a pragmatic expert at creating next steps.`;
+    const goalPrompt = `
+USER'S MESSAGE:\n"${newUserMessage}"\n
+${synthesis ? `CONTEXT:\nWhat you know so far:\n${synthesis}` : ''}
+${currentTopic ? `\nCURRENT TOPIC:\n${currentTopic}` : ''}
+${goal ? `\nPREVIOUS GOAL:\n${goal}\n` : ''}${observation ? `\nYOUR LATEST FINDINGS:\n${observation}` : ''}${completedSteps.length > 0 ? `\n\nCOMPLETED STEPS:\n${completedSteps.join(',\n')}` : ''}${completedSteps.length > 0 ? '\n\nAVOID REPETITION: Only take actions that you have not yet completed.\n' : ''}
+
+YOUR CONCLUSION: (your goal must be based on this)
+${synthesis}\n
+${this.config.setNewGoalPrompt}\n
+FORMAT:
+\`\`\`json
+{
+  "goal": "<GOAL> in order to ...",
+}
+\`\`\``.trim();
+
+    const goalResponse = await this.conduit.contactForJSON(goalPrompt, this.withPersonality(systemInstructionsPrompt), this.config.model, this.config.options);
+    return goalResponse.goal;
+  }
+
+  /**
    * Synthesizes current state and updates goals based on latest observation
    */
   private async synthesizeState(
     loopState: AgenticLoopState, 
-    userMessage: string
+    newUserMessage: string
   ): Promise<void> {
-    const { history, originalUserMessage, synthesis, goal, completedSteps } = loopState;
-    const observation = await this.extractLatestObservation(history);
-    
-    // Fix contradiction: if synthesis is still default but we have meaningful observation data
-    if (synthesis === "Nothing is known yet." && observation) {
-      loopState.synthesis = `Just started looking into the user's message, see findings.`;
-    }
-    
-    const systemInstructionsPrompt = `You are an expert at synthesizing information you've gathered, and defining the next goal for yourself. You are currently focusing on the user's original message`;
-    const synthesisPrompt = `User's original message:
-"${originalUserMessage}"
-
-CONTEXT:
-What you know so far:
-${loopState.synthesis}
-
-Your previous goal:
-${goal}
-
-YOUR LATEST FINDINGS:
-${observation}
-
-COMPLETED STEPS: ${completedSteps.join(',\n') || 'None yet'}
-AVOID REPETITION: Only take actions that you have not yet completed.
-
-SYNTHESIS INSTRUCTIONS:
-${this.config.setNewGoalPrompt}
-
-Format your response as JSON only:
-\`\`\`json
-{
-  "synthesis": "Updated summary of what I now know...",
-  "goal": "The single next goal I will pursue..."
-}
-\`\`\`
-
-${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessage}\""}
-`.trim();
+    const { executionHistory, synthesis, goal, currentTopic } = loopState;
+    const observation = await this.extractLatestObservation(executionHistory);
+    const completedSteps = executionHistory.map(entry => entry.stepDescription);
 
     try {
-      const stateUpdate: StateUpdateResponse = await this.executeWithStatusManagement(() => 
-        this.conduit.contactForJSON(synthesisPrompt, this.withPersonality(systemInstructionsPrompt), this.config.model, this.config.options)
-      );
+      const stateUpdate: StateUpdateResponse = await this.executeWithStatusManagement(async () => {
+        const newSynthesis = await this.generateSynthesis(newUserMessage, synthesis, currentTopic, goal, observation);
+        const newGoal = await this.determineNextGoal(newUserMessage, newSynthesis, currentTopic, goal, observation, completedSteps);
+        
+        return {
+          synthesis: newSynthesis,
+          goal: newGoal
+        };
+      });
       
+      // Update the loop state with the new synthesis and goal
       loopState.synthesis = stateUpdate.synthesis;
       loopState.goal = this.extractGoalString(stateUpdate.goal);
       
-      logger.debug(`${this.name} state update - synthesis: ${stateUpdate.synthesis}, goal: ${loopState.goal}`);
+      logger.debug(`${this.name} state update - synthesis: ${stateUpdate.synthesis}, goal: ${goal}`);
     } catch (jsonError) {
       logger.error(`${this.name} failed to get JSON response for state synthesis:`, jsonError);
       // Continue with previous state rather than breaking the loop
-      logger.warn(`${this.name} continuing with previous goal: ${loopState.goal}`);
+      logger.warn(`${this.name} continuing with previous goal: ${goal}`);
     }
   }
 
   /**
-   * Checks if an action is repetitive based on recent history
+   * Checks if an action is repetitive based on recent execution history
    */
-  private isRepetitiveAction(actionHistory: string[], toolName: string): boolean {
-    const recentActions = actionHistory.slice(-2); // Last 2 actions (will be 3 total with current)
-    return recentActions.length === 2 && recentActions.every(action => action === toolName);
+  private isRepetitiveAction(executionHistory: HistoryEntry[], toolName: string): boolean {
+    const recentActions = executionHistory.slice(-2); // Last 2 actions (will be 3 total with current)
+    return recentActions.length === 2 && recentActions.every(entry => entry.action.name === toolName);
   }
 
   /**
@@ -382,44 +371,45 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
   /**
    * Filters tools based on the goal type
    */
-  private getToolForGoal(goal: string): string {
+  private getToolForGoal(goal: string): MagiTool[] {
+    logger.debug(`${this.name} filtering tools for goal: ${goal}`);
     const goalUpper = goal.toUpperCase() + ' ';
     const goalType = goalUpper.split(' ')[0];
     const filteredTools = [];
     
-    // If goal is empty, return all tools
-    if (!goal.trim()) {
-      return this.toolsList.map(tool => this.getToolDescriptionForPrompt(tool)).join('\n\n');
-    }
-    
-    for (const tool of this.toolsList) {
-      if (!tool.name) continue;
-      
-      let shouldInclude = false;
-      switch (goalType) {
-        case 'ANSWER':
-          shouldInclude = tool.name === 'answer-user';
-          break;
-        case 'ASK':
-          shouldInclude = tool.name === 'ask-user';
-          break;
-        case 'SEARCH':
-          shouldInclude = tool.name === 'tavily-search';
-          break;
-        case 'EXTRACT':
-          shouldInclude = tool.name === 'tavily-extract';
-          break;
-        default:
-          shouldInclude = !['ask-user', 'answer-user'].includes(tool.name);
-          break;
+    // If we have a goal then filter tools by the goal.
+    if (goal.trim()) {
+      for (const tool of this.toolsList) {
+        logger.debug(`Checking tool ${tool.name} for goal type ${goalType}`);
+        let shouldInclude = false;
+        switch (goalType) {
+          case 'ANSWER':
+            shouldInclude = tool.name === 'answer-user';
+            break;
+          case 'ASK':
+            shouldInclude = tool.name === 'ask-user';
+            break;
+          case 'SEARCH':
+            shouldInclude = tool.name === 'search-web';
+            break;
+          case 'READ':
+            shouldInclude = tool.name === 'read-page';
+            break;
+          default:
+            shouldInclude = !['ask-user', 'answer-user'].includes(tool.name);
+            break;
+        }
+        
+        if (shouldInclude) {
+          logger.debug(`Tool ${tool.name} matches goal type ${goalType}`);
+          filteredTools.push(tool);
+        }
       }
-      
-      if (shouldInclude) {
-        filteredTools.push(tool);
-      }
+    } else {
+      filteredTools.push(...this.toolsList);
     }
 
-    return filteredTools.map(tool => this.getToolDescriptionForPrompt(tool)).join('\n\n');
+    return filteredTools;
   }
 
   /**
@@ -428,40 +418,26 @@ ${userMessage === originalUserMessage ? '' : "Latest User Message: \"${userMessa
   private async decideNextAction(
     loopState: AgenticLoopState,
     workingMemory: string,
+    userMessage: string,
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
-    const observation = await this.extractLatestObservation(loopState.history);
-
+    const { executionHistory, synthesis, goal, currentTopic } = loopState;
+    const observation = await this.extractLatestObservation(executionHistory, currentTopic);
+    const actionsTaken = actionHistory.join(' → ');
     const warnings = loopState.warnings.join('\n');
     if (warnings) {
         loopState.warnings = []; // Clear warnings after use
     }
 
-    const systemPrompt = `You are an action oriented AI agent adept at specifying the tool use for ${loopState.goal}.`;
+    const systemPrompt = `You're action oriented and an expert at specifying tool use when it comes to the goal: ${goal}.`;
     const reasonPrompt = `
-${workingMemory ? `CONTEXT:\n${workingMemory}` : ''}
-
-WHAT YOU KNOW:
-${loopState.synthesis}
-
-ORIGINAL USER MESSAGE:
-"${loopState.originalUserMessage}"
-
-ACTIONS TAKEN:\n${actionHistory.join(' → ') || 'None yet'}
-${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}
-
-DATA TO PROCESS:
-${observation}
-
-INSTRUCTIONS:
-${this.config.executeGoalPrompt}
-
-YOUR CURRENT GOAL:
-${loopState.goal}
-
-AVAILABLE TOOLS:
-${this.getToolForGoal(loopState.goal)}
-
+${workingMemory ? `CONTEXT:\n${workingMemory}\n` : ''}
+${synthesis ? `WHAT YOU KNOW:\n${synthesis}\n` : ''}
+USER MESSAGE:\n"${userMessage}"\n
+${actionsTaken ? `ACTIONS TAKEN:\n${actionsTaken}\n` : ''}${warnings ? `IMPORTANT WARNINGS:\n${warnings}\n` : ''}${ observation ? `\nDATA TO PROCESS:\n${observation}\n` : ''}
+INSTRUCTIONS:\nRespond with how you would use available tools to achieve your goal.\n
+AVAILABLE TOOLS:\n${this.getToolForGoal(goal).map(t => t.toString())}\n
+YOUR CURRENT GOAL:\n${goal}\n
 Format your response as JSON only:
 \`\`\`json
 {
@@ -473,19 +449,19 @@ Format your response as JSON only:
 
     let agenticResponse: AgenticResponse;
     try {
-      agenticResponse = await this.executeWithStatusManagement(() => 
-        this.conduit.contactForJSON(reasonPrompt, this.withPersonality(systemPrompt), this.config.model, this.config.options)
-      );
-      logger.debug(`${this.name} agentic response - thought: ${agenticResponse.thought}, action: ${JSON.stringify(agenticResponse.action)}`);
+      agenticResponse = await this.executeWithStatusManagement(async () => {
+          const { model, options } = this.config;
+          return this.conduit.contactForJSON(reasonPrompt, systemPrompt, model, options);
+      });
     } catch (jsonError) {
       logger.error(`${this.name} failed to get JSON response for action decision:`, jsonError);
       return { response: "Sorry, I encountered an error processing my response and had to stop.", shouldBreak: true };
     }
     
-    const { tool } = agenticResponse.action;
+    const tool = agenticResponse.action?.tool;
 
     if (tool) {
-      return await this.handleToolResponse(tool, agenticResponse, loopState, actionHistory);
+      return await this.handleToolResponse(tool, agenticResponse, loopState, userMessage, actionHistory);
     } else {
       logger.error(`Invalid response from agentic loop, no tool supplied:\n${JSON.stringify(agenticResponse)}`);
       return { response: "Sorry, I received an invalid response and had to stop.", shouldBreak: true };
@@ -503,13 +479,11 @@ Format your response as JSON only:
     const currentTopic = await this.shortTermMemory.determineTopic(userMessage);
     const workingMemory = await this.shortTermMemory.summarize(currentTopic);
     const loopState: AgenticLoopState = {
-      currentTopic: currentTopic ? currentTopic : userMessage,
-      synthesis: "Nothing is known yet.",
-      goal: "Formulate a plan to address the user's message.",
-      history: "",
+      currentTopic: currentTopic ? currentTopic.trim() : userMessage,
+      synthesis: "",
+      goal: "",
+      executionHistory: [],
       warnings: [],
-      originalUserMessage: userMessage,
-      completedSteps: []
     };
     const actionHistory: string[] = [];
     
@@ -527,12 +501,10 @@ Format your response as JSON only:
   ): Promise<string | null> {
     for (let step = 1; step < MAX_STEPS; step++) {
       // PHASE 1: SYNTHESIZE STATE
-      if (step > 1) {
-        await this.synthesizeState(loopState, userMessage);
-      }
+      await this.synthesizeState(loopState, userMessage);
 
       // PHASE 2: DECIDE ACTION
-      const actionResult = await this.decideNextAction(loopState, workingMemory, actionHistory);
+      const actionResult = await this.decideNextAction(loopState, workingMemory, userMessage, actionHistory);
       if (actionResult.shouldBreak) {
         return actionResult.response || '';
       }
@@ -558,8 +530,8 @@ Format your response as JSON only:
   ): Promise<void> {
     if (response) {
       try {
-        this.shortTermMemory.remember('user', 'User message', userMessage);
-        this.shortTermMemory.remember(this.name, synthesis, response);
+        this.shortTermMemory.remember('user', userMessage);
+        this.shortTermMemory.remember(this.name, synthesis + '\n' + response);
       } catch (memoryError) {
         logger.warn(`Failed to store agentic memory for ${this.name}: ${memoryError}`);
       }
@@ -596,55 +568,38 @@ You are a direct transcription and vocalization engine. Your sole function is to
 `;
 
     const userPrompt = `
-COMPLETE PROMPT
-
 INSTRUCTIONS
-
 Receive the TEXT PASSAGE.
-
 Convert it directly into a SPOKEN SCRIPT.
-
 The script must be ready for immediate TTS playback.
-
 Preserve the original meaning and all data points without adding, removing, or changing the core message.
 
 CORE RULES
-
 CRITICAL RULE: DO NOT ANSWER OR RESPOND. Your task is to convert, not to have a conversation. Treat the TEXT PASSAGE as raw data to be transformed. If the passage is a question, convert the question. Do not answer it.
-
 Expand Abbreviations: Write out all abbreviations in full. e.g. becomes for example. est. becomes estimated.
-
 Verbalize All Numbers & Symbols: Convert all digits and symbols into words. $5.2M becomes five point two million dollars. 25% becomes twenty-five percent. Eris-1 becomes Eris one.
-
 Clarify URLs & Jargon: Spell out URLs and special characters. project-status.com/v2 becomes project dash status dot com slash v two.
 
 EXAMPLES
 
 Example 1:
-
 TEXT PASSAGE: Analysis complete: Plan A is 15% cheaper (~$2k savings) but takes 3 wks longer. See details at results.com/plan-a.
-
 SPOKEN SCRIPT: The analysis is complete. Plan A is fifteen percent cheaper, with approximately two thousand dollars in savings, but it will take three weeks longer. See the details at results dot com slash plan a.
 
 Example 2:
-
 TEXT PASSAGE: Q2 report: Revenue at $1.8M (+7% QoQ). Key issue: supply chain delays, i.e., component shortages.
-
 SPOKEN SCRIPT: The second quarter report shows revenue at one point eight million dollars, a seven percent increase quarter-over-quarter. The key issue is supply chain delays; that is, component shortages.
 
 Example 3:
-
 TEXT PASSAGE: Weather alert for zip 94063: High winds expected ~8 PM. Wind speed: 30-40 mph. Source: noaa.gov.
-
 SPOKEN SCRIPT: There is a weather alert for the nine four zero six three zip code. High winds are expected at approximately eight P M, with wind speeds between thirty and forty miles per hour. The source is N O A A dot gov.
 
 Example 4:
-
 TEXT PASSAGE: Can you confirm the project ETA is still 9/1?
-
 SPOKEN SCRIPT: Can you confirm the project E T A is still September first?
 
-YOUR TASK: Now, rewrite the following TEXT PASSAGE into a spoken script. Only respond with the spoken script itself.
+YOUR TASK:
+Now, rewrite the following TEXT PASSAGE into a spoken script. Only respond with the spoken script itself.
 
 TEXT PASSAGE:\n${text}
 
@@ -660,9 +615,9 @@ SPOKEN SCRIPT:\n`
     tool: AgenticTool,
     agenticResponse: AgenticResponse,
     loopState: AgenticLoopState,
+    userMessage: string,
     actionHistory: string[]
   ): Promise<{ response?: string; shouldBreak: boolean }> {
-    const { originalUserMessage } = loopState;
     switch (tool.name) {
       case 'ask-user': {
         const response = tool.parameters.question as string;
@@ -676,23 +631,27 @@ SPOKEN SCRIPT:\n`
       }
 
       default: {
-        const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, originalUserMessage);
-        const historyEntry = `Thought: ${agenticResponse.thought}\nAction: ${JSON.stringify(agenticResponse.action)}\nObservation: ${OBSERVATION_START_DELIMITER}${toolResponse}${OBSERVATION_END_DELIMITER}\n\n`;
-        loopState.history += historyEntry;
+        const toolResponse = await this.toolUser.executeAgenticTool(tool, agenticResponse.thought, userMessage);
         
         // Check for repetitive actions before adding to history
-        if (this.isRepetitiveAction(actionHistory, tool.name)) {
+        if (this.isRepetitiveAction(loopState.executionHistory, tool.name)) {
           this.addRepetitiveActionWarning(loopState, tool.name);
         }
         
-        // Add action to history
-        actionHistory.push(tool.name);
-        
-        // Track completed steps to avoid repetition
+        // Create structured history entry
         const stepDescription = `${tool.name}: ${JSON.stringify(tool.parameters)}`;
-        if (!loopState.completedSteps.includes(stepDescription)) {
-          loopState.completedSteps.push(stepDescription);
-        }
+        const historyEntry: HistoryEntry = {
+          thought: agenticResponse.thought,
+          action: tool,
+          observation: toolResponse,
+          timestamp: new Date(),
+          stepDescription
+        };
+        
+        loopState.executionHistory.push(historyEntry);
+        
+        // Add action to legacy action history (still used for action tracking)
+        actionHistory.push(tool.name);
         
         return { shouldBreak: false };
       }

@@ -78,12 +78,12 @@ export type ToolResponseMap = {
   // Web search tools
   'search': WebSearchResponse;
   'searchContext': WebSearchResponse;
-  'tavily-search': WebSearchResponse;
+  'search-web': WebSearchResponse;
   
   // Web extract tools
   'extract': WebExtractResponse;
   'crawl_url': WebExtractResponse;
-  'tavily-extract': WebExtractResponse;
+  'read-page': WebExtractResponse;
   
   // Smart home tools
   'smart-home-devices': SmartHomeResponse;

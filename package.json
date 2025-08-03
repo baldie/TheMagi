@@ -1,0 +1,19 @@
+{
+  "name": "the-magi",
+  "version": "1.0.0",
+  "description": "The Magi - Personal AI system with three deliberating personas",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint services/",
+    "lint:fix": "eslint services/ --fix",
+    "lint:all": "eslint .",
+    "lint:all:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^8.57.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}

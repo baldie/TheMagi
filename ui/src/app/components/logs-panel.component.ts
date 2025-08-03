@@ -33,7 +33,7 @@ export class LogsPanelComponent implements AfterViewChecked {
     }
   }
 
-  onLogsScroll(event: Event) {
+  onLogsScroll() {
     if (!this.logsContainer) return;
     
     const element = this.logsContainer.nativeElement;
@@ -78,7 +78,7 @@ export class LogsPanelComponent implements AfterViewChecked {
     try {
       const element = this.logsContainer.nativeElement;
       element.scrollTop = element.scrollHeight;
-    } catch (err) {
+    } catch {
       // Ignore scroll errors
     }
   }

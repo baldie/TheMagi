@@ -2,12 +2,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { MagiName } from '../magi/magi';
 import { logger } from '../logger';
-import { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
+import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
 import { getBalthazarToolAssignments, getBalthazarToolServers } from './tools/balthazar-tools';
 import { getCasparToolAssignments,getCasparTools } from './tools/caspar-tools';
 import { getMelchiorToolAssignments, getMelchiorTools } from './tools/melchior-tools';
-import { TOOL_REGISTRY, ToolRegistry } from './tools/tool-registry';
+import { EXCLUDED_TOOL_PARAMS, TOOL_REGISTRY, ToolRegistry } from './tools/tool-registry';
 
 /**
  * Information about a single MCP tool
@@ -28,6 +28,48 @@ export interface McpServerConfig {
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
+}
+
+export class MagiTool implements McpToolInfo {
+  name: string;
+  description?: string | undefined;
+  inputSchema?: Record<string, any> | undefined;
+  instructions?: string | undefined;
+
+  constructor(info: McpToolInfo) {
+    this.name = info.name;
+    this.description = info.description;
+    this.inputSchema = info.inputSchema;
+    this.instructions = info.instructions;
+  }
+
+  toString(): string {
+    const parts = [`Name: ${this.name}`];
+    
+    if (this.description) {
+      parts.push(`Description: ${this.description}`);
+    }
+    
+    if (this.inputSchema?.properties) {
+      const params = Object.entries(this.inputSchema.properties)
+        .filter(([key]) => !EXCLUDED_TOOL_PARAMS.has(key))
+        .map(([key, value]: [string, any]) => {
+          const paramDesc = value.description ? ` (${value.description})` : '';
+          const required = this.inputSchema?.required?.includes(key) ? ' [required]' : '';
+          return `  ${key}: ${value.type || 'any'}${paramDesc}${required}`;
+        })
+        .join('\n');
+      if (params.trim()) {
+        parts.push(`Parameters:\n${params}`);
+      }
+    }
+    
+    if (this.instructions) {
+      parts.push(`Instructions: ${this.instructions}`);
+    }
+    
+    return parts.join('\n');
+  }
 }
 
 function getToolAssigmentsForAllMagi(): Record<MagiName, string[]> {
@@ -208,8 +250,8 @@ export class McpClientManager {
   /**
    * Get available tools for a specific Magi
    */
-  async getMCPToolInfoForMagi(magiName: MagiName): Promise<McpToolInfo[]> {
-    const allTools: McpToolInfo[] = [];
+  async getMCPToolInfoForMagi(magiName: MagiName): Promise<MagiTool[]> {
+    const allTools: MagiTool[] = [];
     
     // Find all clients for this Magi
     const serverConfigs = this.getServerConfigs();
@@ -227,14 +269,29 @@ export class McpClientManager {
       try {
         const response = await client.listTools();
         const myTools = getToolAssigmentsForAllMagi()[magiName];
+        
+        // Create mapping from MCP tool names to friendly names
+        const mcpToFriendlyMap: Record<string, string> = {
+          'tavily-search': 'search-web',
+          'tavily-extract': 'read-page',
+          'personal-data': 'personal-data'  // Direct mapping for personal-data tool
+        };
+        
         const tools = response.tools
-        .filter((tool: Tool) => myTools.includes(tool.name))
-        .map((tool: Tool) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          instructions: TOOL_REGISTRY[tool.name]?.instructions
-        }));
+        .filter((tool: Tool) => {
+          // Check if this MCP tool has a friendly name that's assigned to this Magi
+          const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
+          return myTools.includes(friendlyName);
+        })
+        .map((tool: Tool) => {
+          // Use the friendly name instead of the MCP name
+          const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
+          return new MagiTool({
+            name: friendlyName,
+            description: tool.description,
+            inputSchema: tool.inputSchema,
+          });
+        });
         allTools.push(...tools);
       } catch (error) {
         logger.error(`Failed to list tools for ${magiName}:${config.name}:`, error);
@@ -246,11 +303,10 @@ export class McpClientManager {
     const defaultAgenticTools = myTools
       .map(toolName => TOOL_REGISTRY[toolName])
       .filter(toolDef => toolDef?.category === 'default_agentic_tool')
-      .map(toolDef => ({
+      .map(toolDef => new MagiTool({
         name: toolDef.name,
         description: toolDef.description,
         inputSchema: this.createInputSchemaForDefaultTool(toolDef),
-        instructions: toolDef.instructions
       }));
     
     allTools.push(...defaultAgenticTools);
@@ -259,7 +315,7 @@ export class McpClientManager {
   }
 
   /**
-   * Create a basic input schema for default agentic tools
+   * Create a basic input schema for default agentic tools using structured parameters
    */
   private createInputSchemaForDefaultTool(toolDef: any): Record<string, any> {
     // Basic schema structure for default tools
@@ -269,24 +325,23 @@ export class McpClientManager {
       required: [] as string[]
     };
 
-    // Parse instructions to determine required parameters
-    if (toolDef.instructions) {
-      const lines = toolDef.instructions.split('\n');
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.includes('(required)')) {
-          const paramMatch = trimmed.match(/^\s*(\w+)\s*\(required\)/);
-          if (paramMatch) {
-            const paramName = paramMatch[1];
-            schema.properties[paramName] = { type: 'string' };
-            schema.required.push(paramName);
-          }
-        } else if (trimmed.includes('(optional)')) {
-          const paramMatch = trimmed.match(/^\s*(\w+)\s*\(optional\)/);
-          if (paramMatch) {
-            const paramName = paramMatch[1];
-            schema.properties[paramName] = { type: 'string' };
-          }
+    // Use structured parameters instead of parsing instructions
+    if (toolDef.parameters) {
+      for (const [paramName, paramDef] of Object.entries(toolDef.parameters)) {
+        const param = paramDef as any;
+        schema.properties[paramName] = {
+          type: param.type || 'string',
+          description: param.description
+        };
+        
+        // Add enum if present
+        if (param.enum) {
+          schema.properties[paramName].enum = param.enum;
+        }
+        
+        // Add to required array if marked as required
+        if (param.required) {
+          schema.required.push(paramName);
         }
       }
     }
@@ -326,12 +381,21 @@ export class McpClientManager {
         const availableTools = response.tools.map((tool: Tool) => tool.name);
         logger.debug(`${config.name} server has tools: [${availableTools.join(', ')}], looking for: ${toolName}`);
         
-        const hasTool = response.tools.some((tool: Tool) => tool.name === toolName);
+        // Create mapping from friendly names to MCP tool names for server lookup
+        const friendlyToMcpMap: Record<string, string> = {
+          'search-web': 'tavily-search',
+          'read-page': 'tavily-extract',
+          'personal-data': 'personal-data'  // Direct mapping for personal-data tool
+        };
+        
+        // Map friendly tool name to MCP tool name for lookup
+        const mcpToolName = friendlyToMcpMap[toolName] || toolName;
+        const hasTool = response.tools.some((tool: Tool) => tool.name === mcpToolName);
         
         if (hasTool) {
-          logger.debug(`Executing tool ${toolName} (mapped to ${toolName}) for ${magiName} via ${config.name} server`);
+          logger.debug(`Executing tool ${toolName} (mapped to ${mcpToolName}) for ${magiName} via ${config.name} server`);
           
-          const result = await client.callTool({ name: toolName, arguments: toolArguments });
+          const result = await client.callTool({ name: mcpToolName, arguments: toolArguments });
           
           logger.debug(`Tool ${toolName} completed for ${magiName} via ${config.name} server`);
           
@@ -354,7 +418,15 @@ export class McpClientManager {
       return this.executeDefaultAgenticTool(toolName, toolArguments) as GetToolResponse<T>;
     }
 
-    logger.warn(`Tool ${toolName} (mapped to ${toolName}) not found in any MCP server for ${magiName}`);
+    // Create mapping for error logging
+    const friendlyToMcpMap: Record<string, string> = {
+      'search-web': 'tavily-search',
+      'read-page': 'tavily-extract',
+      'personal-data': 'personal-data'  // Direct mapping for personal-data tool
+    };
+    const mcpToolName = friendlyToMcpMap[toolName] || toolName;
+    
+    logger.warn(`Tool ${toolName} (mapped to ${mcpToolName}) not found in any MCP server for ${magiName}`);
     return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;
   }
 
@@ -560,7 +632,7 @@ export const mcpClientManager = new McpClientManager();
 
 // Legacy exports for backward compatibility during transition
 export const mcpToolRegistry = {
-  initialize: () => mcpClientManager.initialize(),
-  executeTool: (magiName: MagiName, toolName: string, toolArguments: Record<string, any>) => 
+  initialize: async () => mcpClientManager.initialize(),
+  executeTool: async (magiName: MagiName, toolName: string, toolArguments: Record<string, any>) => 
     mcpClientManager.executeTool(magiName, toolName, toolArguments)
 };

@@ -1,4 +1,5 @@
-import axios, { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import type { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import { ensureMagiConduitIsRunning } from './index';
 
 jest.mock('axios');

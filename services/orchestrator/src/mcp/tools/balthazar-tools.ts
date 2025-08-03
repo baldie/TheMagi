@@ -1,11 +1,11 @@
 import { MagiName } from '../../types/magi-types';
 import { ToolRegistry } from './tool-registry';
-import { McpServerConfig } from '../index';
+import type { McpServerConfig } from '../index';
 
 /**
  * Balthazar's analytical tools - focused on data gathering, analysis, and fact-checking
  * 
- * Tools assigned: tavily-search, tavily-extract, ask-user, answer-user
+ * Tools assigned: search-web, read-page, ask-user, answer-user
  * - Web search for current information and fact-checking
  * - Content extraction from URLs for detailed analysis
  * - Core agentic tools for user interaction
@@ -15,7 +15,7 @@ import { McpServerConfig } from '../index';
  * Get Balthazar's tool assignments
  */
 export function getBalthazarToolAssignments(): string[] {
-  return ['tavily-search', 'tavily-extract', 'ask-user', 'answer-user'];
+  return ['search-web', 'read-page', 'ask-user', 'answer-user'];
 }
 
 /**

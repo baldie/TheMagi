@@ -1,7 +1,5 @@
-/// <reference types="ws" />
-
 import { WebSocketServer, WebSocket } from 'ws';
-import { Server } from 'http';
+import type { Server } from 'http';
 import { logger } from './logger';
 import { logStream } from './log-stream';
 

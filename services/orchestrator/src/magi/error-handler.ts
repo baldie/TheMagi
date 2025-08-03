@@ -1,5 +1,5 @@
 import { logger } from '../logger';
-import { MagiName } from './magi';
+import type { MagiName } from './magi';
 
 export interface ErrorContext {
   magiName: MagiName;
@@ -38,6 +38,15 @@ export class MagiErrorHandler {
         }
         
         const duration = Date.now() - startTime;
+        
+        // Log additional axios error details if available
+        if (error && typeof error === 'object' && 'response' in error) {
+          const axiosError = error as any;
+          if (axiosError.response?.data) {
+            logger.error(`${context.magiName} ${context.operation} API error response: ${JSON.stringify(axiosError.response.data)}`);
+          }
+        }
+        
         logger.error(`${context.magiName} ${context.operation} failed after ${duration}ms`, error);
         
         throw this.createContextualError(error, context);

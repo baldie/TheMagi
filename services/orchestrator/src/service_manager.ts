@@ -1,4 +1,5 @@
-import { spawn, ChildProcess } from 'child_process';
+import type { ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 import { logger, closeLogStream } from './logger';
 import path from 'path';
 import axios from 'axios';
@@ -43,7 +44,7 @@ class ServiceManager {
             }
             logger.debug(`${serviceName} status is '${response.data.status}', waiting...`);
         }
-      } catch (error: unknown) {
+      } catch {
         if (attempt === 1) {
             logger.info(`Waiting for ${serviceName} to launch (attempt ${attempt}/${maxAttempts})`);
         }
@@ -63,7 +64,7 @@ class ServiceManager {
         await axios.get(healthUrl, { timeout: 1000 });
         logger.info('TTS service is already running.');
         return;
-    } catch (error) {
+    } catch {
         logger.info('TTS service not running. Starting it now...');
     }
 
@@ -165,7 +166,7 @@ class ServiceManager {
         await axios.get(healthUrl, { timeout: 1000 });
         logger.info('UI service is already running.');
         return;
-    } catch (error) {
+    } catch {
         logger.info('UI service not running. Starting it now...');
     }
 

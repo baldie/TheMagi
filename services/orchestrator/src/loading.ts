@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import { logger } from './logger';
-import { balthazar, caspar, melchior, Magi, MagiName, PERSONAS_CONFIG } from './magi/magi';
+import type { Magi} from './magi/magi';
+import { balthazar, caspar, melchior, MagiName, PERSONAS_CONFIG } from './magi/magi';
 
 async function checkPersonaReadiness(magi: Magi): Promise<void> {
   const maxRetries = 3;
@@ -68,7 +69,7 @@ export async function loadMagi(): Promise<void> {
 
   // Step 2: Check readiness of all Magi in parallel
   logger.info('--- Checking Magi Readiness ---');
-  const readinessPromises = [caspar, melchior, balthazar].map(magi => 
+  const readinessPromises = [caspar, melchior, balthazar].map(async magi => 
     checkPersonaReadiness(magi)
   );
 

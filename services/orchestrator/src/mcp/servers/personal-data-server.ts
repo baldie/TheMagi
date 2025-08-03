@@ -8,16 +8,18 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type {
+  Tool,
+  CallToolResult,
+  TextContent} from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  Tool,
-  CallToolResult,
-  TextContent,
   ErrorCode,
   McpError
 } from '@modelcontextprotocol/sdk/types.js';
-import { LocalIndex, MetadataTypes } from 'vectra';
+import type { MetadataTypes } from 'vectra';
+import { LocalIndex } from 'vectra';
 import path from 'path';
 import fs from 'fs/promises';
 import axios from 'axios';

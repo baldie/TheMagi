@@ -1,4 +1,5 @@
-import { balthazar, caspar, melchior, MagiName, Magi, allMagi } from './magi/magi';
+import type { Magi} from './magi/magi';
+import { balthazar, caspar, melchior, MagiName, allMagi } from './magi/magi';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
 
@@ -26,13 +27,13 @@ async function runSealedEnvelopePhase(userMessage: string): Promise<string> {
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(() => balthazar.contactAsAgent(userMessage));
+  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(userMessage));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(() => melchior.contactAsAgent(userMessage));
+  const melchiorResponse = await retry(async () => melchior.contactAsAgent(userMessage));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(() => caspar.contactAsAgent(userMessage));
+  const casparResponse = await retry(async () => caspar.contactAsAgent(userMessage));
 
   const sealedEnvelope = `
     
@@ -94,7 +95,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       What is your response? Be very concise.
       `;
       
-      const response = await retry(() => currentMagi.contact(debatePrompt));
+      const response = await retry(async () => currentMagi.contact(debatePrompt));
       roundResponses += `\n${currentMagi.name}'s Round ${round} response:\n${response}\n---`;
       logger.info(`${currentMagi.name} has contributed to Round ${round}.`);
     }
@@ -121,7 +122,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       It is very important that you concise in your summary.
       Use as few words as possible to convey the outcome.
       `;
-    const consensusResult = await retry(() => caspar.contactSimple(consensusCheckPrompt, systemPrompt));
+    const consensusResult = await retry(async () => caspar.contactSimple(consensusCheckPrompt, systemPrompt));
 
     if (consensusResult.trim().toUpperCase() !== 'IMPASSE') {
       logger.info(`Consensus reached in Round ${round}.`);
@@ -144,7 +145,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
   Capture each Magi's final position and present them clearly to the user.
   Be very concise and do not use bullet points, use conversational prose.
   The user should be able to understand the differing viewpoints and the nature of the impasse.`;
-  return await retry(() => caspar.contactSimple(impasseSummaryPrompt, ''));
+  return await retry(async () => caspar.contactSimple(impasseSummaryPrompt, ''));
 }
 
 /**

@@ -5,7 +5,7 @@
   </div>
   <div class="logs-container" 
        #logsContainer
-       (scroll)="onLogsScroll($event)">
+       (scroll)="onLogsScroll()">
     <div class="log-row" 
          *ngFor="let log of serverLogs; let i = index"
          [class.selected]="selectedLogIndex === i"

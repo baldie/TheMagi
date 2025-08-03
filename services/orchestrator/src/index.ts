@@ -75,13 +75,13 @@ async function main() {
     });
   } catch (error) {
     logger.error('A critical error occurred during system initialization. The application will now exit.', error);
-    gracefulShutdown('unhandledRejection');
+    void gracefulShutdown('unhandledRejection');
   }
 }
 
 main().catch(error => {
   logger.error('Unhandled promise rejection in main.', error);
-  gracefulShutdown('unhandledRejection');
+  void gracefulShutdown('unhandledRejection');
 });
 
 async function gracefulShutdown(signal: string) {
@@ -97,8 +97,8 @@ async function gracefulShutdown(signal: string) {
   process.exit(0);
 }
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', async () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', async () => gracefulShutdown('SIGINT'));
 
 // This service provides the orchestrator's health route and a websocket server for the UI to connect to.
 function startHttpOrchestratorService() {

@@ -4,7 +4,6 @@ import os from 'os';
 import path from 'path';
 import { logger } from './logger';
 import { MAGI_CONDUIT_API_BASE_URL, TTS_API_BASE_URL, REQUIRED_MODELS } from './config';
-import { PERSONAS_CONFIG } from './magi/magi';
 import { promises as fs } from 'fs';
 import { exec } from 'child_process';
 import { mcpClientManager } from './mcp';
@@ -33,7 +32,7 @@ async function ensureServiceReady(
     await axios.get(healthUrl, { timeout: 5000 });
     logger.info(`... ${serviceName} service is already running.`);
     return; // If it's running, we're done.
-  } catch (e) {
+  } catch  {
     // Service is not ready, so we will proceed to start and poll.
     logger.info(`... ${serviceName} service not detected or not responding. Attempting to start and poll...`);
   }
@@ -220,7 +219,7 @@ async function ensurePythonServiceReady(
   try {
     await fs.access(venvPython, fs.constants.F_OK);
     pythonCmd = venvPython;
-  } catch (error) {
+  } catch  {
     logger.warn(`${serviceName} virtual environment not found, using system python. Run install-magi.sh to set up properly.`);
   }
   
@@ -258,7 +257,7 @@ async function verifyInternetAccess(): Promise<void> {
   try {
     await axios.get('http://www.gstatic.com/generate_204');
     logger.info('... Internet access verified.');
-  } catch (error) {
+  } catch  {
     throw new Error('Internet access verification failed.');
   }
 }
@@ -320,7 +319,7 @@ async function verifyMcpServers(): Promise<void> {
             logger.info(`... ${magiName}: Testing search tool availability...`);
             
             // Check if search tool exists
-            const hasSearchTool = tools.some(tool => tool.name === 'tavily-search');
+            const hasSearchTool = tools.some(tool => tool.name === 'search-web');
             
             if (hasSearchTool) {
               logger.info(`... ${magiName}: ✅ search tool FOUND`);
@@ -341,7 +340,7 @@ async function verifyMcpServers(): Promise<void> {
           }
 
           // Check for Tavily tools and API key availability
-          if (tools.some(tool => tool.name === 'tavily-search' || tool.name === 'tavily-extract' || tool.name === 'tavily-crawl' || tool.name === 'tavily-map')) {
+          if (tools.some(tool => tool.name === 'search-web' || tool.name === 'read-page' || tool.name === 'tavily-crawl' || tool.name === 'tavily-map')) {
             const tavilyApiKey = process.env.TAVILY_API_KEY;
             if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
               logger.info(`... ${magiName}: Tavily search tools available with valid API key`);
@@ -351,7 +350,7 @@ async function verifyMcpServers(): Promise<void> {
               logger.warn(`... ${magiName}: Tavily tools available but TAVILY_API_KEY not set in environment`);
             }
           } else if (magiName === MagiName.Balthazar) {
-            logger.error(`... ${magiName}: NO Tavily tools found! Expected: tavily-search, tavily-extract, tavily-crawl, tavily-map`);
+            logger.error(`... ${magiName}: NO Tavily tools found! Expected: search-web, read-page, tavily-crawl, tavily-map`);
             logger.error(`... ${magiName}: Available tools: [${tools.map(t => t.name).join(', ')}]`);
           }
 

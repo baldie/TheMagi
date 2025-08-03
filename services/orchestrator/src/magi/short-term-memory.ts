@@ -1,8 +1,7 @@
-import { Magi } from './magi';
-import { MagiName } from '../types/magi-types';
+import type { Magi } from './magi';
+import type { MagiName } from '../types/magi-types';
 
 export interface Memory {
-  thought: string;
   speaker: MagiName | 'user';
   message: string;
 }
@@ -20,11 +19,9 @@ export class ShortTermMemory {
 
   public remember(
     speaker: MagiName | 'user',
-    scratchpad: string,
     message: string
   ): void {
     const memory: Memory = {
-      thought: scratchpad,
       speaker,
       message
     };
@@ -55,7 +52,7 @@ export class ShortTermMemory {
       return null;
     }
 
-    if (userMessage.trim() == '')
+    if (userMessage.trim() === '')
       return null;
 
     const memoryText = `Conversation History:` +
@@ -71,7 +68,13 @@ Speaker: User
 Message: ${userMessage}
 
 INSTRUCTIONS:
-What is the user's last message focused on? Identify what aspect or characteristic is being discussed and about whom/what. Format as "The [aspect] of [subject]".`;
+Your goal is to identify the subject of the user's final message.
+
+1.  First, analyze the final message on its own. If it contains a new and specific subject, prioritize it.
+2.  If the message lacks a specific subject and seems to be a follow-up (e.g., uses pronouns like "he", "it", or asks a short question), use the conversation history to determine the subject.
+
+What is the primary subject of the final message? Format as "The [aspect] of [subject]".
+`.trim();
 
     try {
       const topic = await this.magi.contactSimple(topicDetectionPrompt, systemPrompt);
@@ -95,12 +98,7 @@ What is the user's last message focused on? Identify what aspect or characterist
       return this.lastSummary;
     }
 
-    const memoryText = memories.map((memory) => 
-      `Speaker: ${memory.speaker}
-Scratchpad: ${memory.thought}
-Message: ${memory.message}`
-    ).join('\n');
-
+    const memoryText = memories.map((memory) => `Speaker: ${memory.speaker}\nMessage: ${memory.message}`).join('\n');
     const systemPrompt = `PERSONA\nYou ${this.magi.name}, are a helpful assistant that creates concise extractive summaries.`;
     const summarizationPrompt = `CONTEXT:
 ${memoryText}

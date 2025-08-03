@@ -1,7 +1,8 @@
 import axios from 'axios';
-import { MAGI_CONDUIT_API_BASE_URL, ModelType } from '../config';
+import type { ModelType } from '../config';
+import { MAGI_CONDUIT_API_BASE_URL } from '../config';
 import { logger } from '../logger';
-import { MagiName } from './magi';
+import type { MagiName } from './magi';
 import { MagiErrorHandler } from './error-handler';
 
 /**

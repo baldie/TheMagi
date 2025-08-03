@@ -1,6 +1,6 @@
 import { MagiName } from '../../types/magi-types';
 import { ToolRegistry } from './tool-registry';
-import { McpServerConfig } from '../index';
+import type { McpServerConfig } from '../index';
 
 /**
  * Caspar's practical tools - focused on smart home devices, system status, and integration data

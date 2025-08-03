@@ -45,8 +45,8 @@ run_test() {
 PROJECT_ROOT="/home/baldie/David/Project/TheMagi"
 
 # Test each service
-run_test "Orchestrator" "npm run lint && npm test" "$PROJECT_ROOT/services/orchestrator"
-run_test "Conduit" "npm run lint && npm test" "$PROJECT_ROOT/services/conduit"
+run_test "Orchestrator" "cd $PROJECT_ROOT && npx eslint services/orchestrator/src/**/*.ts --quiet && cd services/orchestrator && npm test" "$PROJECT_ROOT/services/orchestrator"
+run_test "Conduit" "cd $PROJECT_ROOT && npx eslint services/conduit/src/**/*.ts --quiet && cd services/conduit && npm test" "$PROJECT_ROOT/services/conduit"
 
 # Test UI with Chrome headless
 if command -v google-chrome &> /dev/null || command -v chromium-browser &> /dev/null || command -v chromium &> /dev/null; then
