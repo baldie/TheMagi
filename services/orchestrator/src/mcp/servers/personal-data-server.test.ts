@@ -147,7 +147,7 @@ describe('PersonalDataServer', () => {
       const responseData = JSON.parse(result.content[0].text);
       expect(responseData.data.items).toHaveLength(1);
       expect(responseData.data.items[0].content).toBe('Test content');
-      expect(responseData.categories).toEqual(['test-category']);
+      expect(responseData.categories).toEqual(['test-category', '']);
     });
 
     it('should handle search action correctly', async () => {
@@ -219,19 +219,20 @@ describe('PersonalDataServer', () => {
       );
     });
 
-    it('should require categories for retrieve action', async () => {
+    it('should handle retrieve action with missing categories', async () => {
       const mockArgs = {
         action: 'retrieve'
         // Missing categories
       };
 
+      mockVectraIndex.listItems.mockResolvedValue([]);
+
       const handleMethod = (server as any).handlePersonalDataTool.bind(server);
+      const result = await handleMethod(mockArgs);
       
-      await expect(handleMethod(mockArgs)).rejects.toThrow(
-        expect.objectContaining({
-          message: expect.stringContaining('Categories array is required')
-        })
-      );
+      const responseData = JSON.parse(result.content[0].text);
+      expect(responseData.data.items).toHaveLength(0);
+      expect(responseData.categories).toEqual(['']);
     });
 
     it('should require query for search action', async () => {

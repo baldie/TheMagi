@@ -23,6 +23,7 @@ import { LocalIndex } from 'vectra';
 import path from 'path';
 import fs from 'fs/promises';
 import axios from 'axios';
+import { randomBytes } from 'crypto';
 import { logger } from '../../logger';
 
 /**
@@ -56,10 +57,10 @@ interface PersonalDataItem extends Record<string, MetadataTypes> {
  * Personal Data MCP Server class
  */
 class PersonalDataServer {
-  private server: Server;
-  private vectorIndex: LocalIndex;
-  private indexPath: string;
-  private config: PersonalDataConfig;
+  private readonly server: Server;
+  private readonly vectorIndex: LocalIndex;
+  private readonly indexPath: string;
+  private readonly config: PersonalDataConfig;
 
   constructor() {
     this.server = new Server(
@@ -76,8 +77,8 @@ class PersonalDataServer {
 
     // Set up configuration
     this.config = {
-      ollamaUrl: process.env.OLLAMA_URL || 'http://localhost:11434',
-      embeddingModel: process.env.EMBEDDING_MODEL || 'nomic-embed-text',
+      ollamaUrl: process.env.OLLAMA_URL ?? 'http://localhost:11434',
+      embeddingModel: process.env.EMBEDDING_MODEL ?? 'nomic-embed-text',
       vectorDimensions: 768 // nomic-embed-text produces 768-dimensional vectors
     };
 
@@ -117,65 +118,76 @@ class PersonalDataServer {
    * Generate embeddings using Ollama's API
    */
   private async generateVector(text: string): Promise<number[]> {
-    const maxRetries = 3;
-    const retryDelay = 1000; // 1 second
+    return this.retryOperation(async () => {
+      const response = await axios.post(
+        `${this.config.ollamaUrl}/api/embeddings`,
+        {
+          model: this.config.embeddingModel,
+          prompt: text
+        },
+        {
+          timeout: 30000,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
 
+      return this.validateEmbeddingResponse(response.data);
+    }, 'generate embeddings');
+  }
+
+  /**
+   * Validate embedding response format and dimensions
+   */
+  private validateEmbeddingResponse(data: any): number[] {
+    const embeddingResponse = data as OllamaEmbeddingResponse;
+    
+    if (!embeddingResponse.embedding || !Array.isArray(embeddingResponse.embedding)) {
+      throw new Error('Invalid embedding response format');
+    }
+
+    const embedding = embeddingResponse.embedding;
+    
+    if (embedding.length !== this.config.vectorDimensions) {
+      throw new Error(
+        `Expected ${this.config.vectorDimensions} dimensions, got ${embedding.length}`
+      );
+    }
+
+    return embedding;
+  }
+
+  /**
+   * Generic retry operation helper
+   */
+  private async retryOperation<T>(
+    operation: () => Promise<T>,
+    operationName: string,
+    maxRetries = 3,
+    retryDelay = 1000
+  ): Promise<T> {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await axios.post(
-          `${this.config.ollamaUrl}/api/embeddings`,
-          {
-            model: this.config.embeddingModel,
-            prompt: text
-          },
-          {
-            timeout: 30000, // 30 second timeout
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-
-        const embeddingResponse = response.data as OllamaEmbeddingResponse;
-        
-        if (!embeddingResponse.embedding || !Array.isArray(embeddingResponse.embedding)) {
-          throw new Error('Invalid embedding response format');
-        }
-
-        const embedding = embeddingResponse.embedding;
-        
-        // Validate expected dimensions
-        if (embedding.length !== this.config.vectorDimensions) {
-          throw new Error(
-            `Expected ${this.config.vectorDimensions} dimensions, got ${embedding.length}`
-          );
-        }
-
-        return embedding;
-
+        return await operation();
       } catch (error) {
         if (attempt === maxRetries) {
           throw new McpError(
             ErrorCode.InternalError,
-            `Failed to generate embeddings after ${maxRetries} attempts: ${
+            `Failed to ${operationName} after ${maxRetries} attempts: ${
               error instanceof Error ? error.message : 'Unknown error'
             }`
           );
         }
 
-        // Log the retry attempt
         console.warn(
-          `Embedding generation attempt ${attempt} failed, retrying in ${retryDelay}ms...`,
+          `${operationName} attempt ${attempt} failed, retrying in ${retryDelay}ms...`,
           error instanceof Error ? error.message : error
         );
 
-        // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       }
     }
 
-    // This should never be reached due to the throw in the loop, but TypeScript requires it
-    throw new McpError(ErrorCode.InternalError, 'Unexpected error in embedding generation');
+    throw new McpError(ErrorCode.InternalError, `Unexpected error in ${operationName}`);
   }
 
   /**
@@ -187,14 +199,14 @@ class PersonalDataServer {
         tools: [
           {
             name: 'personal-data',
-            description: 'Store and retrieve user personal data using vector similarity search',
+            description: 'Store or Retrieve data about the user using vector similarity search. IMPORTANT: You MUST store any personal data or preferences that the user has shared with you if you have not done so already.',
             inputSchema: {
               type: 'object',
               properties: {
                 action: {
                   type: 'string',
                   enum: ['store', 'retrieve', 'search'],
-                  description: 'Action to perform'
+                  description: 'Action to perform **REQUIRED**'
                 },
                 content: {
                   type: 'string',
@@ -202,7 +214,7 @@ class PersonalDataServer {
                 },
                 category: {
                   type: 'string',
-                  description: 'Category of the data (e.g., preferences, behavior, context)'
+                  description: 'Category of the data ("Health & Wellness", "Preferences", "Relationships", "Daily Routines", "Personal Facts", "Goals", etc)'
                 },
                 categories: {
                   type: 'array',
@@ -254,8 +266,13 @@ class PersonalDataServer {
       switch (action) {
         case 'store':
           return await this.storeData(content, category, user_context);
-        case 'retrieve':
-          return await this.retrieveData(categories, user_context, limit);
+        case 'retrieve': {
+          // absolutely make sure categories array is provided when retrieving
+          const retrievalCategories: string [] = [];
+          retrievalCategories.push(...(categories || []));
+          retrievalCategories.push(category || '');
+          return await this.retrieveData(retrievalCategories, user_context, limit);
+        }
         case 'search':
           return await this.searchData(content, limit);
         default:
@@ -287,7 +304,7 @@ class PersonalDataServer {
       );
     }
 
-    const itemId = `pd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const itemId = `pd_${Date.now()}_${randomBytes(6).toString('hex')}`;
     const vector = await this.generateVector(content);
 
     const metadata: PersonalDataItem = {
@@ -295,7 +312,7 @@ class PersonalDataServer {
       content,
       category,
       timestamp: new Date().toISOString(),
-      user_context: user_context || ''
+      user_context: user_context ?? ''
     };
 
     await this.vectorIndex.insertItem({
@@ -310,7 +327,7 @@ class PersonalDataServer {
         vector_length: vector.length
       },
       categories: [category],
-      context: user_context || 'No context provided',
+      context: user_context ?? 'No context provided',
       last_updated: metadata.timestamp
     };
 
@@ -381,16 +398,15 @@ class PersonalDataServer {
         };
       });
 
-    const filteredItems = await Promise.all(filteredItemsPromises);
-
+    const finalItems = await Promise.all(filteredItemsPromises);
     const response = {
       data: {
-        items: filteredItems,
-        total_found: filteredItems.length
+        items: finalItems,
+        total_found: finalItems.length
       },
       categories: categories,
-      context: user_context || 'Category-based retrieval',
-      last_updated: filteredItems.length > 0 ? String(filteredItems[0].timestamp) : new Date().toISOString()
+      context: user_context ?? 'Category based retrieval',
+      last_updated: finalItems.length > 0 ? String(finalItems[0].timestamp) : new Date().toISOString()
     };
 
     return {

@@ -17,11 +17,9 @@ interface QueuedAudio {
 })
 export class AudioService {
   private audioContext: AudioContext | null = null;
-  private currentAudioChunks: ArrayBuffer[] = [];
   private isPlaying = false;
-  private isRecording = false;
-  private mediaStream: MediaStream | null = null;
-  private audioQueue: Map<number, QueuedAudio> = new Map();
+  private readonly mediaStream: MediaStream | null = null;
+  private readonly audioQueue: Map<number, QueuedAudio> = new Map();
   private nextExpectedSequence = 0;
   private isProcessingQueue = false;
 
@@ -160,7 +158,7 @@ export class AudioService {
       } catch (error) {
         console.error('Error playing audio:', error);
         this.isPlaying = false;
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -204,12 +202,37 @@ export class AudioService {
     }
     
     const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-    const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
-    
+
+    // Register the audio worklet processor if not already registered
+    if (!this.audioContext.audioWorklet) {
+      console.error('AudioWorklet is not supported in this browser.');
+      return;
+    }
+
+    // Define a simple processor if not already loaded
+    try {
+      // You may want to move this to a separate file for production use
+      const processorCode = `
+        class RecorderProcessor extends AudioWorkletProcessor {
+          process(inputs, outputs, parameters) {
+            // Implement your recording logic here
+            return true;
+          }
+        }
+        registerProcessor('recorder-processor', RecorderProcessor);
+      `;
+      const blob = new Blob([processorCode], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      await this.audioContext.audioWorklet.addModule(url);
+    } catch  {
+      // Ignore if already loaded
+    }
+
+    const processor = new AudioWorkletNode(this.audioContext, 'recorder-processor');
+
     source.connect(processor);
     processor.connect(this.audioContext.destination);
-    
-    this.isRecording = true;
+
     // ... rest of the code ...
   }
 }

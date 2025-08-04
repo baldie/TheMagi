@@ -59,7 +59,7 @@ export function getRelevantContentFromRawText(userMessage: string, rawToolRespon
  * ToolUser handles tool identification and execution for the Magi system.
  */
 export class ToolUser {
-  constructor(private magi: Magi) {}
+  constructor(private readonly magi: Magi) {}
 
   /**
    * Map friendly tool names to actual MCP tool names
@@ -97,7 +97,6 @@ export class ToolUser {
   async executeWithTool<T extends string = string>(
     toolName: T, 
     toolArguments: Record<string, any>,
-    stepDescription: string
   ): Promise<string> {
     try {
       // Initialize MCP client manager if needed
@@ -125,14 +124,14 @@ export class ToolUser {
       return MagiErrorHandler.handleToolError(error, {
         magiName: this.magi.name,
         operation: 'tool execution'
-      }, stepDescription);
+      });
     }
   }
 
   /**
    * Response type detection strategies
    */
-  private responseDetectors = new Map<string, (data: any) => boolean>([
+  private readonly responseDetectors = new Map<string, (data: any) => boolean>([
     ['WebSearch', (data) => 'results' in data && Array.isArray(data.results) && 'query' in data && 'response_time' in data],
     ['WebExtract', (data) => 'results' in data && Array.isArray(data.results) && 'failed_results' in data && 'response_time' in data],
     ['SmartHome', (data) => 'devices' in data && Array.isArray(data.devices) && 'timestamp' in data],
@@ -143,7 +142,7 @@ export class ToolUser {
   /**
    * Response formatters for each type
    */
-  private responseFormatters = new Map<string, (data: any) => string>([
+  private readonly responseFormatters = new Map<string, (data: any) => string>([
     ['WebSearch', (data) => this.formatWebSearchResponse(data as WebSearchResponse)],
     ['WebExtract', (data) => this.formatWebExtractResponse(data as WebExtractResponse)],
     ['SmartHome', (data) => this.formatSmartHomeResponse(data as SmartHomeResponse)],
@@ -157,7 +156,7 @@ export class ToolUser {
    * @returns Formatted text output.
    */
   private extractToolOutput(toolResult: GetToolResponse<string> | { data: AnyToolResponse | TextResponse; isError?: boolean; _meta?: any }): string {
-    if (!toolResult || !toolResult.data) {
+    if (!toolResult?.data) {
       return 'No output from tool';
     }
     
@@ -254,7 +253,7 @@ export class ToolUser {
   private formatErrorData(data: AnyToolResponse | TextResponse): string {
     const isTextResponse = 'text' in data && typeof (data as any).text === 'string';
     if (isTextResponse) {
-      return (data as TextResponse).text;
+      return data.text;
     }
     if (typeof data === 'string') {
       return data;
@@ -271,25 +270,27 @@ export class ToolUser {
     }
 
     const properties = inputSchema.properties;
-    const required = inputSchema.required || [];
+    const required = inputSchema.required ?? [];
     
     const parameters: Record<string, string> = {};
     
     Object.entries(properties).forEach(([name, schema]: [string, JsonSchemaProperty]) => {
-      const type = schema.type || 'any';
+      const type = schema.type ?? 'any';
       const isRequired = required.includes(name);
       const defaultValue = schema.default !== undefined ? `, default: ${JSON.stringify(schema.default)}` : '';
       const status = isRequired ? 'required' : 'optional';
       
       // Include enum constraints if present
-      const enumConstraint = schema.enum ? ` [options: ${schema.enum.map(v => `"${v}"`).join('|')}]` : '';
+      const enumOptions = schema.enum ? schema.enum.map(v => `"${v}"`).join('|') : '';
+      const enumConstraint = enumOptions ? ` [options: ${enumOptions}]` : '';
       
       // Special handling for common parameter patterns
       let description = '';
       if (name === 'options' && type === 'object') {
         // Check for nested topic enum in options object
         const topicProperty = schema.properties?.topic;
-        const topicEnum = topicProperty?.enum ? `topic must be one of: ${topicProperty.enum.map(v => `"${v}"`).join('|')}. ` : '';
+        const topicEnumOptions = topicProperty?.enum ? topicProperty.enum.map(v => `"${v}"`).join('|') : '';
+        const topicEnum = topicEnumOptions ? `topic must be one of: ${topicEnumOptions}. ` : '';
         description = ` - Configure search depth, topic, max results, etc. ${topicEnum}`;
       } else if (name === 'urls' && type === 'array') {
         description = ' - List of URLs to process (up to 20)';
@@ -307,11 +308,10 @@ export class ToolUser {
     return parameters;
   }
 
-  async executeAgenticTool(tool: AgenticTool, thought: string, userMessage: string): Promise<string> {
+  async executeAgenticTool(tool: AgenticTool, userMessage: string): Promise<string> {
     let toolResponse = await this.executeWithTool(
       tool.name, 
       tool.parameters, 
-      thought
     );
 
     // Web pages can have a lot of noise that throw off the magi, so lets clean it
@@ -323,7 +323,7 @@ export class ToolUser {
     // Summarize the data we recieved back in human readable form.
     if (tool.name === "personal-data") {
       logger.debug(`Raw personal-data retreived: ${toolResponse}`);
-      const summarize = `You have just completed the following task:\n${thought}\nThis resulted in:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language.When referring to ${this.magi.name}, speak in the first person.`;
+      const summarize = `You have just completed the following task:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${this.magi.name}, speak in the first person and only provide the summary.`;
       logger.debug(`Summary prompt:\n${summarize}`);
       toolResponse = await this.magi.contactSimple(summarize);
     }

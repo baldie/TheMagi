@@ -326,7 +326,7 @@ async function verifyMcpServers(): Promise<void> {
               
               // Check API key without making actual calls
               const tavilyApiKey = process.env.TAVILY_API_KEY;
-              if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
+              if (tavilyApiKey?.startsWith('tvly-')) {
                 logger.info(`... ${magiName}: ✅ Tavily API key is properly configured`);
                 logger.info(`... ${magiName}: 🟢 Web search should work correctly!`);
               } else {
@@ -342,7 +342,7 @@ async function verifyMcpServers(): Promise<void> {
           // Check for Tavily tools and API key availability
           if (tools.some(tool => tool.name === 'search-web' || tool.name === 'read-page' || tool.name === 'tavily-crawl' || tool.name === 'tavily-map')) {
             const tavilyApiKey = process.env.TAVILY_API_KEY;
-            if (tavilyApiKey && tavilyApiKey.startsWith('tvly-')) {
+            if (tavilyApiKey?.startsWith('tvly-')) {
               logger.info(`... ${magiName}: Tavily search tools available with valid API key`);
             } else if (tavilyApiKey) {
               logger.warn(`... ${magiName}: Tavily tools available but API key format appears invalid (should start with 'tvly-')`);
@@ -407,13 +407,11 @@ async function verifyMcpServers(): Promise<void> {
               logger.error(`... ${magiName}: 🔴 This will prevent Melchior from accessing personal data!`);
             }
           }
-        } else {
-          if (magiName === MagiName.Caspar) {
+        } else if (magiName === MagiName.Caspar) {
             logger.info(`... ${magiName}: No MCP tools configured (this is expected for Caspar)`);
           } else {
             logger.info(`... ${magiName}: No MCP tools configured`);
           }
-        }
       } catch (error) {
         logger.error(`... ${magiName}: MCP server verification failed:`, error);
         // Bright yellow warning for missing MCP services

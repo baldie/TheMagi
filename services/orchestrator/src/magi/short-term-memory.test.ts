@@ -86,7 +86,7 @@ describe('ShortTermMemory', () => {
       const summary = await memory.summarize(null);
       
       expect(mockMagi.contactSimple).toHaveBeenCalledWith(
-        expect.stringContaining('Provide an extractive summary'),
+        expect.stringContaining('create a concise extractive summary'),
         expect.stringContaining('PERSONA')
       );
       expect(summary).toBe('Test summary');

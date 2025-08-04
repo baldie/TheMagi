@@ -43,7 +43,8 @@ export async function ensureMagiConduitIsRunning() {
       const startCommand = `export OLLAMA_MODELS=$(wslpath '${wslModelsPath}'); ${wslLocalOllamaPath} serve > '${wslLogFile}' 2>&1`;
       const fullCommand = `${killCommand} && ${startCommand}`;
 
-      const magiConduitProcess = spawn('wsl.exe', ['-e', 'bash', '-c', fullCommand], {
+      const wslPath = process.platform === 'win32' ? 'C:\\Windows\\System32\\wsl.exe' : 'wsl';
+      const magiConduitProcess = spawn(wslPath, ['-e', 'bash', '-c', fullCommand], {
         detached: true,
         stdio: 'ignore',
       });

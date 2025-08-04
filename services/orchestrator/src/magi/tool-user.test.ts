@@ -1,6 +1,6 @@
 import { ToolUser } from './tool-user';
 import { MagiName, Magi, PERSONAS_CONFIG } from './magi';
-import { mcpClientManager } from '../mcp';
+import { mcpClientManager, MagiTool } from '../mcp';
 
 // Mock logger to avoid path issues
 jest.mock('../logger', () => ({
@@ -44,8 +44,10 @@ describe('ToolUser', () => {
             properties: {
               query: { type: 'string' }
             }
-          }
-        }
+          },
+          toString: () => 'Name: web_search\nDescription: Search the web for information',
+          formatTypeInfo: (value: any) => value.type || 'unknown'
+        } as unknown as MagiTool
       ];
 
       mockMcpClientManager.getMCPToolInfoForMagi.mockResolvedValue(mockTools);
@@ -92,8 +94,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'web_search',
-        { query: 'test query' },
-        'Search for information'
+        { query: 'test query' }
       );
 
       expect(mockMcpClientManager.initialize).toHaveBeenCalled();
@@ -110,8 +111,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'web_search',
-        { query: 'test' },
-        'Search for something'
+        { query: 'test' }
       );
 
       expect(result).toContain('Tool execution failed');
@@ -130,8 +130,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'empty_tool',
-        {},
-        'Test empty result'
+        {}
       );
 
       expect(result).toContain('Tool executed successfully but returned no text content');
@@ -149,8 +148,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'error_tool',
-        {},
-        'Test error handling'
+        {}
       );
 
       expect(result).toContain('Tool error occurred');
@@ -168,8 +166,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'search',
-        { query: 'test query' },
-        'Test search results'
+        { query: 'test query' }
       );
 
       expect(result).toContain('First Result');
@@ -189,8 +186,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'text_tool',
-        {},
-        'Test text content'
+        {}
       );
 
       expect(result).toContain('Simple text content');
@@ -203,8 +199,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'null_tool',
-        {},
-        'Test null result'
+        {}
       );
 
       expect(result).toContain('No output from tool');
@@ -217,8 +212,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'no_content_tool',
-        {},
-        'Test no content'
+        {}
       );
 
       expect(result).toContain('No output from tool');
@@ -236,8 +230,7 @@ describe('ToolUser', () => {
 
       const result = await toolUser.executeWithTool(
         'empty_text_tool',
-        {},
-        'Test empty text'
+        {}
       );
 
       expect(result).toBe('');

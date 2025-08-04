@@ -25,15 +25,18 @@ async function retry<T>(
 async function runSealedEnvelopePhase(userMessage: string): Promise<string> {
   logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
 
+  // During the sealed envelope phase, the magi cannot ask the user any questions
+  const prohibitedTools = ['ask-user'];
+
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(userMessage));
+  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(userMessage, prohibitedTools));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(async () => melchior.contactAsAgent(userMessage));
+  const melchiorResponse = await retry(async () => melchior.contactAsAgent(userMessage, prohibitedTools));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(async () => caspar.contactAsAgent(userMessage));
+  const casparResponse = await retry(async () => caspar.contactAsAgent(userMessage, prohibitedTools));
 
   const sealedEnvelope = `
     
@@ -70,6 +73,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
     logger.info(`Phase 2: Starting Deliberation Round ${round}.`);
 
     // Shuffle the Magi order so that over time it balances out
+    // eslint-disable-next-line
     const deliberationOrder = [MagiName.Balthazar, MagiName.Melchior, MagiName.Caspar].sort(() => Math.random() - 0.5);
     let roundResponses = '';
 
@@ -169,19 +173,22 @@ export async function routeMessage(userMessage?: string): Promise<string> {
   }
 
   // Regex patterns for each Magi: (short|full name)[:,]
-  const melchiorMatch = trimmedUserMessage.match(/^(m|melchior)[:,]\s*/i);
+  const melchiorRegex = /^(m|melchior)[:,]\s*/i;
+  const melchiorMatch = melchiorRegex.exec(trimmedUserMessage);
   if (melchiorMatch) {
     const melchiorUserMessage = trimmedUserMessage.substring(melchiorMatch[0].length);
     return await magiDirect(allMagi[MagiName.Melchior], melchiorUserMessage);
   }
 
-  const balthazarMatch = trimmedUserMessage.match(/^(b|balthazar)[:,]\s*/i);
+  const balthazarRegex = /^(b|balthazar)[:,]\s*/i;
+  const balthazarMatch = balthazarRegex.exec(trimmedUserMessage);
   if (balthazarMatch) {
     const balthazarUserMessage = trimmedUserMessage.substring(balthazarMatch[0].length);
     return await magiDirect(allMagi[MagiName.Balthazar], balthazarUserMessage);
   }
 
-  const casparMatch = trimmedUserMessage.match(/^(c|caspar)[:,]\s*/i);
+  const casparRegex = /^(c|caspar)[:,]\s*/i;
+  const casparMatch = casparRegex.exec(trimmedUserMessage);
   if (casparMatch) {
     const casparUserMessage = trimmedUserMessage.substring(casparMatch[0].length);
     return await magiDirect(allMagi[MagiName.Caspar], casparUserMessage);
@@ -203,7 +210,7 @@ export async function beginDeliberation(userMessage?: string): Promise<string> {
     // V0 placeholders from PRD
     logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
 
-    const sealedEnvelope = await runSealedEnvelopePhase(userMessage || '');
+    const sealedEnvelope = await runSealedEnvelopePhase(userMessage ?? '');
     const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
 
     logger.info('--- Deliberation Complete ---');

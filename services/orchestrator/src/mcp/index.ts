@@ -32,9 +32,9 @@ export interface McpServerConfig {
 
 export class MagiTool implements McpToolInfo {
   name: string;
-  description?: string | undefined;
-  inputSchema?: Record<string, any> | undefined;
-  instructions?: string | undefined;
+  description?: string;
+  inputSchema?: Record<string, any>;
+  instructions?: string;
 
   constructor(info: McpToolInfo) {
     this.name = info.name;
@@ -54,9 +54,11 @@ export class MagiTool implements McpToolInfo {
       const params = Object.entries(this.inputSchema.properties)
         .filter(([key]) => !EXCLUDED_TOOL_PARAMS.has(key))
         .map(([key, value]: [string, any]) => {
-          const paramDesc = value.description ? ` (${value.description})` : '';
-          const required = this.inputSchema?.required?.includes(key) ? ' [required]' : '';
-          return `  ${key}: ${value.type || 'any'}${paramDesc}${required}`;
+          const required = this.inputSchema?.required?.includes(key) ? ', required' : '';
+          const typeInfo = this.formatTypeInfo(value);
+          const description = value.description || 'No description provided';
+          
+          return `    ${key} (${typeInfo}${required}): ${description}`;
         })
         .join('\n');
       if (params.trim()) {
@@ -70,6 +72,19 @@ export class MagiTool implements McpToolInfo {
     
     return parts.join('\n');
   }
+
+  private formatTypeInfo(value: any): string {
+    if (value.type === 'array' && value.items?.type) {
+      return `array of ${value.items.type}s`;
+    }
+    
+    if (value.enum && Array.isArray(value.enum)) {
+      const enumList = value.enum.map((v: any) => `"${v}"`).join(', ');
+      return `${value.type || 'string'}. Must be one of the following exact values: ${enumList}`;
+    }
+    
+    return value.type || 'any';
+  }
 }
 
 function getToolAssigmentsForAllMagi(): Record<MagiName, string[]> {
@@ -78,26 +93,24 @@ function getToolAssigmentsForAllMagi(): Record<MagiName, string[]> {
     [MagiName.Caspar]: getCasparToolAssignments(),
     [MagiName.Melchior]: getMelchiorToolAssignments()
   };
-}
+} 
 
 /**
  * MCP Client Manager - Manages connections to MCP servers for each Magi
  */
 export class McpClientManager {
   private initialized = false;
-  private clients = new Map<string, Client>(); // Key format: "MagiName:ServerName"
-  private transports = new Map<string, StdioClientTransport>(); // Key format: "MagiName:ServerName"
+  private readonly clients = new Map<string, Client>(); // Key format: "MagiName:ServerName"
+  private readonly transports = new Map<string, StdioClientTransport>(); // Key format: "MagiName:ServerName"
   private serverConfigs?: Record<MagiName, McpServerConfig[]>;
   
   // MCP server configurations for each Magi - lazily initialized
   private getServerConfigs(): Record<MagiName, McpServerConfig[]> {
-    if (!this.serverConfigs) {
-      this.serverConfigs = {
-        [MagiName.Balthazar]: getBalthazarToolServers(),
-        [MagiName.Caspar]: getCasparTools(),
-        [MagiName.Melchior]: getMelchiorTools()
-      };
-    }
+    this.serverConfigs ??= {
+      [MagiName.Balthazar]: getBalthazarToolServers(),
+      [MagiName.Caspar]: getCasparTools(),
+      [MagiName.Melchior]: getMelchiorTools()
+    };
     return this.serverConfigs;
   }
 
@@ -188,7 +201,8 @@ export class McpClientManager {
       // Special logging for Tavily to debug API key issues
       if (config.name === 'tavily') {
         const apiKey = config.env?.TAVILY_API_KEY;
-        logger.debug(`Tavily API key status: ${apiKey ? `Present (${apiKey.substring(0, 8)}...)` : 'Missing'}`);
+        const keyStatus = apiKey ? `Present (${apiKey.substring(0, 8)}...)` : 'Missing';
+        logger.debug(`Tavily API key status: ${keyStatus}`);
       }
       
       const transport = new StdioClientTransport({
@@ -225,7 +239,7 @@ export class McpClientManager {
         
         // Log each tool for debugging
         response.tools.forEach((tool: Tool) => {
-          logger.debug(`  Tool available: ${tool.name} - ${tool.description || 'No description'}`);
+          logger.debug(`  Tool available: ${tool.name} - ${tool.description ?? 'No description'}`);
         });
         
         // Special logging for Tavily to help debug the web_search mapping issue

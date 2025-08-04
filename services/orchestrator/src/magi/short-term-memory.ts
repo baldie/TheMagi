@@ -9,7 +9,7 @@ export interface Memory {
 export class ShortTermMemory {
   private static readonly MAX_MEMORIES = 15;
   private memories: Memory[] = [];
-  private magi: Magi;
+  private readonly magi: Magi;
   private lastSummary: string = '';
   private lastSummaryHash: string = '';
 
@@ -68,12 +68,12 @@ Speaker: User
 Message: ${userMessage}
 
 INSTRUCTIONS:
-Your goal is to identify the subject of the user's final message.
+Your goal is to identify the subject of the user's last message.
 
-1.  First, analyze the final message on its own. If it contains a new and specific subject, prioritize it.
-2.  If the message lacks a specific subject and seems to be a follow-up (e.g., uses pronouns like "he", "it", or asks a short question), use the conversation history to determine the subject.
+1. First, analyze the last message on its own. If it contains a new and specific subject, prioritize it.
+2. If the message lacks a specific subject and seems to be a follow-up, use the conversation history to determine the subject.
 
-What is the primary subject of the final message? Format as "The [aspect] of [subject]".
+What is the primary subject of the user's last message? Be specific and complete in your answer. Format as "The [aspect] of [subject]".
 `.trim();
 
     try {
@@ -104,9 +104,9 @@ What is the primary subject of the final message? Format as "The [aspect] of [su
 ${memoryText}
     
 INSTRUCTIONS:
-Provide an extractive summary of the CONTEXT entries${forTopic ? ' only if they are related to "' + forTopic + '"': ''}.
-Focus on key information, decisions, and ongoing tasks.
-Keep the summary concise but comprehensive:`;
+From ${this.magi.name}'s perspective (using "I"), create a concise extractive summary of the exchange. Include the specific, key information details and any actions taken.
+Be sure to include an extractive summary of the CONTEXT entries${forTopic ? ' only if they are related to "' + forTopic + '"': ''}.
+Keep the summary concise but detailed and comprehensive:`;
 
     try {
       const summary = await this.magi.contactSimple(summarizationPrompt, systemPrompt);

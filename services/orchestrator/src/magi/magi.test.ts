@@ -27,7 +27,10 @@ jest.mock('./conduit-client', () => ({
 
 jest.mock('./tool-user', () => ({
   ToolUser: class MockToolUser {
-    constructor() {}
+    magi: any;
+    constructor(magi: any) {
+      this.magi = magi;
+    }
     async getAvailableTools() {
       return [];
     }
@@ -39,15 +42,22 @@ jest.mock('./tool-user', () => ({
 
 jest.mock('./short-term-memory', () => ({
   ShortTermMemory: class MockShortTermMemory {
-    constructor() {}
+    magi: any;
+    constructor(magi: any) {
+      this.magi = magi;
+    }
     async summarize() {
       return '';
     }
     async determineTopic() {
       return null;
     }
-    remember() {}
-    forget() {}
+    remember(_speaker: string, _message: string) {
+      // Mock implementation - store memory
+    }
+    forget() {
+      // Mock implementation - clear memory
+    }
   }
 }));
 
@@ -124,12 +134,9 @@ describe('Magi contactAsAgent', () => {
 
     // Third: action decision (search tool)
     const toolResponse = {
-      thought: "I need to search for information",
-      action: {
-        tool: {
-          name: "search-web",
-          parameters: { query: "test query" }
-        }
+      tool: {
+        name: "search-web",
+        parameters: { query: "test query" }
       }
     };
 
@@ -145,12 +152,9 @@ describe('Magi contactAsAgent', () => {
 
     // Sixth: final action decision (answer user)
     const finalResponse = {
-      thought: "Based on the search results, I can now answer",
-      action: {
-        tool: {
-          name: "answer-user",
-          parameters: { answer: "Here is my final answer based on the search" }
-        }
+      tool: {
+        name: "answer-user",
+        parameters: { answer: "Here is my final answer based on the search" }
       }
     };
 
@@ -170,7 +174,6 @@ describe('Magi contactAsAgent', () => {
     expect(mockContactForJSON).toHaveBeenCalledTimes(6);
     expect(mockExecuteAgenticTool).toHaveBeenCalledWith(
       { name: "search-web", parameters: { query: "test query" } },
-      "I need to search for information",
       "Search for information about testing"
     );
   });
@@ -178,20 +181,15 @@ describe('Magi contactAsAgent', () => {
   it('should handle multiple tool executions before final answer', async () => {
     const responses = [
       {
-        thought: "First I need to search",
-        action: { tool: { name: "search-web", parameters: { query: "test" } } }
+        tool: { name: "search-web", parameters: { query: "test" } }
       },
       {
-        thought: "Now I need to analyze the data",
-        action: { tool: { name: "read-page", parameters: { urls: "search_results" } } }
+        tool: { name: "read-page", parameters: { urls: "search_results" } }
       },
       {
-        thought: "I can now provide the final answer",
-        action: {
-          tool: {
-            name: "answer-user",
-            parameters: { answer: "Final comprehensive answer" }
-          }
+        tool: {
+          name: "answer-user",
+          parameters: { answer: "Final comprehensive answer" }
         }
       }
     ];
@@ -228,10 +226,7 @@ describe('Magi contactAsAgent', () => {
 
   it('should handle maximum steps reached without final answer', async () => {
     const toolResponse = {
-      thought: "I need to keep working",
-      action: {
-        tool: { name: "test_tool", parameters: {} }
-      }
+      tool: { name: "test_tool", parameters: {} }
     };
 
     const synthesisResponse = {
@@ -289,14 +284,16 @@ describe('Magi contactAsAgent', () => {
   });
 
   it('should handle tool execution errors gracefully', async () => {
+    const synthesisResponse = { synthesis: "I need to analyze the user's request" };
+    const goalResponse = { goal: "Execute a tool to help with the request" };
     const toolResponse = {
-      thought: "I'll try to use a tool",
-      action: {
-        tool: { name: "failing_tool", parameters: {} }
-      }
+      tool: { name: "failing_tool", parameters: {} }
     };
 
-    mockContactForJSON.mockResolvedValue(toolResponse);
+    mockContactForJSON
+      .mockResolvedValueOnce(synthesisResponse)
+      .mockResolvedValueOnce(goalResponse)
+      .mockResolvedValueOnce(toolResponse);
     mockExecuteAgenticTool.mockRejectedValue(new Error("Tool execution failed"));
 
     await expect(magi.contactAsAgent("Test tool error")).rejects.toThrow("Tool execution failed");
@@ -312,8 +309,7 @@ describe('Magi contactAsAgent', () => {
     };
 
     const searchAction = {
-      thought: "I need to search first",
-      action: { tool: { name: "search-web", parameters: { query: "test" } } }
+      tool: { name: "search-web", parameters: { query: "test" } }
     };
 
     const finalSynthesis = {
@@ -437,5 +433,27 @@ describe('Magi getToolForGoal', () => {
     expect(result.some(tool => tool.name === 'read-page')).toBe(true);
     expect(result.some(tool => tool.name === 'ask-user')).toBe(false);
     expect(result.some(tool => tool.name === 'answer-user')).toBe(false);
+  });
+
+  it('should filter out prohibited tools', () => {
+    const prohibitedTools = ['search-web', 'ask-user'];
+    const result = magi['getToolForGoal']('', prohibitedTools);
+    
+    // Should exclude prohibited tools
+    expect(result.some(tool => tool.name === 'search-web')).toBe(false);
+    expect(result.some(tool => tool.name === 'ask-user')).toBe(false);
+    // Should include non-prohibited tools
+    expect(result.some(tool => tool.name === 'read-page')).toBe(true);
+    expect(result.some(tool => tool.name === 'answer-user')).toBe(true);
+  });
+
+  it('should filter prohibited tools even when they match goal type', () => {
+    const prohibitedTools = ['ask-user'];
+    const result = magi['getToolForGoal']('ASK the user', prohibitedTools);
+    
+    // Should exclude prohibited tool even though it matches the goal
+    expect(result.some(tool => tool.name === 'ask-user')).toBe(false);
+    // Should not include any tools since ask-user is the only match for ASK goal
+    expect(result.length).toBe(0);
   });
 });

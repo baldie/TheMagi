@@ -101,7 +101,8 @@ export class WebsocketService implements OnDestroy {
 
   private formatError(error: Error | Event | CloseEvent | ErrorEvent | unknown): string {
     if (error instanceof CloseEvent) {
-      return `Connection closed (${error.code}${error.reason ? `: ${error.reason}` : ''})`;
+      const reasonPart = error.reason ? ': ' + error.reason : '';
+      return `Connection closed (${error.code}${reasonPart})`;
     }
     if (error instanceof Event) {
       return 'Network error - check if orchestrator server is running';

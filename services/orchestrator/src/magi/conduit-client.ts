@@ -33,7 +33,7 @@ interface ConduitRequestOptions {
  * ConduitClient handles all API communication with the Magi Conduit service.
  */
 export class ConduitClient {
-  constructor(private magiName: MagiName) {}
+  constructor(private readonly magiName: MagiName) {}
 
   /**
    * Contacts the Magi Conduit to get a response from the AI model.
@@ -56,14 +56,32 @@ export class ConduitClient {
 
     return MagiErrorHandler.withErrorHandling(
       async () => {
-        const response = await axios.post<ConduitResponse>(
-          `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
-          requestData,
-          { timeout: 60000 } // 1-minute timeout
-        );
+        const maxRetries = 3;
+        let lastError: any;
 
-        logger.debug(`🔙🤖\n\n${response.data.response}\n\n`);
-        return response.data.response;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await axios.post<ConduitResponse>(
+              `${MAGI_CONDUIT_API_BASE_URL}/api/generate`,
+              requestData,
+              { timeout: 60000 } // 1-minute timeout
+            );
+
+            logger.debug(`🔙🤖\n\n${response.data.response}\n\n`);
+            return response.data.response;
+          } catch (error) {
+            lastError = error;
+            logger.warn(`${this.magiName} conduit request attempt ${attempt}/${maxRetries} failed:`, error);
+            
+            if (attempt < maxRetries) {
+              const delayMs = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
+              logger.info(`${this.magiName} retrying in ${delayMs}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+          }
+        }
+
+        throw lastError;
       },
       {
         magiName: this.magiName,
@@ -87,17 +105,28 @@ export class ConduitClient {
     model: ModelType,
     options: ConduitRequestOptions
   ): Promise<any> {
-    const originalResponse = await this.contact(userPrompt, systemPrompt, model, options, 'json');
-    
-    // Try to parse the JSON response
-    try {
-      return this.parseJsonResponse(originalResponse);
-    } catch (parseError) {
-      // JSON parsing failed, attempt to fix it
-      logger.debug(`${this.magiName} original malformed response:`, originalResponse);
-      logger.error(`${this.magiName} failed to parse JSON response:`, parseError);
-      throw new Error(`Failed to parse JSON response: ${parseError}`);
+    const maxParseRetries = 3;
+    let lastParseError: any;
+
+    for (let attempt = 1; attempt <= maxParseRetries; attempt++) {
+      let response: string;
+      response = '';
+      try {
+        response = await this.contact(userPrompt, systemPrompt, model, options, 'json');
+        return this.parseJsonResponse(response);
+      } catch (parseError) {
+        lastParseError = parseError;
+        logger.warn(`${this.magiName} JSON parse attempt ${attempt}/${maxParseRetries} failed: ${parseError}`);
+        logger.warn(`Response was: ${response}`);
+        if (attempt < maxParseRetries) {
+          logger.info(`${this.magiName} retrying JSON request...`);
+        }
+      }
     }
+
+    // All parsing attempts failed
+    logger.error(`${this.magiName} failed to parse JSON response after ${maxParseRetries} attempts:`, lastParseError);
+    throw new Error(`Failed to parse JSON response after ${maxParseRetries} attempts: ${lastParseError}`);
   }
 
   /**
@@ -109,11 +138,20 @@ export class ConduitClient {
     // Try to extract JSON from the response if it's wrapped in markdown or other text
     let cleanedJSON = jsonResponse.trim();
     
-    // Remove markdown code blocks if present
-    const jsonBlockMatch = cleanedJSON.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-    if (jsonBlockMatch) {
-      cleanedJSON = jsonBlockMatch[1].trim();
-      logger.debug(`${this.magiName} extracted JSON from code block:\n${cleanedJSON}`);
+    // Remove markdown code blocks if present (avoid vulnerable regex)
+    const codeBlockStart = cleanedJSON.indexOf('```');
+    if (codeBlockStart !== -1) {
+      // Find the end of the code block after the start
+      const codeBlockEnd = cleanedJSON.indexOf('```', codeBlockStart + 3);
+      if (codeBlockEnd !== -1) {
+        // Optionally remove 'json' after the opening ```
+        let blockContent = cleanedJSON.slice(codeBlockStart + 3, codeBlockEnd).trim();
+        if (blockContent.startsWith('json')) {
+          blockContent = blockContent.slice(4).trim();
+        }
+        cleanedJSON = blockContent;
+        logger.debug(`${this.magiName} extracted JSON from code block:\n${cleanedJSON}`);
+      }
     }
     
     const parsedData = JSON.parse(cleanedJSON);

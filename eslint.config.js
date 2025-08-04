@@ -2,11 +2,13 @@
 
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import { default as sonarjs } from 'eslint-plugin-sonarjs';
 
 export default tseslint.config(
   // Apply to all files
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  sonarjs.configs.recommended,
 
   // Global ignores
   {
@@ -41,16 +43,23 @@ export default tseslint.config(
     },
     rules: {
       // Current Rules from existing configs
-      '@typescript-eslint/no-unused-vars': 'error',
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          ignoreRestSiblings: true
+        }
+      ],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
 
       // Additional recommended rules
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/promise-function-async': 'warn',
-      '@typescript-eslint/consistent-type-imports': 'warn',
-      'eqeqeq': 'warn',
-      'prefer-const': 'error'
+      '@typescript-eslint/consistent-type-imports': 'warn'
+      // Removed 'eqeqeq' and 'prefer-const' as SonarJS provides better equivalents
     }
   },
 
@@ -69,9 +78,8 @@ export default tseslint.config(
       // Basic rules that don't require type information
       '@typescript-eslint/no-unused-vars': 'error',
       '@typescript-eslint/explicit-function-return-type': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      'eqeqeq': 'warn',
-      'prefer-const': 'error'
+      '@typescript-eslint/no-explicit-any': 'off'
+      // Removed 'eqeqeq' and 'prefer-const' as SonarJS provides better equivalents
       // Note: Removed type-aware rules for UI since no project config
     }
   }
