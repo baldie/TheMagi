@@ -1,6 +1,7 @@
 import { ToolUser } from './tool-user';
 import { MagiName, Magi, PERSONAS_CONFIG } from './magi';
-import { mcpClientManager, MagiTool } from '../mcp';
+import type { MagiTool } from '../mcp';
+import { mcpClientManager } from '../mcp';
 
 // Mock logger to avoid path issues
 jest.mock('../logger', () => ({

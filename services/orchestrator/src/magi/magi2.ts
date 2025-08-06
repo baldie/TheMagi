@@ -1,777 +1,413 @@
-import { createMachine, assign, fromPromise, type ActorRefFrom } from 'xstate';
-import { logger } from '../logger';
+import { type ActorRefFrom, createActor } from 'xstate';
+import { agentMachine, type AgentMachine } from './agent-machine';
+import { plannerMachine, type PlannerMachine } from './planner-machine';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { ShortTermMemory } from './short-term-memory';
 import { MagiName } from '../types/magi-types';
 import type { MagiTool } from '../mcp';
-import type { AgenticTool } from './magi';
-
-// Constants
-const MAX_RETRIES = 3;
-
-// ============================================================================
-// TYPE DEFINITIONS
-// ============================================================================
-
-/**
- * Context for the high-level Planner machine
- */
-interface PlannerContext {
-  userMessage: string;
-  strategicPlan: string[];
-  currentStepIndex: number;
-  currentGoal: string;
-  agentResult: string | null;
-  error: string | null;
-  magiName: MagiName;
-}
+import type {
+  PlannerContext,
+  AgentContext,
+  PlannerEvent,
+  AgentEvent
+} from './types';
+import path from 'path';
+import type { ModelType } from '../config';
+import { Model } from '../config';
+import { logger } from '../logger';
+import { MagiErrorHandler } from './error-handler';
+export { MagiName };
 
 /**
- * Context for the tactical Agent machine
+ * Creates a configured planner machine with proper context injection
  */
-interface AgentContext {
-  // Goal and planning
-  strategicGoal: string;
-  currentSubGoal: string;
-  
-  // Memory and context
-  fullContext: string;
-  promptContext: string;
-  workingMemory: string;
-  
-  // Tool execution
-  selectedTool: AgenticTool | null;
-  toolInput: Record<string, unknown>;
-  toolOutput: string;
-  processedOutput: string;
-  
-  // Tracking and control
-  completedSubGoals: string[];
-  retryCount: number;
-  error: string | null;
-  
-  // Integration points
-  magiName: MagiName;
-  conduitClient: ConduitClient;
-  toolUser: ToolUser;
-  shortTermMemory: ShortTermMemory;
-  availableTools: MagiTool[];
-}
-
-/**
- * Events for the Planner machine
- */
-type PlannerEvent = 
-  | { type: 'START'; userMessage: string; magiName: MagiName }
-  | { type: 'AGENT_SUCCESS'; result: string }
-  | { type: 'AGENT_FAILURE'; error: string }
-  | { type: 'RETRY' }
-  | { type: 'PLAN_COMPLETE' }
-  | { type: 'PLAN_FAILED' };
-
-/**
- * Events for the Agent machine
- */
-type AgentEvent = 
-  | { type: 'START'; strategicGoal: string }
-  | { type: 'CONTEXT_GATHERED' }
-  | { type: 'SYNTHESIZED' }
-  | { type: 'SUBGOAL_DETERMINED' }
-  | { type: 'TOOL_SELECTED' }
-  | { type: 'INPUT_FORMATTED' }
-  | { type: 'TOOL_EXECUTED' }
-  | { type: 'OUTPUT_PROCESSED' }
-  | { type: 'SUBGOAL_COMPLETE' }
-  | { type: 'SUBGOAL_INCOMPLETE' }
-  | { type: 'GOAL_COMPLETE' }
-  | { type: 'GOAL_INCOMPLETE' }
-  | { type: 'RETRY' }
-  | { type: 'VALIDATION_FAILED' }
-  | { type: 'MAX_RETRIES_REACHED' };
-
-// ============================================================================
-// ASYNC ACTIONS (Placeholders for LLM calls and tool execution)
-// ============================================================================
-
-/**
- * Creates a strategic plan from user message using LLM
- */
-const createStrategicPlan = fromPromise(async ({ input }: { input: { userMessage: string; conduitClient: ConduitClient; magiName: MagiName } }) => {
-  const { userMessage, conduitClient, magiName } = input;
-  
-  logger.debug(`${magiName} creating strategic plan for: ${userMessage}`);
-  
-  // Placeholder for LLM call to create strategic plan
-  const systemPrompt = `You are a strategic planner. Break down the user's request into 2-5 high-level strategic goals.
-Each goal should be actionable and specific. Return as a JSON array of strings.`;
-  
-  const userPrompt = `User request: "${userMessage}"
-
-Create a strategic plan to address this request. Each step should be a clear, actionable goal.
-
-Format your response as JSON:
-{
-  "plan": ["goal1", "goal2", "goal3"]
-}`;
-
-  try {
-    const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, 'llama3.2', { temperature: 0.3 });
-    return response.plan || [`Address the user's request: ${userMessage}`];
-  } catch (error) {
-    logger.warn(`${magiName} failed to create strategic plan, using fallback:`, error);
-    return [`Address the user's request: ${userMessage}`];
-  }
-});
-
-/**
- * Determines the next tactical sub-goal based on current context
- */
-const determineNextTacticalGoal = fromPromise(async ({ input }: { 
-  input: { 
-    strategicGoal: string; 
-    context: string; 
-    completedSubGoals: string[];
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  } 
-}) => {
-  const { strategicGoal, context, completedSubGoals, conduitClient, magiName } = input;
-  
-  logger.debug(`${magiName} determining next tactical goal for: ${strategicGoal}`);
-  
-  const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable sub-goal.`;
-
-  const userPrompt = `Strategic Goal: ${strategicGoal}
-Context: ${context}
-Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}
-
-What is the next specific, actionable sub-goal to work towards the strategic goal?
-Respond with just the sub-goal text.`;
-
-  try {
-    return await conduitClient.contact(userPrompt, systemPrompt, 'llama3.2', { temperature: 0.4 });
-  } catch (error) {
-    logger.error(`${magiName} failed to determine tactical goal:`, error);
-    return `Work towards: ${strategicGoal}`;
-  }
-});
-
-/**
- * Selects the appropriate tool for the current sub-goal
- */
-const selectTool = fromPromise(async ({ input }: { 
-  input: { 
-    subGoal: string; 
-    availableTools: MagiTool[];
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  } 
-}) => {
-  const { subGoal, availableTools, conduitClient, magiName } = input;
-  
-  logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
-  
-  const systemPrompt = `You are a tool selector. Choose the most appropriate tool for the given sub-goal.`;
-
-  const toolList = availableTools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n');
-
-  const userPrompt = `Sub-goal: ${subGoal}
-
-Available tools:
-${toolList}
-
-Select the most appropriate tool and respond with JSON:
-{
-  "tool": {
-    "name": "tool_name",
-    "parameters": {}
-  }
-}`;
-
-  try {
-    const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, 'llama3.2', { temperature: 0.2 });
-    return response.tool;
-  } catch (error) {
-    logger.error(`${magiName} failed to select tool:`, error);
-    // Fallback to first available tool
-    return {
-      name: availableTools[0]?.name || 'answer-user',
-      parameters: {}
-    };
-  }
-});
-
-/**
- * Executes the selected tool with formatted input
- */
-const executeTool = fromPromise(async ({ input }: { 
-  input: { 
-    tool: AgenticTool; 
-    toolUser: ToolUser;
-    magiName: MagiName;
-  } 
-}) => {
-  const { tool, toolUser, magiName } = input;
-  
-  logger.debug(`${magiName} executing tool: ${tool.name}`);
-  
-  try {
-    // Handle special tool cases
-    if (tool.name === 'answer-user') {
-      return tool.parameters.answer as string || 'No answer provided';
-    }
-    
-    if (tool.name === 'ask-user') {
-      return tool.parameters.question as string || 'No question provided';
-    }
-    
-    // Execute regular tools through ToolUser
-    return await toolUser.executeWithTool(tool.name, tool.parameters);
-  } catch (error) {
-    logger.error(`${magiName} tool execution failed:`, error);
-    throw error;
-  }
-});
-
-// ============================================================================
-// GUARDS
-// ============================================================================
-
-/**
- * Validates tool input before execution
- */
-const isToolInputValid = ({ context }: { context: AgentContext }): boolean => {
-  const { selectedTool } = context;
-  
-  if (!selectedTool) {
-    logger.warn(`${context.magiName} no tool selected`);
-    return false;
-  }
-  
-  // Basic validation - tool has a name
-  if (!selectedTool.name || typeof selectedTool.name !== 'string') {
-    logger.warn(`${context.magiName} invalid tool name`);
-    return false;
-  }
-  
-  // Tool parameters should be an object
-  if (!selectedTool.parameters || typeof selectedTool.parameters !== 'object') {
-    logger.warn(`${context.magiName} invalid tool parameters`);
-    return false;
-  }
-  
-  return true;
-};
-
-/**
- * Checks if retry limit has been reached
- */
-const canRetry = ({ context }: { context: AgentContext }): boolean => {
-  const canRetryResult = context.retryCount < MAX_RETRIES;
-  if (!canRetryResult) {
-    logger.warn(`${context.magiName} max retries (${MAX_RETRIES}) reached`);
-  }
-  return canRetryResult;
-};
-
-/**
- * Checks if plan has more steps
- */
-const hasMoreSteps = ({ context }: { context: PlannerContext }): boolean => {
-  return context.currentStepIndex < context.strategicPlan.length - 1;
-};
-
-/**
- * Checks if agent succeeded
- */
-const agentSucceeded = ({ context }: { context: PlannerContext }): boolean => {
-  return context.agentResult !== null && context.error === null;
-};
-
-// ============================================================================
-// AGENT MACHINE (defined first to avoid forward reference)
-// ============================================================================
-
-const agentMachineDefinition = createMachine({
-  id: 'agent',
-  types: {
-    context: {} as AgentContext,
-    events: {} as AgentEvent,
-  },
-  initial: 'gatheringContext',
-  context: {
-    strategicGoal: '',
-    currentSubGoal: '',
-    fullContext: '',
-    promptContext: '',
-    workingMemory: '',
-    selectedTool: null,
-    toolInput: {},
-    toolOutput: '',
-    processedOutput: '',
-    completedSubGoals: [],
-    retryCount: 0,
-    error: null,
-    magiName: 'Balthazar' as MagiName,
-    conduitClient: new ConduitClient(MagiName.Balthazar),
-    toolUser: {} as ToolUser,
-    shortTermMemory: {} as ShortTermMemory,
-    availableTools: [],
-  },
-  states: {
-    gatheringContext: {
-      entry: [
-        assign({
-          // Gather working memory, chat history, tool outputs, completed subgoals
-          fullContext: ({ context }) => {
-            const parts = [
-              `Strategic Goal: ${context.strategicGoal}`,
-              `Working Memory: ${context.workingMemory}`,
-              `Completed Sub-goals: ${context.completedSubGoals.join(', ') || 'None'}`,
-            ];
-            return parts.join('\n');
-          },
-        }),
-      ],
-      always: {
-        target: 'synthesize',
-      },
+export function createConfiguredPlannerMachine(_magiName: MagiName, _userMessage: string) {
+  return plannerMachine.provide({
+    actors: {
+      agentMachine: agentMachine
     },
-    
-    synthesize: {
-      entry: [
-        assign({
-          // Synthesize only relevant information for the strategic goal
-          promptContext: ({ context }) => {
-            // Filter and synthesize the full context for relevance
-            return `Goal: ${context.strategicGoal}\nRelevant Context: ${context.fullContext}`;
-          },
-        }),
-      ],
-      always: {
-        target: 'determiningSubGoal',
-      },
-    },
-    
-    determiningSubGoal: {
-      invoke: {
-        src: determineNextTacticalGoal,
-        input: ({ context }) => ({
-          strategicGoal: context.strategicGoal,
-          context: context.promptContext,
-          completedSubGoals: context.completedSubGoals,
-          conduitClient: context.conduitClient,
-          magiName: context.magiName,
-        }),
-        onDone: {
-          target: 'selectingTool',
-          actions: assign({
-            currentSubGoal: ({ event }) => event.output,
-            retryCount: () => 0, // Reset retry count for new sub-goal
-          }),
-        },
-        onError: [
-          {
-            guard: canRetry,
-            target: 'determiningSubGoal',
-            actions: assign({
-              retryCount: ({ context }) => context.retryCount + 1,
-            }),
-          },
-          {
-            target: 'failed',
-            actions: assign({
-              error: ({ event }) => `Failed to determine sub-goal: ${event.error}`,
-            }),
-          },
-        ],
-      },
-    },
-    
-    selectingTool: {
-      invoke: {
-        src: selectTool,
-        input: ({ context }) => ({
-          subGoal: context.currentSubGoal,
-          availableTools: context.availableTools,
-          conduitClient: context.conduitClient,
-          magiName: context.magiName,
-        }),
-        onDone: {
-          target: 'formattingToolInput',
-          actions: assign({
-            selectedTool: ({ event }) => event.output,
-          }),
-        },
-        onError: [
-          {
-            guard: canRetry,
-            target: 'selectingTool',
-            actions: assign({
-              retryCount: ({ context }) => context.retryCount + 1,
-              // Add feedback for retry: could log why previous attempt failed
-            }),
-          },
-          {
-            target: 'failed',
-            actions: assign({
-              error: ({ event }) => `Failed to select tool: ${event.error}`,
-            }),
-          },
-        ],
-      },
-    },
-    
-    formattingToolInput: {
-      entry: [
-        assign({
-          // Format tool parameters based on selected tool and context
-          toolInput: ({ context }) => {
-            const { selectedTool, currentSubGoal } = context;
-            
-            if (!selectedTool) return {};
-            
-            // Basic parameter formatting based on tool type
-            switch (selectedTool.name) {
-              case 'search-web':
-                return { query: currentSubGoal };
-              case 'read-page':
-                return { urls: selectedTool.parameters.urls || [] };
-              case 'answer-user':
-                return { answer: selectedTool.parameters.answer || currentSubGoal };
-              case 'ask-user':
-                return { question: selectedTool.parameters.question || currentSubGoal };
-              default:
-                return selectedTool.parameters;
-            }
-          },
-        }),
-      ],
-      always: {
-        target: 'validateToolInput',
-      },
-    },
-    
-    validateToolInput: {
-      always: [
-        {
-          guard: isToolInputValid,
-          target: 'executingTool',
-        },
-        {
-          target: 'validationFailed',
-        },
-      ],
-    },
-    
-    validationFailed: {
-      always: [
-        {
-          guard: canRetry,
-          target: 'selectingTool',
-          actions: assign({
-            retryCount: ({ context }) => context.retryCount + 1,
-            error: () => 'Tool input validation failed, retrying tool selection',
-          }),
-        },
-        {
-          target: 'failed',
-          actions: assign({
-            error: () => 'Tool input validation failed after max retries',
-          }),
-        },
-      ],
-    },
-    
-    executingTool: {
-      invoke: {
-        src: executeTool,
-        input: ({ context }) => ({
-          tool: {
-            name: context.selectedTool!.name,
-            parameters: context.toolInput,
-          },
-          toolUser: context.toolUser,
-          magiName: context.magiName,
-        }),
-        onDone: {
-          target: 'processingOutput',
-          actions: assign({
-            toolOutput: ({ event }) => event.output,
-          }),
-        },
-        onError: [
-          {
-            guard: canRetry,
-            target: 'selectingTool',
-            actions: assign({
-              retryCount: ({ context }) => context.retryCount + 1,
-              error: ({ event }) => `Tool execution failed: ${event.error}`,
-            }),
-          },
-          {
-            target: 'failed',
-            actions: assign({
-              error: ({ event }) => `Tool execution failed after retries: ${event.error}`,
-            }),
-          },
-        ],
-      },
-    },
-    
-    processingOutput: {
-      entry: [
-        assign({
-          // Perform post-processing on tool output as needed
-          processedOutput: ({ context }) => {
-            let output = context.toolOutput;
-            
-            // Basic post-processing
-            if (output.length > 5000) {
-              output = output.substring(0, 5000) + '... [truncated]';
-            }
-            
-            return output;
-          },
-        }),
-      ],
-      always: {
-        target: 'subGoalReflection',
-      },
-    },
-    
-    subGoalReflection: {
-      // Determine whether the subgoal has been met
-      entry: [
-        assign({
-          // Simple heuristic: if we got meaningful output, subgoal is likely complete
-          // In a real implementation, this would involve LLM evaluation
-        }),
-      ],
-      always: [
-        {
-          // Simplified: if we have processed output and no errors, subgoal is complete
-          guard: ({ context }) => context.processedOutput.length > 0 && !context.error,
-          target: 'goalReflection',
-          actions: assign({
-            completedSubGoals: ({ context }) => [...context.completedSubGoals, context.currentSubGoal],
-          }),
-        },
-        {
-          // If subgoal incomplete, add failure reason to context and retry
-          target: 'gatheringContext',
-          actions: assign({
-            fullContext: ({ context }) => `${context.fullContext}\nSubgoal "${context.currentSubGoal}" failed: ${context.error ?? 'Unknown reason'}`,
-            error: () => null, // Clear error for next iteration
-          }),
-        },
-      ],
-    },
-    
-    goalReflection: {
-      // Determine whether the planner-provided goal has been met
-      always: [
-        {
-          // Simplified: if we have completed sub-goals and processed output, goal is complete
-          guard: ({ context }) => context.completedSubGoals.length > 0 && context.processedOutput.length > 0,
-          target: 'done',
-        },
-        {
-          // Goal incomplete, continue with more sub-goals
-          target: 'gatheringContext',
-          actions: assign({
-            fullContext: ({ context }) => `${context.fullContext}\nCompleted: ${context.currentSubGoal} -> ${context.processedOutput}`,
-          }),
-        },
-      ],
-    },
-    
-    done: {
-      type: 'final',
-    },
-    
-    failed: {
-      type: 'final',
-    },
-  },
-});
-
-export const agentMachine = agentMachineDefinition;
-
-// ============================================================================
-// PLANNER MACHINE
-// ============================================================================
-
-export const plannerMachine = createMachine({
-  id: 'planner',
-  types: {
-    context: {} as PlannerContext,
-    events: {} as PlannerEvent,
-  },
-  initial: 'creatingPlan',
-  context: {
-    userMessage: '',
-    strategicPlan: [],
-    currentStepIndex: 0,
-    currentGoal: '',
-    agentResult: null,
-    error: null,
-    magiName: 'Balthazar' as MagiName,
-  },
-  states: {
-    creatingPlan: {
-      invoke: {
-        src: createStrategicPlan,
-        input: ({ context }) => ({
-          userMessage: context.userMessage,
-          conduitClient: new ConduitClient(context.magiName),
-          magiName: context.magiName,
-        }),
-        onDone: {
-          target: 'invokingAgent',
-          actions: assign({
-            strategicPlan: ({ event }) => event.output,
-            currentGoal: ({ event }) => event.output[0] ?? '',
-          }),
-        },
-        onError: {
-          target: 'failed',
-          actions: assign({
-            error: ({ event }) => `Failed to create plan: ${event.error}`,
-          }),
-        },
-      },
-    },
-    
-    invokingAgent: {
-      invoke: {
-        src: agentMachine,
-        input: ({ context }) => ({
-          strategicGoal: context.currentGoal,
-          magiName: context.magiName,
-        }),
-        onDone: {
-          target: 'evaluatingProgress',
-          actions: assign({
-            agentResult: ({ event }) => event.output,
-            error: () => null,
-          }),
-        },
-        onError: {
-          target: 'evaluatingProgress',
-          actions: assign({
-            agentResult: () => null,
-            error: ({ event }) => `Agent failed: ${event.error}`,
-          }),
-        },
-      },
-    },
-    
-    evaluatingProgress: {
-      always: [
-        {
-          guard: agentSucceeded,
-          target: 'checkingPlanCompletion',
-        },
-        {
-          target: 'failed',
-        },
-      ],
-    },
-    
-    checkingPlanCompletion: {
-      always: [
-        {
-          guard: hasMoreSteps,
-          target: 'invokingAgent',
-          actions: assign({
-            currentStepIndex: ({ context }) => context.currentStepIndex + 1,
-            currentGoal: ({ context }) => context.strategicPlan[context.currentStepIndex + 1] ?? '',
-            agentResult: () => null,
-          }),
-        },
-        {
-          target: 'done',
-        },
-      ],
-    },
-    
-    done: {
-      type: 'final',
-    },
-    
-    failed: {
-      type: 'final',
-    },
-  },
-});
-
-
-// ============================================================================
-// FACTORY FUNCTIONS AND EXPORTS
-// ============================================================================
-
-/**
- * Creates a configured planner machine for a specific Magi
- */
-export function createPlannerMachine(magiName: MagiName, userMessage: string) {
-  return createMachine({
-    ...plannerMachine.config,
-    context: {
-      userMessage,
-      strategicPlan: [],
-      currentStepIndex: 0,
-      currentGoal: '',
-      agentResult: null,
-      error: null,
-      magiName,
-    },
+    guards: {},
+    actions: {},
+    delays: {}
   });
 }
 
 /**
- * Creates a configured agent machine for a specific Magi and strategic goal
+ * Creates a configured agent machine with proper context injection
  */
-export function createAgentMachine(
-  magiName: MagiName, 
-  strategicGoal: string,
-  conduitClient: ConduitClient,
-  toolUser: ToolUser,
-  shortTermMemory: ShortTermMemory,
-  availableTools: MagiTool[]
+export function createConfiguredAgentMachine(
+  _strategicGoal: string,
+  _magiName: MagiName,
+  _conduitClient: ConduitClient,
+  _toolUser: ToolUser,
+  _shortTermMemory: ShortTermMemory,
+  _availableTools: MagiTool[]
 ) {
-  return createMachine({
-    ...agentMachine.config,
-    context: {
-      strategicGoal,
-      currentSubGoal: '',
-      fullContext: '',
-      promptContext: '',
-      workingMemory: '',
-      selectedTool: null,
-      toolInput: {},
-      toolOutput: '',
-      processedOutput: '',
-      completedSubGoals: [],
-      retryCount: 0,
-      error: null,
-      magiName,
-      conduitClient,
-      toolUser,
-      shortTermMemory,
-      availableTools,
-    },
+  return agentMachine.provide({
+    actors: {},
+    guards: {},
+    actions: {},
+    delays: {}
   });
 }
 
-/**
- * Type definitions for external usage
- */
-export type PlannerMachine = typeof plannerMachine;
-export type AgentMachine = typeof agentMachine;
-export type PlannerActor = ActorRefFrom<typeof plannerMachine>;
-export type AgentActor = ActorRefFrom<typeof agentMachine>;
+// Re-export machines and types
+export { agentMachine, plannerMachine };
+export type { AgentMachine, PlannerMachine };
+export type PlannerActor = ActorRefFrom<PlannerMachine>;
+export type AgentActor = ActorRefFrom<AgentMachine>;
 
-// Export context types for external usage
-export type { PlannerContext, AgentContext, PlannerEvent, AgentEvent };
+// Re-export types for external usage
+export type {
+  PlannerContext,
+  AgentContext,
+  PlannerEvent,
+  AgentEvent
+};
+
+/**
+ * Interface for the configuration of a single Magi persona.
+ */
+interface MagiConfig {
+  model: ModelType;
+  personalitySource: string;
+  setNewGoalPrompt: string;
+  executeGoalPrompt: string;
+  options: {
+    temperature: number;
+  };
+}
+
+export type AgenticTool = { name: string; parameters: Record<string, unknown>};
+
+export interface AgenticResponse {
+  tool: AgenticTool;
+}
+
+export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
+  [MagiName.Balthazar]: {
+    model: Model.Llama,
+    personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
+    setNewGoalPrompt: `[PLACEHOLDER] Goal setting prompt for Balthazar - focused on logical analysis and web search`,
+    executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Balthazar`,
+    options: { temperature: 0.4 },
+  },
+  [MagiName.Melchior]: {
+    model: Model.Gemma,
+    personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
+    setNewGoalPrompt: `[PLACEHOLDER] Goal setting prompt for Melchior - focused on creativity and personal data`,
+    executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
+    options: { temperature: 0.6 },
+  },
+  [MagiName.Caspar]: {
+    model: Model.Qwen,
+    personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
+    setNewGoalPrompt: `[PLACEHOLDER] Goal setting prompt for Caspar - focused on smart home integration`,
+    executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Caspar`,
+    options: { temperature: 0.5 },
+  },
+};
+
+// Additional types needed (copied from magi.ts)
+interface HistoryEntry {
+  action: AgenticTool;
+  observation: string;
+  timestamp: Date;
+  stepDescription: string;
+}
+
+interface AgenticLoopState {
+  currentTopic: string;
+  synthesis: string;
+  goal: string;
+  executionHistory: HistoryEntry[];
+  warnings: string[];
+  prohibitedTools: string[];
+}
+
+// Minimal interface for ToolUser and ShortTermMemory compatibility
+interface MagiCompatible {
+  name: MagiName;
+  withPersonality(systemPrompt: string): string;
+  contact(userPrompt: string): Promise<string>;
+  contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
+  forget(): void;
+}
+
+/**
+ * The Magi2 class represents a single AI persona within the Magi system.
+ * It uses composition to communicate through a ConduitClient and XState machines.
+ */
+export class Magi2 implements MagiCompatible {
+  private personalityPrompt: string = '';
+  private status: 'available' | 'busy' | 'offline' = 'offline';
+  private readonly toolUser: ToolUser;
+  private toolsList: MagiTool[] = [];
+  private readonly conduit: ConduitClient;
+  private readonly shortTermMemory: ShortTermMemory;
+  
+  constructor(public name: MagiName, private readonly config: MagiConfig) {
+    this.conduit = new ConduitClient(name);
+    this.toolUser = new ToolUser(this as MagiCompatible as any);
+    this.shortTermMemory = new ShortTermMemory(this as MagiCompatible as any);
+  }
+
+  /**
+   * Initialize the Magi
+   */
+  async initialize(prompt: string): Promise<void> {
+    this.personalityPrompt = prompt;
+    this.toolsList = await this.toolUser.getAvailableTools();
+  }
+
+    /**
+   * Retrieves the cached personality prompt.
+   * @throws If the prompt has not been loaded yet.
+   */
+  withPersonality(systemInstructionsPrompt: string): string {
+    if (!this.personalityPrompt) {
+      const err = new Error(`Attempted to access personality for ${this.name}, but it has not been cached.`);
+      logger.error('Prompt retrieval error', err);
+      throw err;
+    }
+    return `${this.personalityPrompt}\n\n${systemInstructionsPrompt}`;
+  }
+
+  public getStatus(): 'available' | 'busy' | 'offline' {
+    return this.status;
+  }
+
+  async contact(userPrompt: string): Promise<string> {
+    const currentTopic = await this.shortTermMemory.determineTopic(userPrompt);
+    const workingMemory = await this.shortTermMemory.summarize(currentTopic);
+    const promptWithContext = workingMemory + '\n' + userPrompt;
+    const response = await this.executeWithStatusManagement(async () => 
+      this.conduit.contact(promptWithContext, this.withPersonality(''), this.config.model, this.config.options)
+    );
+    
+    // Store the interaction in short-term memory
+    try {
+      this.shortTermMemory.remember('user', userPrompt);
+      this.shortTermMemory.remember(this.name, response);
+    } catch (memoryError) {
+      logger.warn(`Failed to store memory for ${this.name}: ${memoryError}`);
+      // Continue execution - memory failure shouldn't break the response
+    }
+    
+    return response;
+  }
+
+  async contactSimple(userPrompt: string, systemPrompt?: string): Promise<string> {
+    return this.executeWithStatusManagement(async () => 
+      this.conduit.contact(userPrompt, systemPrompt ?? '', this.config.model, this.config.options)
+    );
+  }
+
+  public forget(): void {
+    this.shortTermMemory.forget();
+  }
+
+  private async waitForActorCompletion(plannerActor: any): Promise<string> {
+    // Wait for the actor to reach its final 'done' state.
+    const finalState = await plannerActor.waitFor({ status: 'done' });
+
+    // The output from the machine's final state is in the 'output' property.
+    const output = finalState.output as { result?: string; error?: string };
+
+    if (output.error) {
+      // Throwing an error here will be caught by the .catch() block
+      // of the calling async function.
+      throw new Error(output.error);
+    }
+
+    return output.result ?? 'Task completed successfully.';
+  }
+
+  public async contactAsAgent(userMessage: string, _prohibitedTools: string[] = []): Promise<string> {
+    let response = '';
+    try {
+      logger.info(`${this.name} beginning state machine agentic loop...`);
+
+      // Initialize memory context
+      const currentTopic = await this.shortTermMemory.determineTopic(userMessage);
+      const workingMemory = await this.shortTermMemory.summarize(currentTopic);
+
+      // Create planner machine with proper context
+      const plannerMachine = createConfiguredPlannerMachine(this.name, userMessage);
+      
+      // Create and start the planner actor
+      const plannerActor = createActor(plannerMachine, {
+        input: {
+          userMessage,
+          magiName: this.name,
+          conduitClient: this.conduit,
+          toolUser: this.toolUser,
+          shortTermMemory: this.shortTermMemory,
+          availableTools: this.toolsList.filter(tool => !_prohibitedTools.includes(tool.name)),
+          workingMemory
+        }
+      });
+
+      // Start the actor and wait for completion
+      plannerActor.start();
+      
+      // Wait for the machine to complete
+      response = await this.waitForActorCompletion(plannerActor);
+
+      // Store interaction in short-term memory
+      try {
+        this.shortTermMemory.remember('user', userMessage);
+        this.shortTermMemory.remember(this.name, response);
+      } catch (memoryError) {
+        logger.warn(`Failed to store agentic memory for ${this.name}: ${memoryError}`);
+      }
+      
+    } catch (error) {
+      logger.error(`ERROR: ${error}`);
+      throw MagiErrorHandler.createContextualError(error, {
+        magiName: this.name,
+        operation: 'agentic loop'
+      });
+    }
+
+    const finalResponse = await this.makeTTSReady(response);
+    logger.debug(`\n🤖🔊\n${finalResponse}`);
+    return finalResponse;
+  }
+
+  /**
+   * Executes a contact operation with proper status management
+   */
+  private async executeWithStatusManagement<T>(operation: () => Promise<T>): Promise<T> {
+    this.status = 'busy';
+    
+    try {
+      const result = await operation();
+      this.status = 'available';
+      return result;
+    } catch (error) {
+      this.status = 'available';
+      throw error;
+    }
+  }
+
+  // @ts-expect-error will add later
+  private async _handleToolResponse(
+    tool: AgenticTool,
+    loopState: AgenticLoopState,
+    _userMessage: string,
+    actionHistory: string[]
+  ): Promise<{ response?: string; shouldBreak: boolean }> {
+    switch (tool.name) {
+      case 'ask-user': {
+        const response = tool.parameters.question as string;
+        logger.info(`${this.name} has a clarifying question: "${response}"`);
+        return { response, shouldBreak: true };
+      }
+
+      case 'answer-user': {
+        return { response: tool.parameters.answer as string, shouldBreak: true };
+      }
+
+      default: {
+        const toolResponse = await this.toolUser.executeWithTool(tool.name, tool.parameters);
+        
+        // Check for repetitive actions before adding to history
+        if (this.isRepetitiveAction(loopState.executionHistory, tool.name)) {
+          this.addRepetitiveActionWarning(loopState, tool.name);
+        }
+        
+        // Create structured history entry
+        const stepDescription = `${tool.name}: ${JSON.stringify(tool.parameters)}`;
+        const historyEntry: HistoryEntry = {
+          action: tool,
+          observation: toolResponse,
+          timestamp: new Date(),
+          stepDescription
+        };
+        
+        loopState.executionHistory.push(historyEntry);
+        
+        // Add action to legacy action history (still used for action tracking)
+        actionHistory.push(tool.name);
+        
+        return { shouldBreak: false };
+      }
+    }
+  }
+
+  /**
+   * Checks if an action is repetitive based on recent execution history
+   */
+  private isRepetitiveAction(executionHistory: HistoryEntry[], toolName: string): boolean {
+    const recentActions = executionHistory.slice(-2); // Last 2 actions (will be 3 total with current)
+    return recentActions.length === 2 && recentActions.every(entry => entry.action.name === toolName);
+  }
+
+  /**
+   * Adds warning to synthesis if repetitive action is detected
+   */
+  private addRepetitiveActionWarning(loopState: AgenticLoopState, toolName: string): void {
+    logger.warn(`${this.name} detected repetitive use of ${toolName} - forcing progression`);
+    loopState.warnings.push(`You have used the '${toolName}' tool three times in a row. You MUST use a different tool or provide a final answer now. Use any tool that is not '${toolName}'.`);
+  }
+  
+  private async makeTTSReady(text: string): Promise<string> {
+    const systemPrompt = `ROLE & GOAL
+You are a direct transcription and vocalization engine. Your sole function is to take a TEXT PASSAGE and convert it verbatim into a SPOKEN SCRIPT for a Text-to-Speech (TTS) engine. Your output must preserve the original text's structure and intent, simply making it readable for a voice synthesizer.
+`;
+
+    const userPrompt = `
+INSTRUCTIONS
+Receive the TEXT PASSAGE.
+Convert it directly into a SPOKEN SCRIPT.
+The script must be ready for immediate TTS playback.
+Preserve the original meaning and all data points without adding, removing, or changing the core message.
+
+CORE RULES
+CRITICAL RULE: DO NOT ANSWER OR RESPOND. Your task is to convert, not to have a conversation. Treat the TEXT PASSAGE as raw data to be transformed. If the passage is a question, convert the question. Do not answer it.
+Expand Abbreviations: Write out all abbreviations in full. e.g. becomes for example. est. becomes estimated.
+Verbalize All Numbers & Symbols: Convert all digits and symbols into words. $5.2M becomes five point two million dollars. 25% becomes twenty-five percent. Eris-1 becomes Eris one.
+Clarify URLs & Jargon: Spell out URLs and special characters. project-status.com/v2 becomes project dash status dot com slash v two.
+
+EXAMPLES
+
+Example 1:
+TEXT PASSAGE: Analysis complete: Plan A is 15% cheaper (~$2k savings) but takes 3 wks longer. See details at results.com/plan-a.
+SPOKEN SCRIPT: The analysis is complete. Plan A is fifteen percent cheaper, with approximately two thousand dollars in savings, but it will take three weeks longer. See the details at results dot com slash plan a.
+
+Example 2:
+TEXT PASSAGE: Q2 report: Revenue at $1.8M (+7% QoQ). Key issue: supply chain delays, i.e., component shortages.
+SPOKEN SCRIPT: The second quarter report shows revenue at one point eight million dollars, a seven percent increase quarter-over-quarter. The key issue is supply chain delays; that is, component shortages.
+
+Example 3:
+TEXT PASSAGE: Weather alert for zip 94063: High winds expected ~8 PM. Wind speed: 30-40 mph. Source: noaa.gov.
+SPOKEN SCRIPT: There is a weather alert for the nine four zero six three zip code. High winds are expected at approximately eight P M, with wind speeds between thirty and forty miles per hour. The source is N O A A dot gov.
+
+Example 4:
+TEXT PASSAGE: Can you confirm the project ETA is still 9/1?
+SPOKEN SCRIPT: Can you confirm the project E T A is still September first?
+
+YOUR TASK:
+Now, rewrite the following TEXT PASSAGE into a spoken script. Only respond with the spoken script itself.
+
+TEXT PASSAGE:\n${text}
+
+SPOKEN SCRIPT:\n`
+
+    return await this.conduit.contact(userPrompt, this.withPersonality(systemPrompt), this.config.model, this.config.options)
+  }
+}
+
+// Create and export the three Magi instances
+export const balthazar = new Magi2(MagiName.Balthazar, PERSONAS_CONFIG[MagiName.Balthazar]);
+export const melchior = new Magi2(MagiName.Melchior, PERSONAS_CONFIG[MagiName.Melchior]);
+export const caspar = new Magi2(MagiName.Caspar, PERSONAS_CONFIG[MagiName.Caspar]);
+
+// Export all Magi instances in a single object for easy iteration
+export const allMagi = {
+  [MagiName.Balthazar]: balthazar,
+  [MagiName.Melchior]: melchior,
+  [MagiName.Caspar]: caspar,
+};

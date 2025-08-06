@@ -1,5 +1,6 @@
-import type { Magi} from './magi/magi';
+import { Magi} from './magi/magi';
 import { balthazar, caspar, melchior, MagiName, allMagi } from './magi/magi';
+import { balthazar as balthazar2 } from './magi/magi';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
 
@@ -184,7 +185,8 @@ export async function routeMessage(userMessage?: string): Promise<string> {
   const balthazarMatch = balthazarRegex.exec(trimmedUserMessage);
   if (balthazarMatch) {
     const balthazarUserMessage = trimmedUserMessage.substring(balthazarMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Balthazar], balthazarUserMessage);
+    const resp = await balthazar2.contactAsAgent(balthazarUserMessage);
+    await speakWithMagiVoice(resp, MagiName.Balthazar);
   }
 
   const casparRegex = /^(c|caspar)[:,]\s*/i;
