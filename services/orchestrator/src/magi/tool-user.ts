@@ -314,19 +314,46 @@ export class ToolUser {
       tool.parameters, 
     );
 
-    // Web pages can have a lot of noise that throw off the magi, so lets clean it
-    if (tool.name === 'read-page'){
-      const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolResponse);
-      toolResponse = await this.magi.contactSimple(relevantContentPrompt, "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.");
-    }
-
-    // Summarize the data we recieved back in human readable form.
-    if (tool.name === "personal-data") {
-      logger.debug(`Raw personal-data retreived: ${toolResponse}`);
-      const summarize = `You have just completed the following task:\n${toolResponse}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${this.magi.name}, speak in the first person and only provide the summary.`;
-      logger.debug(`Summary prompt:\n${summarize}`);
-      toolResponse = await this.magi.contactSimple(summarize);
-    }
+    // Use the centralized processOutput logic from agent-actions
+    toolResponse = await this.processToolOutput(tool.name, toolResponse, userMessage);
     return toolResponse;
+  }
+
+  /**
+   * Process tool output using the same logic as the state machine
+   */
+  private async processToolOutput(toolName: string, toolOutput: string, userMessage?: string): Promise<string> {
+    let processedOutput = toolOutput;
+    
+    // Process output based on tool type
+    switch (toolName) {
+      case 'read-page':
+        // Web pages can have a lot of noise that throw off the magi, so lets clean it
+        if (userMessage) {
+          const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolOutput);
+          processedOutput = await this.magi.contactSimple(relevantContentPrompt, "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.");
+        }
+        break;
+      
+      case 'personal-data': {
+        // Summarize the data we received back in human readable form
+        logger.debug(`Raw personal-data retrieved: ${toolOutput}`);
+        const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${this.magi.name}, speak in the first person and only provide the summary.`;
+        logger.debug(`Summary prompt:\n${summarize}`);
+        processedOutput = await this.magi.contactSimple(summarize);
+        break;
+      }
+      
+      default:
+        // No special processing for other tools - keep original output
+        break;
+    }
+    
+    // Basic length check and truncation
+    if (processedOutput.length > 5000) {
+      processedOutput = processedOutput.substring(0, 5000) + '... [truncated]';
+    }
+    
+    return processedOutput;
   }
 }

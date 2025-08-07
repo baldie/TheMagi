@@ -35,7 +35,7 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
           logger.info(`[WebSocket] Received start-magi signal from client. ${message}`);
           try {
             const response = await startCallback(parsedMessage.data?.userMessage);
-            logger.info('[WebSocket] Deliberation completed successfully');
+            logger.info('[WebSocket] Magi contact completed successfully');
             
             // Send the final response back to the client
             if (ws.readyState === WebSocket.OPEN) {
@@ -45,7 +45,7 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
               }));
             }
           } catch (error) {
-            logger.error('[WebSocket] Deliberation failed:', error);
+            logger.error(`[WebSocket] Magi contact failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ 
                 type: 'deliberation-error', 

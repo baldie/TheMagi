@@ -9,9 +9,9 @@ import type { ToolExecutionResult } from './types';
  */
 export class ToolExecutor {
   constructor(
-    private toolUser: ToolUser,
-    private magiName: MagiName,
-    private timeoutMs: number = 30000
+    private readonly toolUser: ToolUser,
+    private readonly magiName: MagiName,
+    private readonly timeoutMs: number = 30000
   ) {}
 
   /**
@@ -38,7 +38,7 @@ export class ToolExecutor {
       
       return {
         success: true,
-        output: output as string
+        output: output
       };
     } catch (error) {
       const duration = Date.now() - startTime;

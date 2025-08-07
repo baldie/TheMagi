@@ -61,3 +61,10 @@ export const isToolValid = ({ context }: { context: AgentContext }): boolean => 
 
   return validation.isValid;
 };
+
+/**
+ * Checks if we should follow up web-search with read-page
+ */
+export const shouldFollowUpWithRead = ({ context }: { context: AgentContext }): boolean => {
+  return context.shouldFollowUpWithRead === true && !!context.followUpUrl?.trim();
+};

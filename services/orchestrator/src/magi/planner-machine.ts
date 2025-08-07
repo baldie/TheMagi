@@ -6,6 +6,9 @@ import type { MagiName } from '../types/magi-types';
 import type { PlannerContext, PlannerEvent } from './types';
 import { TIMEOUT_MS } from './types';
 import { PERSONAS_CONFIG } from './magi2';
+import type { ToolUser } from './tool-user';
+import type { ShortTermMemory } from './short-term-memory';
+import type { MagiTool } from '../mcp';
 
 // ============================================================================
 // ASYNC ACTIONS
@@ -47,6 +50,80 @@ Format your response as JSON:
   }
 });
 
+/**
+ * Adapts strategic plan based on agent discoveries
+ */
+const adaptStrategicPlan = fromPromise(async ({ input }: { 
+  input: { 
+    originalPlan: string[];
+    currentStepIndex: number;
+    discovery: any;
+    userMessage: string;
+    conduitClient: ConduitClient; 
+    magiName: MagiName;
+  } 
+}) => {
+  const { originalPlan, currentStepIndex, discovery, userMessage, conduitClient, magiName } = input;
+  
+  logger.debug(`${magiName} adapting strategic plan based on discovery: ${discovery.type}`);
+  
+  const systemPrompt = `You are a strategic planner. Adapt an existing strategic plan based on new discoveries made during execution.
+
+Consider:
+- The original user request and strategic plan
+- Current progress (completed steps)
+- The discovery details and implications
+- How to best incorporate this new information
+
+Maintain strategic coherence while leveraging the discovery.`;
+  
+  const userPrompt = `Original User Message: "${userMessage}"
+
+Original Strategic Plan:
+${originalPlan.map((step, i) => {
+  let status = '';
+  if (i < currentStepIndex) {
+    status = ' (COMPLETED)';
+  } else if (i === currentStepIndex) {
+    status = ' (CURRENT)';
+  }
+  return `${i + 1}. ${step}${status}`;
+}).join('\n')}
+
+Discovery Made:
+- Type: ${discovery.type}
+- Details: ${discovery.details}
+- Context: ${discovery.context}
+
+Based on this discovery, should the strategic plan be adapted? If so, provide a revised plan that incorporates this new information.
+
+Respond with JSON:
+{
+  "shouldAdapt": true/false,
+  "reason": "explanation of decision",
+  "newPlan": ["revised step 1", "revised step 2", ...] // only if shouldAdapt is true
+}`;
+
+  try {
+    const { model } = PERSONAS_CONFIG[magiName];
+    const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
+    
+    return {
+      shouldAdapt: response.shouldAdapt === true,
+      reason: response.reason || 'No reason provided',
+      newPlan: response.newPlan || originalPlan
+    };
+  } catch (error) {
+    logger.warn(`${magiName} failed to adapt strategic plan:`, error);
+    // Fallback: continue with original plan unless discovery indicates impossibility
+    return {
+      shouldAdapt: discovery.type === 'impossibility',
+      reason: discovery.type === 'impossibility' ? 'Cannot continue with impossible goal' : 'Failed to adapt plan, continuing',
+      newPlan: discovery.type === 'impossibility' ? [] : originalPlan
+    };
+  }
+});
+
 // ============================================================================
 // GUARDS
 // ============================================================================
@@ -66,7 +143,7 @@ const isPlannerContextValid = ({ context }: { context: PlannerContext }): boolea
   }
 
   if (errors.length > 0) {
-    logger.warn(`${context.magiName} planner context validation failed:`, errors);
+    logger.warn(`${context.magiName} planner context validation failed: ${errors.join(', ')}`);
     return false;
   }
 
@@ -77,6 +154,7 @@ const isPlannerContextValid = ({ context }: { context: PlannerContext }): boolea
  * Checks if plan has more steps
  */
 const hasMoreSteps = ({ context }: { context: PlannerContext }): boolean => {
+  logger.debug(`${context.magiName} checking if more steps remain: currentStepIndex=${context.currentStepIndex}, planLength=${context.strategicPlan.length}`);
   return context.currentStepIndex < context.strategicPlan.length - 1;
 };
 
@@ -96,6 +174,7 @@ const isPlanValid = ({ context }: { context: PlannerContext }): boolean => {
          context.strategicPlan.every(step => typeof step === 'string' && step.trim().length > 0);
 };
 
+
 // ============================================================================
 // PLANNER MACHINE
 // ============================================================================
@@ -105,18 +184,33 @@ export const plannerMachine = createMachine({
   types: {
     context: {} as PlannerContext,
     events: {} as PlannerEvent,
+    input: {} as {
+      userMessage: string;
+      magiName: MagiName;
+      conduitClient: ConduitClient;
+      toolUser: ToolUser;
+      shortTermMemory: ShortTermMemory;
+      availableTools: MagiTool[];
+      workingMemory: string;
+    }
   },
   initial: 'validateContext',
-  context: {
-    userMessage: '',
+  context: ({ input }) => ({
+    userMessage: input.userMessage,
     strategicPlan: [],
     currentStepIndex: 0,
     currentGoal: '',
     agentResult: null,
     error: null,
-    magiName: 'Balthazar' as MagiName, // will be overridden by the planner context
-    conduitClient: {} as ConduitClient, // will be overridden by the planner context
-  },
+    magiName: input.magiName,
+    conduitClient: input.conduitClient,
+    toolUser: input.toolUser,
+    shortTermMemory: input.shortTermMemory,
+    availableTools: input.availableTools,
+    workingMemory: input.workingMemory,
+    currentDiscovery: null,
+    planRevisions: [],
+  }),
   states: {
     validateContext: {
       always: [
@@ -193,15 +287,30 @@ export const plannerMachine = createMachine({
         input: ({ context }) => ({
           strategicGoal: context.currentGoal,
           magiName: context.magiName,
-          // Additional context would be provided here in real implementation
+          conduitClient: context.conduitClient,
+          toolUser: context.toolUser,
+          shortTermMemory: context.shortTermMemory,
+          availableTools: context.availableTools,
+          workingMemory: context.workingMemory,
         }),
-        onDone: {
-          target: 'evaluatingProgress',
-          actions: assign({
-            agentResult: ({ event }) => typeof event.output === 'string' ? event.output : JSON.stringify(event.output),
-            error: () => null,
-          }),
-        },
+        onDone: [
+          {
+            guard: ({ event }) => event.output.discovery !== undefined,
+            target: 'evaluatingDiscovery',
+            actions: assign({
+              agentResult: ({ event }) => event.output.result || 'Discovery reported',
+              currentDiscovery: ({ event }) => event.output.discovery,
+              error: () => null,
+            }),
+          },
+          {
+            target: 'evaluatingProgress',
+            actions: assign({
+              agentResult: ({ event }) => typeof event.output === 'string' ? event.output : JSON.stringify(event.output),
+              error: () => null,
+            }),
+          },
+        ],
         onError: {
           target: 'evaluatingProgress',
           actions: assign({
@@ -212,6 +321,75 @@ export const plannerMachine = createMachine({
       },
     },
     
+    evaluatingDiscovery: {
+      invoke: {
+        src: adaptStrategicPlan,
+        input: ({ context }) => ({
+          originalPlan: context.strategicPlan,
+          currentStepIndex: context.currentStepIndex,
+          discovery: context.currentDiscovery,
+          userMessage: context.userMessage,
+          conduitClient: context.conduitClient,
+          magiName: context.magiName,
+        }),
+        onDone: [
+          {
+            guard: ({ event }) => event.output.shouldAdapt === true,
+            target: 'adaptingPlan',
+            actions: assign({
+              strategicPlan: ({ event }) => event.output.newPlan || [],
+              planRevisions: ({ context, event }) => [
+                ...context.planRevisions,
+                {
+                  reason: event.output.reason || 'Plan adaptation',
+                  originalPlan: [...context.strategicPlan],
+                  newPlan: event.output.newPlan || context.strategicPlan
+                }
+              ],
+            }),
+          },
+          {
+            target: 'evaluatingProgress',
+            actions: assign({
+              error: () => null, // Clear any previous errors
+            }),
+          },
+        ],
+        onError: {
+          target: 'evaluatingProgress',
+          actions: assign({
+            error: ({ event }) => `Failed to evaluate discovery: ${event.error}`,
+          }),
+        },
+      },
+    },
+
+    adaptingPlan: {
+      entry: [
+        assign({
+          currentStepIndex: () => 0, // Reset to start of new plan
+          currentGoal: ({ context }) => context.strategicPlan[0] || '',
+          error: () => null,
+          currentDiscovery: () => null, // Clear processed discovery
+        }),
+        ({ context }) => {
+          logger.info(`${context.magiName} adapted strategic plan based on discovery`);
+        }
+      ],
+      always: [
+        {
+          guard: isPlanValid,
+          target: 'invokingAgent'
+        },
+        {
+          target: 'failed',
+          actions: assign({
+            error: () => 'Adapted plan is invalid or empty'
+          })
+        }
+      ]
+    },
+
     evaluatingProgress: {
       always: [
         {
@@ -258,7 +436,8 @@ export const plannerMachine = createMachine({
       output: ({ context }) => ({
         result: context.agentResult,
         completedSteps: context.currentStepIndex + 1,
-        totalSteps: context.strategicPlan.length
+        totalSteps: context.strategicPlan.length,
+        planRevisions: context.planRevisions
       })
     },
     
@@ -267,7 +446,8 @@ export const plannerMachine = createMachine({
       output: ({ context }) => ({
         error: context.error,
         completedSteps: context.currentStepIndex,
-        totalSteps: context.strategicPlan.length
+        totalSteps: context.strategicPlan.length,
+        planRevisions: context.planRevisions
       })
     },
   },

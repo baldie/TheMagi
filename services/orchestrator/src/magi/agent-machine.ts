@@ -1,9 +1,12 @@
 import { createMachine, assign, fromPromise } from 'xstate';
 import { ToolExecutor } from './tool-executor';
-import { ConduitClient } from './conduit-client';
-import { MagiName } from '../types/magi-types';
+import type { ConduitClient } from './conduit-client';
+import type { MagiName } from '../types/magi-types';
 import type { AgentContext, AgentEvent } from './types';
 import { TIMEOUT_MS } from './types';
+import type { ToolUser } from './tool-user';
+import type { ShortTermMemory } from './short-term-memory';
+import type { MagiTool } from '../mcp';
 import { 
   determineNextTacticalGoal,
   selectTool,
@@ -24,29 +27,41 @@ export const agentMachine = createMachine({
   types: {
     context: {} as AgentContext,
     events: {} as AgentEvent,
+    input: {} as {
+      strategicGoal: string;
+      magiName: MagiName;
+      conduitClient: ConduitClient;
+      toolUser: ToolUser;
+      shortTermMemory: ShortTermMemory;
+      availableTools: MagiTool[];
+      workingMemory?: string;
+    }
   },
   initial: 'validateContext',
-  context: {
-    strategicGoal: '',
+  context: ({ input }) => ({
+    strategicGoal: input.strategicGoal,
     currentSubGoal: '',
     fullContext: '',
     promptContext: '',
-    workingMemory: '',
+    workingMemory: input.workingMemory ?? '',
     selectedTool: null,
     toolInput: {},
     toolOutput: '',
     processedOutput: '',
+    shouldFollowUpWithRead: false,
+    followUpUrl: undefined,
     completedSubGoals: [],
     retryCount: 0,
     error: null,
-    magiName: 'Balthazar' as MagiName,
-    conduitClient: new ConduitClient(MagiName.Balthazar), // will be overridden by the agent context
-    toolUser: {} as any,
-    shortTermMemory: {} as any,
-    availableTools: [],
+    goalCompletionResult: null,
+    magiName: input.magiName,
+    conduitClient: input.conduitClient,
+    toolUser: input.toolUser,
+    shortTermMemory: input.shortTermMemory,
+    availableTools: input.availableTools,
     circuitBreakerContext: null,
     lastExecutionTime: 0,
-  },
+  }),
   states: {
     validateContext: {
       always: [
@@ -164,11 +179,15 @@ export const agentMachine = createMachine({
           availableTools: context.availableTools,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
+          followUpUrl: context.followUpUrl,
+          isFollowUp: context.shouldFollowUpWithRead,
         }),
         onDone: {
           target: 'validatingTool',
           actions: assign({
             selectedTool: ({ event }) => event.output,
+            shouldFollowUpWithRead: () => false,
+            followUpUrl: () => undefined,
           }),
         },
         onError: [
@@ -261,17 +280,34 @@ export const agentMachine = createMachine({
       invoke: {
         src: processOutput,
         input: ({ context }) => ({
+          toolName: context.selectedTool?.name ?? 'unknown',
           toolOutput: context.toolOutput,
           currentSubGoal: context.currentSubGoal,
+          userMessage: context.workingMemory, // Pass user context for read-page processing
           conduitClient: context.conduitClient,
           magiName: context.magiName,
         }),
-        onDone: {
-          target: 'evaluatingSubGoal',
-          actions: assign({
-            processedOutput: ({ event }) => event.output,
-          }),
-        },
+        onDone: [
+          {
+            guard: ({ event }) => event.output.shouldFollowUpWithRead === true,
+            target: 'selectingTool',
+            actions: assign({
+              processedOutput: ({ event }) => event.output.processedOutput,
+              shouldFollowUpWithRead: ({ event }) => event.output.shouldFollowUpWithRead,
+              followUpUrl: ({ event }) => event.output.followUpUrl,
+              currentSubGoal: () => 'Read the most relevant page from the search results',
+              retryCount: () => 0,
+            }),
+          },
+          {
+            target: 'evaluatingSubGoal',
+            actions: assign({
+              processedOutput: ({ event }) => event.output.processedOutput || event.output,
+              shouldFollowUpWithRead: () => false,
+              followUpUrl: () => undefined,
+            }),
+          }
+        ],
         onError: {
           target: 'evaluatingSubGoal',
           actions: assign({
@@ -337,14 +373,32 @@ export const agentMachine = createMachine({
         }),
         onDone: [
           {
+            guard: ({ event }) => event.output.achieved === true && event.output.hasDiscovery === true,
+            target: 'discoveryReported',
+            actions: assign({
+              goalCompletionResult: ({ event }) => event.output,
+            }),
+          },
+          {
             guard: ({ event }) => event.output.achieved === true,
             target: 'done',
+            actions: assign({
+              goalCompletionResult: ({ event }) => event.output,
+            }),
+          },
+          {
+            guard: ({ event }) => event.output.hasDiscovery === true,
+            target: 'discoveryReported',
+            actions: assign({
+              goalCompletionResult: ({ event }) => event.output,
+            }),
           },
           {
             target: 'gatheringContext',
             actions: assign({
               fullContext: ({ context }) => `${context.fullContext}\nCompleted: ${context.currentSubGoal} -> ${context.processedOutput}`,
               retryCount: () => 0,
+              goalCompletionResult: ({ event }) => event.output,
             }),
           },
         ],
@@ -360,7 +414,15 @@ export const agentMachine = createMachine({
     
     done: {
       type: 'final',
-      output: ({ context }) => context.processedOutput
+      output: ({ context }) => ({ result: context.processedOutput })
+    },
+    
+    discoveryReported: {
+      type: 'final',
+      output: ({ context }) => ({ 
+        result: context.processedOutput,
+        discovery: context.goalCompletionResult?.discovery || null
+      })
     },
     
     failed: {

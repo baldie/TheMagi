@@ -2,6 +2,7 @@ import { fromPromise } from 'xstate';
 import { logger } from '../logger';
 import type { ConduitClient } from './conduit-client';
 import type { MagiName } from '../types/magi-types';
+import type { GoalCompletionResult } from './types';
 import { PERSONAS_CONFIG } from './magi2';
 
 // ============================================================================
@@ -22,12 +23,12 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
 }) => {
   const { strategicGoal, context, completedSubGoals, conduitClient, magiName } = input;
   
-  logger.debug(`${magiName} determining next tactical goal for: ${strategicGoal}`);
+  logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
   
   const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable sub-goal.`;
 
-  const userPrompt = `Strategic Goal: ${strategicGoal}
-Context: ${context}
+  const userPrompt = `Strategic Goal:\n${strategicGoal}
+Context:\n${context}
 Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}
 
 What is the next specific, actionable sub-goal to work towards the strategic goal?
@@ -51,17 +52,30 @@ export const selectTool = fromPromise(async ({ input }: {
     availableTools: any[];
     conduitClient: ConduitClient;
     magiName: MagiName;
+    followUpUrl?: string;
+    isFollowUp?: boolean;
   } 
 }) => {
-  const { subGoal, availableTools, conduitClient, magiName } = input;
+  const { subGoal, availableTools, conduitClient, magiName, followUpUrl, isFollowUp } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
+  
+  // If this is a follow-up from web-search, automatically select read-page
+  if (isFollowUp && followUpUrl) {
+    logger.debug(`${magiName} auto-selecting read-page for follow-up with URL: ${followUpUrl}`);
+    return {
+      name: 'read-page',
+      parameters: {
+        url: followUpUrl
+      }
+    };
+  }
   
   const systemPrompt = `You are a tool selector. Choose the most appropriate tool for the job.`;
 
   const toolList = availableTools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n');
 
-  const userPrompt = `Job: ${subGoal}
+  const userPrompt = `Job:\n${subGoal}
 
 Available tools:
 ${toolList}
@@ -103,9 +117,9 @@ export const evaluateSubGoalCompletion = fromPromise(async ({ input }: {
   
   const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.`;
   
-  const userPrompt = `Sub-goal: ${subGoal}
+  const userPrompt = `Sub-goal:\n${subGoal}
 
-Tool Output: ${toolOutput}
+Tool Output:\n${toolOutput}
 
 Has the sub-goal been completed? Respond only with JSON:
 {
@@ -140,11 +154,11 @@ export const gatherContext = fromPromise(async ({ input }: {
   
   const systemPrompt = `You are a context gatherer. Analyze the strategic goal and provide relevant context for tactical planning.`;
   
-  const userPrompt = `Strategic Goal: ${strategicGoal}
-Working Memory: ${workingMemory}
-Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}
+  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
+Working Memory:\n${workingMemory}\n
+Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
-Gather and organize relevant context that will help with tactical planning. Respond with organized context information.`;
+Organize relevant context from the working memory that will help with tactical planning. Respond with organized context information based on what was provided. Do not invent information or over-complicate things.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -170,8 +184,8 @@ export const synthesizeContext = fromPromise(async ({ input }: {
   
   const systemPrompt = `You are a context synthesizer. Create a focused, actionable context summary for tactical planning.`;
   
-  const userPrompt = `Strategic Goal: ${strategicGoal}
-Full Context: ${fullContext}
+  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
+Full Context:\n${fullContext}
 
 Synthesize this into a clear, focused context that emphasizes the most relevant information for achieving the strategic goal. Keep it concise but comprehensive.`;
 
@@ -185,48 +199,148 @@ Synthesize this into a clear, focused context that emphasizes the most relevant 
 });
 
 /**
+ * Helper function to generate prompt for cleaning web page content
+ */
+function getRelevantContentFromRawText(userMessage: string, rawToolResponse: string): string {
+  return `
+  INSTRUCTIONS
+  - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
+  - Extract Verbatim: Pull out the main content's text exactly as it is, preserving all original sentences, paragraphs, and their order. Do not summarize or add any text.
+
+  EXCLUSION CRITERIA
+  You MUST remove all of the following non-essential elements:
+  - Promotional Content: Advertisements, sponsored links, affiliate marketing, and calls-to-action (e.g., "Sign up," "Download our guide").
+  - Website Navigation: Headers, footers, sidebars, menus, and breadcrumbs.
+  - Related Links: Lists or grids of "Related Articles," "Recent Posts," "Popular Stories," or "You might also like."
+  - Metadata and Threading: Author bios, user signatures, post dates, comment sections, and any replies or comments that follow the main post.
+  - Off-topic Text: Any content that is not directly part of the main content's central topic.
+  - Images in base64 encoded strings and markdown tokens
+
+  OUTPUT
+  Respond ONLY with the cleaned text
+
+  USER'S TOPIC/QUESTION:
+  "${userMessage}"
+
+  Now, perform this task on the following raw text.
+
+  RAW TEXT:
+  ${rawToolResponse}
+  `;
+}
+
+/**
  * Processes tool output for clarity and relevance
+ * Depending on the tool, we might want to process the output differently
  */
 export const processOutput = fromPromise(async ({ input }: {
   input: {
+    toolName: string;
     toolOutput: string;
     currentSubGoal: string;
+    userMessage?: string;
     conduitClient: ConduitClient;
     magiName: MagiName;
   }
-}) => {
-  const { toolOutput, currentSubGoal, conduitClient, magiName } = input;
+}): Promise<{
+  processedOutput: string;
+  shouldFollowUpWithRead?: boolean;
+  followUpUrl?: string;
+}> => {
+  const { toolName, toolOutput, currentSubGoal, userMessage, conduitClient, magiName } = input;
+  const { model } = PERSONAS_CONFIG[magiName];
+  let processedOutput = toolOutput;
   
-  const systemPrompt = `You are an output processor. Clean and organize tool output to be clear and actionable.`;
-  
-  const userPrompt = `Sub-goal: ${currentSubGoal}
-Tool Output: ${toolOutput}
-
-Process this output to be clear, concise, and directly relevant to the sub-goal. Remove unnecessary details but preserve important information.`;
-
-  try {
-    const { model } = PERSONAS_CONFIG[magiName];
-    const processed = await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.1 });
+  // Process output based on tool type
+  switch (toolName) {
+    case 'read-page':
+      // Web pages can have a lot of noise that throw off the magi, so lets clean it
+      if (userMessage) {
+        const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolOutput);
+        processedOutput = await conduitClient.contact(
+          relevantContentPrompt, 
+          "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.",
+          model,
+          { temperature: 0.1 }
+        );
+      }
+      break;
     
-    // Basic length check and truncation
-    if (processed.length > 5000) {
-      return processed.substring(0, 5000) + '... [truncated]';
+    case 'personal-data': {
+      // Summarize the data we received back in human readable form
+      logger.debug(`Raw personal-data retrieved: ${toolOutput}`);
+      const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary.`;
+      logger.debug(`Summary prompt:\n${summarize}`);
+      processedOutput = await conduitClient.contact(
+        summarize,
+        "You are a summary assistant.",
+        model,
+        { temperature: 0.1 }
+      );
+      break;
     }
     
-    return processed;
-  } catch (error) {
-    logger.error(`${magiName} failed to process output:`, error);
-    // Fallback processing
-    let output = toolOutput;
-    if (output.length > 5000) {
-      output = output.substring(0, 5000) + '... [truncated]';
-    }
-    return output;
+    case 'search-web':
+      try {
+        // Extract the most relevant URL for follow-up reading
+        const systemPrompt = `You are an search results expert.`;
+        const userPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nDetermine the single most relevant URL based on the search results and respond with that URL only.`;
+        const extractedUrl = await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.1 });
+        
+        // Extract the first valid URL using regex
+        const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
+        const urls = extractedUrl.match(urlRegex);
+        
+        if (urls && urls.length > 0) {
+          const firstUrl = urls[0];
+          // Basic length check and truncation for the extracted URL
+          processedOutput = firstUrl.length > 5000 
+            ? firstUrl.substring(0, 5000) + '... [truncated]'
+            : firstUrl;
+          
+          // Return with follow-up information
+          return {
+            processedOutput,
+            shouldFollowUpWithRead: true,
+            followUpUrl: firstUrl
+          };
+        } else {
+          // If URL extraction failed, just return the original output
+          processedOutput = toolOutput;
+        }
+      } catch (error) {
+        logger.error(`${magiName} failed to process output:`, error);
+        // Keep original output on error
+        processedOutput = toolOutput;
+      }
+      break;
+    
+    default:
+      try {
+        // General processing for other tools
+        const defaultSystemPrompt = `You are an output processor. Clean and organize tool output to be clear and actionable.`;
+        const defaultUserPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nProcess this output to be clear, concise, and directly relevant to the sub-goal. Remove unnecessary details but preserve important information.`;
+
+        const { model } = PERSONAS_CONFIG[magiName];
+        processedOutput = await conduitClient.contact(defaultUserPrompt, defaultSystemPrompt, model, { temperature: 0.1 });
+      } catch (error) {
+        logger.error(`${magiName} failed to process output:`, error);
+        // Keep original output on error
+        processedOutput = toolOutput;
+      }
+      break;
   }
+  
+  // Basic length check and truncation
+  if (processedOutput.length > 10000) {
+    processedOutput = processedOutput.substring(0, 10000) + '... [truncated]';
+  }
+  
+  return { processedOutput };
 });
 
 /**
- * Evaluates if the overall strategic goal has been achieved
+ * Evaluates if the overall strategic goal has been achieved and detects discoveries
  */
 export const evaluateGoalCompletion = fromPromise(async ({ input }: {
   input: {
@@ -236,30 +350,60 @@ export const evaluateGoalCompletion = fromPromise(async ({ input }: {
     conduitClient: ConduitClient;
     magiName: MagiName;
   }
-}) => {
+}): Promise<GoalCompletionResult> => {
   const { strategicGoal, completedSubGoals, processedOutput, conduitClient, magiName } = input;
   
-  const systemPrompt = `You are a goal evaluator. Determine if the strategic goal has been sufficiently achieved based on completed work.`;
+  const systemPrompt = `You are a goal evaluator and discovery detector. 
+
+1. Determine if the strategic goal has been sufficiently achieved
+2. Detect if any discoveries were made that might impact strategic planning
+
+Discoveries include:
+- "opportunity": Found better tools, methods, or resources that could improve the approach
+- "obstacle": Encountered impediments or constraints that affect feasibility  
+- "impossibility": Determined that the current approach cannot succeed
+
+Focus on information that could change how the strategic planner approaches the overall task.`;
   
   const userPrompt = `Strategic Goal: ${strategicGoal}
 Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}
 Latest Output: ${processedOutput}
 
-Has the strategic goal been sufficiently achieved? Consider both the completed sub-goals and the quality of work done. Respond only with JSON:
+Evaluate goal completion and check for strategic discoveries. Respond only with JSON:
 {
   "achieved": true/false,
   "confidence": 0.0-1.0,
-  "reason": "explanation"
-}`;
+  "reason": "explanation",
+  "hasDiscovery": true/false,
+  "discovery": {
+    "type": "opportunity|obstacle|impossibility",
+    "details": "what was discovered",
+    "context": "relevant context for strategic planning"
+  }
+}
+
+Only include "discovery" if hasDiscovery is true.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.1 });
-    return {
+    
+    const result: GoalCompletionResult = {
       achieved: response.achieved === true,
       confidence: response.confidence || 0.5,
       reason: response.reason || 'No reason provided'
     };
+
+    if (response.hasDiscovery && response.discovery) {
+      result.hasDiscovery = true;
+      result.discovery = {
+        type: response.discovery.type || 'obstacle',
+        details: response.discovery.details || 'Discovery details not provided',
+        context: response.discovery.context || 'Context not provided'
+      };
+    }
+
+    return result;
   } catch (error) {
     logger.error(`${magiName} failed to evaluate goal completion:`, error);
     // Fallback: consider achieved if we have meaningful output and completed sub-goals

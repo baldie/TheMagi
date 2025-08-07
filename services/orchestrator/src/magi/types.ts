@@ -25,6 +25,13 @@ export interface PlannerContext {
   error: string | null;
   magiName: MagiName;
   conduitClient: ConduitClient;
+  toolUser: ToolUser;
+  shortTermMemory: ShortTermMemory;
+  availableTools: MagiTool[];
+  workingMemory: string;
+  // Discovery tracking
+  currentDiscovery: Discovery | null;
+  planRevisions: Array<{ reason: string; originalPlan: string[]; newPlan: string[] }>;
 }
 
 /**
@@ -46,10 +53,17 @@ export interface AgentContext {
   toolOutput: string;
   processedOutput: string;
   
+  // Web-search follow-up flags
+  shouldFollowUpWithRead?: boolean;
+  followUpUrl?: string;
+  
   // Tracking and control
   completedSubGoals: string[];
   retryCount: number;
   error: string | null;
+  
+  // Discovery reporting
+  goalCompletionResult: GoalCompletionResult | null;
   
   // Circuit breaker and reliability
   circuitBreakerContext: CircuitBreakerContext | null;
@@ -64,18 +78,6 @@ export interface AgentContext {
 }
 
 /**
- * Base event types for better discriminated unions (currently unused but kept for future use)
- */
-// interface BaseEvent {
-//   type: string;
-// }
-
-// interface EventWithPayload<T extends string, P = Record<string, unknown>> extends BaseEvent {
-//   type: T;
-//   payload: P;
-// }
-
-/**
  * Events for the Planner machine - using discriminated unions
  */
 export type PlannerEvent = 
@@ -83,6 +85,9 @@ export type PlannerEvent =
   | { type: 'PLAN_CREATED'; strategicPlan: string[] }
   | { type: 'AGENT_COMPLETED'; result: string }
   | { type: 'AGENT_FAILED'; error: string }
+  | { type: 'DISCOVERY_REPORTED'; discovery: Discovery; result: string }
+  | { type: 'PLAN_EVALUATION_COMPLETE'; shouldAdapt: boolean }
+  | { type: 'PLAN_ADAPTED'; newPlan: string[] }
   | { type: 'RETRY_REQUESTED' }
   | { type: 'PLAN_COMPLETE' }
   | { type: 'PLAN_FAILED'; reason: string }
@@ -154,6 +159,31 @@ export interface CircuitBreakerContext {
   failureCount: number;
   lastFailureTime: number;
   config: CircuitBreakerConfig;
+}
+
+/**
+ * Discovery types that agents can report to planners
+ */
+export type DiscoveryType = 'opportunity' | 'obstacle' | 'impossibility';
+
+/**
+ * Discovery information reported by agents
+ */
+export interface Discovery {
+  type: DiscoveryType;
+  details: string;
+  context: string;
+}
+
+/**
+ * Enhanced goal completion result with discovery reporting
+ */
+export interface GoalCompletionResult {
+  achieved: boolean;
+  confidence: number;
+  reason: string;
+  hasDiscovery?: boolean;
+  discovery?: Discovery;
 }
 
 /**

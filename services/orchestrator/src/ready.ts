@@ -1,8 +1,9 @@
-import { Magi} from './magi/magi';
+import type { Magi } from './magi/magi';
 import { balthazar, caspar, melchior, MagiName, allMagi } from './magi/magi';
-import { balthazar as balthazar2 } from './magi/magi';
+import { balthazar as balthazar2, PERSONAS_CONFIG } from './magi/magi2';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
+import fs from 'fs/promises';
 
 /**
  * Retry a function with exponential backoff.
@@ -185,6 +186,9 @@ export async function routeMessage(userMessage?: string): Promise<string> {
   const balthazarMatch = balthazarRegex.exec(trimmedUserMessage);
   if (balthazarMatch) {
     const balthazarUserMessage = trimmedUserMessage.substring(balthazarMatch[0].length);
+    const { personalitySource } = PERSONAS_CONFIG[balthazar2.name];
+    const personalityPrompt = await fs.readFile(personalitySource, 'utf-8');
+    await balthazar2.initialize(personalityPrompt);
     const resp = await balthazar2.contactAsAgent(balthazarUserMessage);
     await speakWithMagiVoice(resp, MagiName.Balthazar);
   }

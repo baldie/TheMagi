@@ -1,6 +1,8 @@
 import { logger } from '../logger';
+import { 
+  CircuitBreakerState 
+} from './types';
 import type { 
-  CircuitBreakerState, 
   CircuitBreakerConfig, 
   CircuitBreakerContext 
 } from './types';

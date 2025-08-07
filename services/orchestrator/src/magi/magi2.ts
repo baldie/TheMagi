@@ -1,4 +1,4 @@
-import { type ActorRefFrom, createActor } from 'xstate';
+import { type ActorRefFrom, createActor, waitFor } from 'xstate';
 import { agentMachine, type AgentMachine } from './agent-machine';
 import { plannerMachine, type PlannerMachine } from './planner-machine';
 import { ConduitClient } from './conduit-client';
@@ -209,11 +209,16 @@ export class Magi2 implements MagiCompatible {
   }
 
   private async waitForActorCompletion(plannerActor: any): Promise<string> {
-    // Wait for the actor to reach its final 'done' state.
-    const finalState = await plannerActor.waitFor({ status: 'done' });
+    // Wait for the actor to reach its final 'done' state using the standalone waitFor function
+    const finalState = await waitFor(plannerActor, (snapshot) => snapshot.status === 'done');
 
     // The output from the machine's final state is in the 'output' property.
-    const output = finalState.output as { result?: string; error?: string };
+    const output = finalState.output as { result?: string; error?: string } | undefined;
+
+    // Handle case where output is undefined
+    if (!output) {
+      throw new Error('Actor completed but produced no output');
+    }
 
     if (output.error) {
       // Throwing an error here will be caught by the .catch() block
@@ -225,44 +230,42 @@ export class Magi2 implements MagiCompatible {
   }
 
   public async contactAsAgent(userMessage: string, _prohibitedTools: string[] = []): Promise<string> {
-    let response = '';
     try {
       logger.info(`${this.name} beginning state machine agentic loop...`);
-
-      // Initialize memory context
-      const currentTopic = await this.shortTermMemory.determineTopic(userMessage);
-      const workingMemory = await this.shortTermMemory.summarize(currentTopic);
-
       // Create planner machine with proper context
       const plannerMachine = createConfiguredPlannerMachine(this.name, userMessage);
-      
-      // Create and start the planner actor
-      const plannerActor = createActor(plannerMachine, {
-        input: {
-          userMessage,
-          magiName: this.name,
-          conduitClient: this.conduit,
-          toolUser: this.toolUser,
-          shortTermMemory: this.shortTermMemory,
-          availableTools: this.toolsList.filter(tool => !_prohibitedTools.includes(tool.name)),
-          workingMemory
-        }
-      });
 
-      // Start the actor and wait for completion
-      plannerActor.start();
-      
-      // Wait for the machine to complete
-      response = await this.waitForActorCompletion(plannerActor);
+      return await this.executeWithStatusManagement(async () => {
+        // Initialize memory context
+        const currentTopic = await this.shortTermMemory.determineTopic(userMessage);
+        const workingMemory = await this.shortTermMemory.summarize(currentTopic);
 
-      // Store interaction in short-term memory
-      try {
+        // Create and start the planner actor
+        const plannerActor = createActor(plannerMachine, {
+          input: {
+            userMessage,
+            magiName: this.name,
+            conduitClient: this.conduit,
+            toolUser: this.toolUser,
+            shortTermMemory: this.shortTermMemory,
+            availableTools: this.toolsList.filter(tool => !_prohibitedTools.includes(tool.name)),
+            workingMemory
+          }
+        });
+
+        // Start the actor and wait for completion
+        plannerActor.start();
+        
+        // Wait for the machine to complete
+        const response = await this.waitForActorCompletion(plannerActor);
         this.shortTermMemory.remember('user', userMessage);
         this.shortTermMemory.remember(this.name, response);
-      } catch (memoryError) {
-        logger.warn(`Failed to store agentic memory for ${this.name}: ${memoryError}`);
-      }
-      
+
+        // Prep for TTS
+        const finalResponse = await this.makeTTSReady(response);
+        logger.debug(`\n🤖🔊\n${finalResponse}`);
+        return finalResponse;
+      });
     } catch (error) {
       logger.error(`ERROR: ${error}`);
       throw MagiErrorHandler.createContextualError(error, {
@@ -270,10 +273,6 @@ export class Magi2 implements MagiCompatible {
         operation: 'agentic loop'
       });
     }
-
-    const finalResponse = await this.makeTTSReady(response);
-    logger.debug(`\n🤖🔊\n${finalResponse}`);
-    return finalResponse;
   }
 
   /**
