@@ -92,6 +92,18 @@ export class ToolExecutor {
       errors.push('Invalid tool parameters');
     }
 
+    if (tool.name === 'read-page') {
+      if (!Array.isArray(tool.parameters?.urls) || tool.parameters.urls.length === 0) {
+        errors.push('read-page tool requires a non-empty urls array parameter');
+      }
+    }
+
+    if (tool.name === 'search-web') {
+      if (typeof tool.parameters?.query !== 'string' || !tool.parameters?.query.trim()) {
+        errors.push('search-web tool requires a valid query parameter');
+      }
+    }
+    
     return {
       isValid: errors.length === 0,
       errors

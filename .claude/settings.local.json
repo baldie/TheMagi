@@ -90,7 +90,8 @@
       "Bash(OLLAMA_MODELS=\"$(pwd)/.models\" OLLAMA_HOST=\"127.0.0.1:11434\" ./services/conduit/CUDA/bin/ollama list)",
       "Bash(ollama:*)",
       "Bash(printenv:*)",
-      "WebFetch(domain:ollama.readthedocs.io)"
+      "WebFetch(domain:ollama.readthedocs.io)",
+      "WebFetch(domain:stately.ai)"
     ],
     "deny": []
   },

@@ -1,13 +1,76 @@
 import { fromPromise } from 'xstate';
 import { logger } from '../logger';
+import { PERSONAS_CONFIG } from './magi2';
 import type { ConduitClient } from './conduit-client';
 import type { MagiName } from '../types/magi-types';
 import type { GoalCompletionResult } from './types';
-import { PERSONAS_CONFIG } from './magi2';
+import type { AgenticTool } from './magi2';
 
 // ============================================================================
 // AGENT ACTIONS - Async operations for the agent state machine
 // ============================================================================
+
+/**
+ * Gathers context for the current strategic goal
+ */
+export const gatherContext = fromPromise(async ({ input }: {
+  input: {
+    strategicGoal: string;
+    workingMemory: string;
+    completedSubGoals: string[];
+    conduitClient: ConduitClient;
+    magiName: MagiName;
+  }
+}) => {
+  const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName } = input;
+  
+  const systemPrompt = `You are a context gatherer. Analyze the strategic goal and provide relevant context for tactical planning.`;
+  
+  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
+Working Memory:\n${workingMemory || 'None'}\n
+Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
+
+Examine the working memory and completed sub-goals.
+Summarize the most relevant information that will help in planning the next immediate step towards achieving the strategic goal.
+Do not invent information or over-complicate things.`;
+
+  try {
+    const { model } = PERSONAS_CONFIG[magiName];
+    return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.3 });
+  } catch (error) {
+    logger.error(`${magiName} failed to gather context:`, error);
+    return `Strategic Goal: ${strategicGoal}\n\nWorking Memory: ${workingMemory}\n\nCompleted Sub-goals:\n${completedSubGoals.join(', ') || 'None'}`;
+  }
+});
+
+/**
+ * Synthesizes gathered context into a focused prompt context
+ */
+export const synthesizeContext = fromPromise(async ({ input }: {
+  input: {
+    strategicGoal: string;
+    fullContext: string;
+    conduitClient: ConduitClient;
+    magiName: MagiName;
+  }
+}) => {
+  const { strategicGoal, fullContext, conduitClient, magiName } = input;
+  
+  const systemPrompt = `You are a context synthesizer. Create a focused, actionable context summary for tactical planning.`;
+  
+  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
+Full Context:\n${fullContext}
+
+Synthesize this into a clear, focused context that emphasizes the most relevant information for achieving the strategic goal. Keep it concise but comprehensive.`;
+
+  try {
+    const { model } = PERSONAS_CONFIG[magiName];
+    return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.2 });
+  } catch (error) {
+    logger.error(`${magiName} failed to synthesize context:`, error);
+    return `Goal: ${strategicGoal}\nRelevant Context: ${fullContext}`;
+  }
+});
 
 /**
  * Determines the next tactical sub-goal based on current context
@@ -27,12 +90,12 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   
   const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable sub-goal.`;
 
-  const userPrompt = `Strategic Goal:\n${strategicGoal}
+  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
 Context:\n${context}
-Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}
+Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
-What is the next specific, actionable sub-goal to work towards the strategic goal?
-Respond with just the sub-goal text.`;
+What is the immediate actionable sub-goal that moves you 1 step towards the strategic goal?
+Respond with just the single sub-goal text.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -52,24 +115,11 @@ export const selectTool = fromPromise(async ({ input }: {
     availableTools: any[];
     conduitClient: ConduitClient;
     magiName: MagiName;
-    followUpUrl?: string;
-    isFollowUp?: boolean;
   } 
 }) => {
-  const { subGoal, availableTools, conduitClient, magiName, followUpUrl, isFollowUp } = input;
+  const { subGoal, availableTools, conduitClient, magiName } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
-  
-  // If this is a follow-up from web-search, automatically select read-page
-  if (isFollowUp && followUpUrl) {
-    logger.debug(`${magiName} auto-selecting read-page for follow-up with URL: ${followUpUrl}`);
-    return {
-      name: 'read-page',
-      parameters: {
-        url: followUpUrl
-      }
-    };
-  }
   
   const systemPrompt = `You are a tool selector. Choose the most appropriate tool for the job.`;
 
@@ -139,66 +189,6 @@ Has the sub-goal been completed? Respond only with JSON:
 });
 
 /**
- * Gathers context for the current strategic goal
- */
-export const gatherContext = fromPromise(async ({ input }: {
-  input: {
-    strategicGoal: string;
-    workingMemory: string;
-    completedSubGoals: string[];
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}) => {
-  const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName } = input;
-  
-  const systemPrompt = `You are a context gatherer. Analyze the strategic goal and provide relevant context for tactical planning.`;
-  
-  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
-Working Memory:\n${workingMemory}\n
-Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
-
-Organize relevant context from the working memory that will help with tactical planning. Respond with organized context information based on what was provided. Do not invent information or over-complicate things.`;
-
-  try {
-    const { model } = PERSONAS_CONFIG[magiName];
-    return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.3 });
-  } catch (error) {
-    logger.error(`${magiName} failed to gather context:`, error);
-    return `Strategic Goal: ${strategicGoal}\nWorking Memory: ${workingMemory}\nCompleted Sub-goals: ${completedSubGoals.join(', ') || 'None'}`;
-  }
-});
-
-/**
- * Synthesizes gathered context into a focused prompt context
- */
-export const synthesizeContext = fromPromise(async ({ input }: {
-  input: {
-    strategicGoal: string;
-    fullContext: string;
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}) => {
-  const { strategicGoal, fullContext, conduitClient, magiName } = input;
-  
-  const systemPrompt = `You are a context synthesizer. Create a focused, actionable context summary for tactical planning.`;
-  
-  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
-Full Context:\n${fullContext}
-
-Synthesize this into a clear, focused context that emphasizes the most relevant information for achieving the strategic goal. Keep it concise but comprehensive.`;
-
-  try {
-    const { model } = PERSONAS_CONFIG[magiName];
-    return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.2 });
-  } catch (error) {
-    logger.error(`${magiName} failed to synthesize context:`, error);
-    return `Goal: ${strategicGoal}\nRelevant Context: ${fullContext}`;
-  }
-});
-
-/**
  * Helper function to generate prompt for cleaning web page content
  */
 function getRelevantContentFromRawText(userMessage: string, rawToolResponse: string): string {
@@ -235,84 +225,53 @@ function getRelevantContentFromRawText(userMessage: string, rawToolResponse: str
  */
 export const processOutput = fromPromise(async ({ input }: {
   input: {
-    toolName: string;
+    tool: AgenticTool;
     toolOutput: string;
     currentSubGoal: string;
     userMessage?: string;
     conduitClient: ConduitClient;
     magiName: MagiName;
   }
-}): Promise<{
-  processedOutput: string;
-  shouldFollowUpWithRead?: boolean;
-  followUpUrl?: string;
-}> => {
-  const { toolName, toolOutput, currentSubGoal, userMessage, conduitClient, magiName } = input;
+}) => {
+  const { tool, toolOutput, currentSubGoal, userMessage, conduitClient, magiName } = input;
   const { model } = PERSONAS_CONFIG[magiName];
-  let processedOutput = toolOutput;
+  let processedOutput;
   
   // Process output based on tool type
-  switch (toolName) {
-    case 'read-page':
-      // Web pages can have a lot of noise that throw off the magi, so lets clean it
-      if (userMessage) {
-        const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolOutput);
+  switch (tool.name) {
+    case 'read-page': {
+        logger.debug(`Proccessing read page results with page length: ${toolOutput.length}`);
+        // Web pages can have a lot of noise that throw off the magi, so lets clean it
+        const relevantContentPrompt = getRelevantContentFromRawText(userMessage ?? '', toolOutput);
         processedOutput = await conduitClient.contact(
           relevantContentPrompt, 
           "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.",
           model,
           { temperature: 0.1 }
         );
+        const urls = (tool.parameters as { urls?: string[] })?.urls;
+        const url = urls && Array.isArray(urls) && urls.length > 0 ? urls[0] : 'unknown URL';
+        processedOutput = `URL: ${url}\n\nPage Summary:\n${processedOutput}`;
       }
       break;
     
     case 'personal-data': {
-      // Summarize the data we received back in human readable form
-      logger.debug(`Raw personal-data retrieved: ${toolOutput}`);
-      const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary.`;
-      logger.debug(`Summary prompt:\n${summarize}`);
-      processedOutput = await conduitClient.contact(
-        summarize,
-        "You are a summary assistant.",
-        model,
-        { temperature: 0.1 }
-      );
-      break;
-    }
+        // Summarize the data we received back in human readable form
+        logger.debug(`Raw personal-data retrieved: ${toolOutput}`);
+        const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary.`;
+        logger.debug(`Summary prompt:\n${summarize}`);
+        processedOutput = await conduitClient.contact(
+          summarize,
+          "You are a summary assistant.",
+          model,
+          { temperature: 0.1 }
+        );
+      }
+    break;
     
     case 'search-web':
-      try {
-        // Extract the most relevant URL for follow-up reading
-        const systemPrompt = `You are an search results expert.`;
-        const userPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nDetermine the single most relevant URL based on the search results and respond with that URL only.`;
-        const extractedUrl = await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.1 });
-        
-        // Extract the first valid URL using regex
-        const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
-        const urls = extractedUrl.match(urlRegex);
-        
-        if (urls && urls.length > 0) {
-          const firstUrl = urls[0];
-          // Basic length check and truncation for the extracted URL
-          processedOutput = firstUrl.length > 5000 
-            ? firstUrl.substring(0, 5000) + '... [truncated]'
-            : firstUrl;
-          
-          // Return with follow-up information
-          return {
-            processedOutput,
-            shouldFollowUpWithRead: true,
-            followUpUrl: firstUrl
-          };
-        } else {
-          // If URL extraction failed, just return the original output
-          processedOutput = toolOutput;
-        }
-      } catch (error) {
-        logger.error(`${magiName} failed to process output:`, error);
-        // Keep original output on error
-        processedOutput = toolOutput;
-      }
+      // Just use the raw search results without follow-up
+      processedOutput = toolOutput;
       break;
     
     default:
@@ -336,7 +295,7 @@ export const processOutput = fromPromise(async ({ input }: {
     processedOutput = processedOutput.substring(0, 10000) + '... [truncated]';
   }
   
-  return { processedOutput };
+  return processedOutput;
 });
 
 /**

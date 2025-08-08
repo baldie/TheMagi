@@ -56,7 +56,7 @@ export const isToolValid = ({ context }: { context: AgentContext }): boolean => 
   const validation = toolExecutor.validateTool(context.selectedTool);
   
   if (!validation.isValid) {
-    logger.warn(`${context.magiName} tool validation failed:`, validation.errors);
+    logger.warn(`${context.magiName} tool validation failed: ${validation.errors.join(', ')}`);
   }
 
   return validation.isValid;

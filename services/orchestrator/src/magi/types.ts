@@ -32,6 +32,8 @@ export interface PlannerContext {
   // Discovery tracking
   currentDiscovery: Discovery | null;
   planRevisions: Array<{ reason: string; originalPlan: string[]; newPlan: string[] }>;
+  // Accumulated results from completed steps
+  accumulatedResults: string[];
 }
 
 /**

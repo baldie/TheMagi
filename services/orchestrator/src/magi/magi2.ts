@@ -211,7 +211,7 @@ export class Magi2 implements MagiCompatible {
   private async waitForActorCompletion(plannerActor: any): Promise<string> {
     // Wait for the actor to reach its final 'done' state using the standalone waitFor function
     const finalState = await waitFor(plannerActor, (snapshot) => snapshot.status === 'done');
-
+    
     // The output from the machine's final state is in the 'output' property.
     const output = finalState.output as { result?: string; error?: string } | undefined;
 

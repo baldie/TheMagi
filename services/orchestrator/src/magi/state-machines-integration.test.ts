@@ -388,6 +388,35 @@ const testPlannerMachine = createMachine({
   },
 });
 
+// Helper functions to reduce nesting
+const createCompletionPromise = (actor: any, timeout: number = 8000) => {
+  return new Promise((resolve, reject) => {
+    const subscription = actor.subscribe((state: any) => {
+      if (state.status === 'done') {
+        subscription.unsubscribe();
+        clearTimeout(timeoutId);
+        resolve(state);
+      }
+    });
+    
+    const timeoutId = setTimeout(() => {
+      subscription.unsubscribe();
+      reject(new Error('Test timeout'));
+    }, timeout);
+  });
+};
+
+const createSimpleCompletionPromise = (actor: any) => {
+  return new Promise((resolve) => {
+    const subscription = actor.subscribe((state: any) => {
+      if (state.status === 'done') {
+        subscription.unsubscribe();
+        resolve(state);
+      }
+    });
+  });
+};
+
 describe('State Machines Integration Tests', () => {
   describe('Planner Machine Happy Path', () => {
     it('should complete the full planner flow successfully', async () => {
@@ -413,20 +442,7 @@ describe('State Machines Integration Tests', () => {
       plannerActor.start();
 
       // Wait for completion
-      await new Promise((resolve, reject) => {
-        const subscription = plannerActor.subscribe((state) => {
-          if (state.status === 'done') {
-            subscription.unsubscribe();
-            resolve(state);
-          }
-        });
-        
-        // Add timeout to prevent infinite hanging
-        setTimeout(() => {
-          subscription.unsubscribe();
-          reject(new Error('Test timeout'));
-        }, 8000);
-      });
+      await createCompletionPromise(plannerActor, 8000);
 
       // Verify state transitions happened in correct order
       // Note: Some states may be skipped due to immediate transitions
@@ -466,19 +482,7 @@ describe('State Machines Integration Tests', () => {
       agentActor.start();
 
       // Wait for completion
-      await new Promise((resolve, reject) => {
-        const subscription = agentActor.subscribe((state) => {
-          if (state.status === 'done') {
-            subscription.unsubscribe();
-            resolve(state);
-          }
-        });
-        
-        setTimeout(() => {
-          subscription.unsubscribe();
-          reject(new Error('Test timeout'));
-        }, 8000);
-      });
+      await createCompletionPromise(agentActor, 8000);
 
       // Verify state transitions happened in correct order
       expect(stateTransitions).toContain('gatheringContext');
@@ -516,7 +520,7 @@ describe('State Machines Integration Tests', () => {
         input: plannerContext
       });
 
-      let plannerStates: string[] = [];
+      const plannerStates: string[] = [];
 
       plannerActor.subscribe((state) => {
         plannerStates.push(state.value as string);
@@ -525,13 +529,7 @@ describe('State Machines Integration Tests', () => {
       plannerActor.start();
 
       // Wait for completion
-      await new Promise((resolve) => {
-        plannerActor.subscribe((state) => {
-          if (state.status === 'done') {
-            resolve(state);
-          }
-        });
-      });
+      await createSimpleCompletionPromise(plannerActor);
 
       // Verify planner completed successfully
       expect(plannerStates).toContain('done');

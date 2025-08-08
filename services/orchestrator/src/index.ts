@@ -1,10 +1,11 @@
 import { serviceManager } from './service_manager';
 import { logger } from './logger';
 import { loadMagi } from './loading';
-import { routeMessage as routeMessage } from './ready';
+import { routeMessage } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics, runBackgroundMcpVerification } from './diagnostics';
-import { balthazar, caspar, melchior } from './magi/magi';
+import { caspar, melchior } from './magi/magi';
+import { balthazar as balthazar2 } from './magi/magi2';
 import { mcpClientManager } from './mcp';
 import express from 'express';
 import http from 'http';
@@ -118,7 +119,7 @@ function startHttpOrchestratorService() {
             status: melchior.getStatus()
           },
           balthazar: {
-            status: balthazar.getStatus()
+            status: balthazar2.getStatus()
           },
         }
       });
@@ -126,7 +127,7 @@ function startHttpOrchestratorService() {
 
   createWebSocketServer(server, routeMessage);
 
-  const PORT = process.env.PORT || 8080;
+  const PORT = process.env.PORT ?? 8080;
   server.listen(PORT, () => {
     logger.info(`Orchestrator listening on port ${PORT}`);
   });

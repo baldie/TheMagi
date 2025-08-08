@@ -28,7 +28,7 @@ const createStrategicPlan = fromPromise(async ({ input }: {
   
   logger.debug(`${magiName} creating strategic plan for: ${userMessage}`);
   
-  const systemPrompt = `You are a strategic planner. Break down the user's message into 2-5 high-level strategic goals.
+  const systemPrompt = `You are a strategic planner. Consider how you will respond to the user's message and break it down into 2-5 high-level strategic goals.
 Each goal should be actionable and specific. Return as a JSON array of strings.`;
   
   const userPrompt = `User message: "${userMessage}"
@@ -210,6 +210,7 @@ export const plannerMachine = createMachine({
     workingMemory: input.workingMemory,
     currentDiscovery: null,
     planRevisions: [],
+    accumulatedResults: [],
   }),
   states: {
     validateContext: {
@@ -284,18 +285,28 @@ export const plannerMachine = createMachine({
     invokingAgent: {
       invoke: {
         src: agentMachine,
-        input: ({ context }) => ({
-          strategicGoal: context.currentGoal,
-          magiName: context.magiName,
-          conduitClient: context.conduitClient,
-          toolUser: context.toolUser,
-          shortTermMemory: context.shortTermMemory,
-          availableTools: context.availableTools,
-          workingMemory: context.workingMemory,
-        }),
+        input: ({ context }) => {
+          // Build enhanced working memory with accumulated results
+          const baseMemory = context.workingMemory;
+          const accumulatedContext = context.accumulatedResults.length > 0 
+            ? `\n\nPrevious strategic goals and results:\n${context.accumulatedResults.map((result, index) => 
+                `Strategic Goal #${index + 1}: "${context.strategicPlan[index]}"\n\nResult:\n${result}`
+              ).join('\n\n')}`
+            : '';
+          
+          return {
+            strategicGoal: context.currentGoal,
+            magiName: context.magiName,
+            conduitClient: context.conduitClient,
+            toolUser: context.toolUser,
+            shortTermMemory: context.shortTermMemory,
+            availableTools: context.availableTools,
+            workingMemory: baseMemory + accumulatedContext,
+          };
+        },
         onDone: [
           {
-            guard: ({ event }) => event.output.discovery !== undefined,
+            guard: ({ event }) => event.output && event.output.discovery !== undefined,
             target: 'evaluatingDiscovery',
             actions: assign({
               agentResult: ({ event }) => event.output.result || 'Discovery reported',
@@ -306,7 +317,13 @@ export const plannerMachine = createMachine({
           {
             target: 'evaluatingProgress',
             actions: assign({
-              agentResult: ({ event }) => typeof event.output === 'string' ? event.output : JSON.stringify(event.output),
+              agentResult: ({ event }) => {
+                return event.output?.result || 'Agent completed';
+              },
+              accumulatedResults: ({ context, event }) => {
+                const result = event.output?.result || 'Agent completed';
+                return [...context.accumulatedResults, result];
+              },
               error: () => null,
             }),
           },
