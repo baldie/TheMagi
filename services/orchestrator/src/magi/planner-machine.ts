@@ -26,19 +26,39 @@ const createStrategicPlan = fromPromise(async ({ input }: {
 }) => {
   const { userMessage, conduitClient, magiName } = input;
   
-  logger.debug(`${magiName} creating strategic plan for: ${userMessage}`);
+  const systemPrompt = `PERSONA\nYou are a strategic planner. Consider how you will respond to the user's message.`;
   
-  const systemPrompt = `You are a strategic planner. Consider how you will respond to the user's message and break it down into 2-5 high-level strategic goals.
-Each goal should be actionable and specific. Return as a JSON array of strings.`;
-  
-  const userPrompt = `User message: "${userMessage}"
+  const userPrompt = `USER MESSAGE:\n"${userMessage}"
 
-Create a strategic plan to address this message. Each step should be a clear, actionable goal.
+INSTRUCTIONS:
+Create a high-level plan for how to address the user's message.
+If the user's request is simple, a single goal may be sufficient.
+Each goal should be actionable. Do not over-complicate things.
 
-Format your response as JSON:
-{
-  "plan": ["goal1", "goal2", "goal3"]
-}`;
+EXAMPLE 1:
+message: "Tell me a joke"
+{"plan": ["Respond with a joke"]}
+
+EXAMPLE 2:
+message: "What is 2 + 2?"
+{"plan": ["Respond with the answer to the simple math question"]}
+
+${PERSONAS_CONFIG[magiName].strategicPlanExamples}
+
+EXAMPLE 6:
+message: "Write a short story about a robot who discovers music."
+{"plan": ["Generate a short story with the requested theme", "Review and edit story to make sure it matches user's requirements", "Respond with the story"]}
+
+EXAMPLE 7:
+message: "Remind me to take out the trash."
+{"plan": ["Ask user what day and time they would like the reminder"]}
+
+EXAMPLE 8:
+message: "Help me plan my vacation."
+{"plan": ["Ask user for key vacation parameters like destination ideas, budget, travel dates, and who they are traveling with"]}
+
+FORMAT:
+{"plan": ["goal1", "goal2", "goal3", ...]}`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -93,9 +113,8 @@ ${originalPlan.map((step, i) => {
 Discovery Made:
 - Type: ${discovery.type}
 - Details: ${discovery.details}
-- Context: ${discovery.context}
 
-Based on this discovery, should the strategic plan be adapted? If so, provide a revised plan that incorporates this new information.
+Based on this ne winformation, should the strategic plan be adapted? If so, provide a revised plan that incorporates this new information.
 
 Respond with JSON:
 {
@@ -295,6 +314,7 @@ export const plannerMachine = createMachine({
             : '';
           
           return {
+            userMessage: context.userMessage,
             strategicGoal: context.currentGoal,
             magiName: context.magiName,
             conduitClient: context.conduitClient,
@@ -450,22 +470,20 @@ export const plannerMachine = createMachine({
     
     done: {
       type: 'final',
-      output: ({ context }) => ({
-        result: context.agentResult,
-        completedSteps: context.currentStepIndex + 1,
-        totalSteps: context.strategicPlan.length,
-        planRevisions: context.planRevisions
-      })
+      output: ({ context }) => {
+        const result = context.agentResult;
+        logger.debug(`${context.magiName} planner-machine done state result: ${result}`);
+        return { result };
+      }
     },
     
     failed: {
       type: 'final',
-      output: ({ context }) => ({
-        error: context.error,
-        completedSteps: context.currentStepIndex,
-        totalSteps: context.strategicPlan.length,
-        planRevisions: context.planRevisions
-      })
+      output: ({ context }) => {
+        const error = context.error;
+        logger.debug(`${context.magiName} planner-machine failed state error: ${error}`);
+        return { error };
+      }
     },
   },
 }, {

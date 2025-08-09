@@ -3,7 +3,7 @@ import type { ToolUser } from './tool-user';
 import type { ShortTermMemory } from './short-term-memory';
 import type { MagiName } from '../types/magi-types';
 import type { MagiTool } from '../mcp';
-import type { AgenticTool } from './magi';
+import type { AgenticTool } from './magi2';
 
 // Constants
 export const MAX_RETRIES = 3;
@@ -40,7 +40,8 @@ export interface PlannerContext {
  * Context for the tactical Agent machine
  */
 export interface AgentContext {
-  // Goal and planning
+  // User input and goal
+  userMessage: string;
   strategicGoal: string;
   currentSubGoal: string;
   

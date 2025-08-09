@@ -4,8 +4,7 @@ import { loadMagi } from './loading';
 import { routeMessage } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics, runBackgroundMcpVerification } from './diagnostics';
-import { caspar, melchior } from './magi/magi';
-import { balthazar as balthazar2 } from './magi/magi2';
+import { balthazar, caspar, melchior } from './magi/magi2';
 import { mcpClientManager } from './mcp';
 import express from 'express';
 import http from 'http';
@@ -98,16 +97,17 @@ async function gracefulShutdown(signal: string) {
   process.exit(0);
 }
 
-process.on('SIGTERM', async () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', async () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => { void gracefulShutdown('SIGTERM'); });
+process.on('SIGINT', () => { void gracefulShutdown('SIGINT'); });
 
 // This service provides the orchestrator's health route and a websocket server for the UI to connect to.
-function startHttpOrchestratorService() {
+function startHttpOrchestratorService(): void {
   const app = express();
   app.use(cors({ origin: ['http://localhost:4200', 'http://127.0.0.1:4200'] }));
+  // eslint-disable-next-line
   const server = http.createServer(app);
 
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json(
       {
         status: isInitialized ? 'available' : 'busy',
@@ -119,13 +119,13 @@ function startHttpOrchestratorService() {
             status: melchior.getStatus()
           },
           balthazar: {
-            status: balthazar2.getStatus()
+            status: balthazar.getStatus()
           },
         }
       });
   });
 
-  createWebSocketServer(server, routeMessage);
+  createWebSocketServer(server, async (userMessage) => routeMessage(userMessage));
 
   const PORT = process.env.PORT ?? 8080;
   server.listen(PORT, () => {

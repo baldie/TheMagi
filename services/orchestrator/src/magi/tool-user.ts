@@ -1,7 +1,7 @@
 import { logger } from '../logger';
 import type { MagiTool } from '../mcp';
 import { mcpClientManager } from '../mcp';
-import type { Magi, AgenticTool } from './magi';
+import type { Magi2, AgenticTool } from './magi2';
 import type { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
 import { MagiErrorHandler } from './error-handler';
 
@@ -59,7 +59,7 @@ export function getRelevantContentFromRawText(userMessage: string, rawToolRespon
  * ToolUser handles tool identification and execution for the Magi system.
  */
 export class ToolUser {
-  constructor(private readonly magi: Magi) {}
+  constructor(private readonly magi: Magi2) {}
 
   /**
    * Map friendly tool names to actual MCP tool names
@@ -102,7 +102,11 @@ export class ToolUser {
       // Initialize MCP client manager if needed
       await mcpClientManager.initialize();
 
-      if (toolName === 'search-web' || toolName === 'read-page') {
+      if (toolName === 'search-web') {
+        toolArguments.urls = [toolArguments.url ?? ''];
+        toolArguments.exclude_domains = ["youtube.com"];
+      }
+      if (toolName === 'read-page') {
         toolArguments.exclude_domains = ["youtube.com"];
       }
       

@@ -29,6 +29,7 @@ export const agentMachine = createMachine({
     context: {} as AgentContext,
     events: {} as AgentEvent,
     input: {} as {
+      userMessage: string;
       strategicGoal: string;
       magiName: MagiName;
       conduitClient: ConduitClient;
@@ -50,6 +51,7 @@ export const agentMachine = createMachine({
   },
   initial: 'validateContext',
   context: ({ input }) => ({
+    userMessage: input.userMessage,
     strategicGoal: input.strategicGoal,
     currentSubGoal: '',
     fullContext: '',
@@ -91,6 +93,7 @@ export const agentMachine = createMachine({
       invoke: {
         src: gatherContext,
         input: ({ context }) => ({
+          userMessage: context.userMessage,
           strategicGoal: context.strategicGoal,
           workingMemory: context.workingMemory,
           completedSubGoals: context.completedSubGoals,
@@ -187,6 +190,7 @@ export const agentMachine = createMachine({
           subGoal: context.currentSubGoal,
           availableTools: context.availableTools,
           conduitClient: context.conduitClient,
+          context: context.promptContext,
           magiName: context.magiName,
         }),
         onDone: {
@@ -288,7 +292,7 @@ export const agentMachine = createMachine({
           tool: context.selectedTool,
           toolOutput: context.toolOutput,
           currentSubGoal: context.currentSubGoal,
-          userMessage: context.workingMemory, // Pass user context for read-page processing
+          userMessage: context.userMessage,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
         }),

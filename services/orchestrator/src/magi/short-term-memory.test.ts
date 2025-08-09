@@ -1,12 +1,12 @@
 import { ShortTermMemory } from './short-term-memory';
 import { MagiName } from '../types/magi-types';
-import type { Magi } from './magi';
+import type { Magi2 } from './magi2';
 
-jest.mock('./magi');
+jest.mock('./magi2');
 
 describe('ShortTermMemory', () => {
   let memory: ShortTermMemory;
-  let mockMagi: jest.Mocked<Magi>;
+  let mockMagi: jest.Mocked<Magi2>;
 
   beforeEach(() => {
     mockMagi = {

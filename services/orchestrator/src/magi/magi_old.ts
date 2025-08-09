@@ -23,6 +23,7 @@ interface MagiConfig {
   };
 }
 
+
 export type AgenticTool = { name: string; parameters: Record<string, unknown>};
 
 export interface AgenticResponse {

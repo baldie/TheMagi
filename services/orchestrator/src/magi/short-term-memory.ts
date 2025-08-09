@@ -1,4 +1,4 @@
-import type { Magi } from './magi';
+import type { Magi2 } from './magi2';
 import type { MagiName } from '../types/magi-types';
 
 export interface Memory {
@@ -9,11 +9,11 @@ export interface Memory {
 export class ShortTermMemory {
   private static readonly MAX_MEMORIES = 15;
   private memories: Memory[] = [];
-  private readonly magi: Magi;
+  private readonly magi: Magi2;
   private lastSummary: string = '';
   private lastSummaryHash: string = '';
 
-  constructor(magi: Magi) {
+  constructor(magi: Magi2) {
     this.magi = magi;
   }
 

@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { ModelType } from '../config';
 import { MAGI_CONDUIT_API_BASE_URL } from '../config';
 import { logger } from '../logger';
-import type { MagiName } from './magi';
+import type { MagiName } from './magi2';
 import { MagiErrorHandler } from './error-handler';
 
 /**

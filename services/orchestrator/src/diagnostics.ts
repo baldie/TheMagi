@@ -7,7 +7,7 @@ import { MAGI_CONDUIT_API_BASE_URL, TTS_API_BASE_URL, REQUIRED_MODELS } from './
 import { promises as fs } from 'fs';
 import { exec } from 'child_process';
 import { mcpClientManager } from './mcp';
-import { MagiName } from './magi/magi';
+import { MagiName } from './magi/magi2';
 
 /**
  * Checks if a service is ready, attempts to start it if not, and polls for it to become available.

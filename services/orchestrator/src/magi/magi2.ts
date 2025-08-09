@@ -72,7 +72,7 @@ export type {
 interface MagiConfig {
   model: ModelType;
   personalitySource: string;
-  setNewGoalPrompt: string;
+  strategicPlanExamples: string;
   executeGoalPrompt: string;
   options: {
     temperature: number;
@@ -89,21 +89,52 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
-    setNewGoalPrompt: `[PLACEHOLDER] Goal setting prompt for Balthazar - focused on logical analysis and web search`,
+    strategicPlanExamples: `EXAMPLE 3:
+message: "Who is the CEO of American Express?"
+{"plan": ["Search web for answer", "Extract content from most relevant search result", "Respond with the answer"]}
+
+EXAMPLE 4:
+message: "What should I make for dinner?"
+{"plan": ["Search personal data for allergies", "Search personal data for preferences", "Respond with appropriate meal suggestions based on personal data"]}
+
+EXAMPLE 5:
+message: "What is the weather like this weekend?"
+{"plan": ["Access location information", "Search web for weather forecast based on location from previous goal", "Extract content from most relevant search result URL", "Respond with forecast"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Balthazar`,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
-    setNewGoalPrompt: `[PLACEHOLDER] Goal setting prompt for Melchior - focused on creativity and personal data`,
+    strategicPlanExamples: `EXAMPLE 3:
+message: "Recommend a good movie for me to watch tonight."
+{"plan": ["Search personal data for movie preferences", "Search web for highly-rated movies matching preferences", "Extract content from most relevant search result URL", "Respond with a list of movie recommendations"]}
+
+Example 4:
+message: "No, I don't like horror movies. Suggest something else."
+{"plan": ["Update user's movie preferences", "Collect a list of recommendations that are not in the horror genre", "Respond with updated list of movie recommendations"]}
+
+Example 5:
+message: "My favorite color is blue."
+{"plan": ["Save 'blue' as the user's favorite color in personal data", "Acknowledge the user's preference will be remembered and ask if there is more context to the statement."]}
+`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
     options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
-    setNewGoalPrompt: `[PLACEHOLDER] Goal setting prompt for Caspar - focused on smart home integration`,
+    strategicPlanExamples: `EXAMPLE 3:
+message: "Turn off the lights in the living room."
+{"plan": ["Search smart home devices for light controls", "Send command to turn off living room lights", "Respond with confirmation that lights are off"]}
+
+EXAMPLE 4:
+message: "Where is Lucky?"
+{"plan": ["Search memory for image of Lucky", "Search smart home devices for webcams", "Check each webcam for Lucky and if found note location", "Respond to user with Lucky's location if found, otherwise inform user that Lucky could not be located"]}
+
+EXAMPLE 5:
+message: "Play my favorite playlist"
+{"plan": ["Search smart home devices for smart speakers", "Confirm device is available and powered on", "Send command to play favorite songs playlist", "Respond with confirmation that playlist is playing"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Caspar`,
     options: { temperature: 0.5 },
   },
@@ -209,20 +240,21 @@ export class Magi2 implements MagiCompatible {
   }
 
   private async waitForActorCompletion(plannerActor: any): Promise<string> {
-    // Wait for the actor to reach its final 'done' state using the standalone waitFor function
     const finalState = await waitFor(plannerActor, (snapshot) => snapshot.status === 'done');
     
-    // The output from the machine's final state is in the 'output' property.
-    const output = finalState.output as { result?: string; error?: string } | undefined;
+    // Get output from state configuration if finalState.output is undefined
+    const currentStateValue = typeof finalState.value === 'string' ? finalState.value : Object.keys(finalState.value)[0];
+    const stateConfig = finalState.machine.config.states[currentStateValue];
+    
+    const output = (stateConfig && typeof stateConfig.output === 'function') 
+      ? stateConfig.output({ context: finalState.context })
+      : finalState.output;
 
-    // Handle case where output is undefined
     if (!output) {
       throw new Error('Actor completed but produced no output');
     }
 
     if (output.error) {
-      // Throwing an error here will be caught by the .catch() block
-      // of the calling async function.
       throw new Error(output.error);
     }
 

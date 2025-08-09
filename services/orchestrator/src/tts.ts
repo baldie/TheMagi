@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { TTS_API_BASE_URL } from './config';
-import { MagiName } from './magi/magi';
+import { MagiName } from './magi/magi2';
 import { logger } from './logger';
 import { serviceManager } from './service_manager';
-// import { Stream } from 'stream'; // No longer needed - using direct Buffer approach
 import { broadcastAudioToClients } from './websocket';
 
 // Constants for TTS service

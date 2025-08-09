@@ -1,7 +1,7 @@
 import { logger } from '../logger';
 import type { ToolUser } from './tool-user';
 import type { MagiName } from '../types/magi-types';
-import type { AgenticTool } from './magi';
+import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
 
 /**

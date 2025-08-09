@@ -1,9 +1,9 @@
 import fs from 'fs/promises';
 import { logger } from './logger';
-import type { Magi} from './magi/magi';
-import { balthazar, caspar, melchior, MagiName, PERSONAS_CONFIG } from './magi/magi';
+import type { Magi2 } from './magi/magi2';
+import { balthazar, caspar, melchior, MagiName, PERSONAS_CONFIG } from './magi/magi2';
 
-async function checkPersonaReadiness(magi: Magi): Promise<void> {
+async function checkPersonaReadiness(magi: Magi2): Promise<void> {
   const maxRetries = 3;
   const retryDelay = 5000; // 5 seconds
 

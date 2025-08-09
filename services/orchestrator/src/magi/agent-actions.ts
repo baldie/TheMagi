@@ -15,6 +15,7 @@ import type { AgenticTool } from './magi2';
  */
 export const gatherContext = fromPromise(async ({ input }: {
   input: {
+    userMessage: string;
     strategicGoal: string;
     workingMemory: string;
     completedSubGoals: string[];
@@ -22,17 +23,21 @@ export const gatherContext = fromPromise(async ({ input }: {
     magiName: MagiName;
   }
 }) => {
-  const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName } = input;
+  const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
   
-  const systemPrompt = `You are a context gatherer. Analyze the strategic goal and provide relevant context for tactical planning.`;
+  const systemPrompt = `You are a data extraction robot. Your only function is to identify and list key factual data points from a given text. You do not analyze, interpret, or suggest actions.`;
   
-  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
-Working Memory:\n${workingMemory || 'None'}\n
+  const userPrompt = `User's Message:\n"${userMessage}"\n
+${workingMemory}\n
+Current Strategic Goal:\n${strategicGoal}\n
 Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
-Examine the working memory and completed sub-goals.
-Summarize the most relevant information that will help in planning the next immediate step towards achieving the strategic goal.
-Do not invent information or over-complicate things.`;
+INSTRUCTIONS:
+Examine the previous strategic goals and results.
+Gather only the most relevant information that will help in planning the next immediate step towards achieving the strategic goal.
+
+OUTPUT:
+Your response is a simple, bulleted list of the key facts and figures. Each point is a direct statement of a relevant piece of data found in the results.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -91,7 +96,7 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable sub-goal.`;
 
   const userPrompt = `Strategic Goal:\n${strategicGoal}\n
-Context:\n${context}
+Context:\n${context}\n
 Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
 What is the immediate actionable sub-goal that moves you 1 step towards the strategic goal?
@@ -114,19 +119,20 @@ export const selectTool = fromPromise(async ({ input }: {
     subGoal: string; 
     availableTools: any[];
     conduitClient: ConduitClient;
+    context: string;
     magiName: MagiName;
   } 
 }) => {
-  const { subGoal, availableTools, conduitClient, magiName } = input;
+  const { subGoal, availableTools, conduitClient, magiName, context } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
   const systemPrompt = `You are a tool selector. Choose the most appropriate tool for the job.`;
 
-  const toolList = availableTools.map(tool => `- ${tool.name}: ${tool.description}`).join('\n');
+  const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
-  const userPrompt = `Job:\n${subGoal}
-
+  const userPrompt = `Job:\n${subGoal}\n
+Context:\n${context}\n
 Available tools:
 ${toolList}
 
@@ -324,8 +330,8 @@ Discoveries include:
 
 Focus on information that could change how the strategic planner approaches the overall task.`;
   
-  const userPrompt = `Strategic Goal: ${strategicGoal}
-Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}
+  const userPrompt = `Strategic Goal: ${strategicGoal}\n
+Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}\n
 Latest Output: ${processedOutput}
 
 Evaluate goal completion and check for strategic discoveries. Respond only with JSON:
@@ -337,7 +343,6 @@ Evaluate goal completion and check for strategic discoveries. Respond only with 
   "discovery": {
     "type": "opportunity|obstacle|impossibility",
     "details": "what was discovered",
-    "context": "relevant context for strategic planning"
   }
 }
 

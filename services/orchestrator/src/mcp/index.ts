@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { MagiName } from '../magi/magi';
+import { MagiName } from '../magi/magi2';
 import { logger } from '../logger';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
@@ -44,7 +44,7 @@ export class MagiTool implements McpToolInfo {
   }
 
   toString(): string {
-    const parts = [`Name: ${this.name}`];
+    const parts = [`Tool Name: ${this.name}`];
     
     if (this.description) {
       parts.push(`Description: ${this.description}`);

@@ -1,5 +1,5 @@
 import { logger } from '../logger';
-import type { MagiName } from './magi';
+import type { MagiName } from './magi2';
 
 export interface ErrorContext {
   magiName: MagiName;
