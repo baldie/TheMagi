@@ -116,8 +116,7 @@ message: "No, I don't like horror movies. Suggest something else."
 
 Example 5:
 message: "My favorite color is blue."
-{"plan": ["Save 'blue' as the user's favorite color in personal data", "Acknowledge the user's preference will be remembered and ask if there is more context to the statement."]}
-`,
+{"plan": ["Save 'blue' as the user's favorite color in personal data", "Acknowledge the user's preference will be remembered and ask if there is more context to the statement."]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
     options: { temperature: 0.6 },
   },
@@ -293,10 +292,7 @@ export class Magi2 implements MagiCompatible {
         this.shortTermMemory.remember('user', userMessage);
         this.shortTermMemory.remember(this.name, response);
 
-        // Prep for TTS
-        const finalResponse = await this.makeTTSReady(response);
-        logger.debug(`\n🤖🔊\n${finalResponse}`);
-        return finalResponse;
+        return response;
       });
     } catch (error) {
       logger.error(`ERROR: ${error}`);
@@ -384,7 +380,7 @@ export class Magi2 implements MagiCompatible {
     loopState.warnings.push(`You have used the '${toolName}' tool three times in a row. You MUST use a different tool or provide a final answer now. Use any tool that is not '${toolName}'.`);
   }
   
-  private async makeTTSReady(text: string): Promise<string> {
+  async makeTTSReady(text: string): Promise<string> {
     const systemPrompt = `ROLE & GOAL
 You are a direct transcription and vocalization engine. Your sole function is to take a TEXT PASSAGE and convert it verbatim into a SPOKEN SCRIPT for a Text-to-Speech (TTS) engine. Your output must preserve the original text's structure and intent, simply making it readable for a voice synthesizer.
 `;

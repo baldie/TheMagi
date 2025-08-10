@@ -168,7 +168,6 @@ export async function routeMessage(userMessage?: string): Promise<string> {
     logger.debug(`Directly routing User's Message to ${magi.name}`);
     const response = await magi.contactAsAgent(userMessage);
     logger.debug(`Received response from ${magi.name}:\n${response}`);
-    await speakWithMagiVoice(response, magi.name);
     return response;
   }
 

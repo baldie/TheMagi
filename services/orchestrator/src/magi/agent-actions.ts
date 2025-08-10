@@ -28,12 +28,15 @@ export const gatherContext = fromPromise(async ({ input }: {
   const systemPrompt = `You are a data extraction robot. Your only function is to identify and list key factual data points from a given text. You do not analyze, interpret, or suggest actions.`;
   
   const userPrompt = `User's Message:\n"${userMessage}"\n
-${workingMemory}\n
-Current Strategic Goal:\n${strategicGoal}\n
+
+Given Text:
+${workingMemory ? workingMemory : 'None'}\n
+Current Strategic Goal (not for you):\n${strategicGoal}\n
 Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
 INSTRUCTIONS:
-Examine the 'Current Strategic Goal' and the available data from previous steps.
+First, verify if 'Given Text' has been provided. If it has not, your only action is to report that 'no relevant context available'.
+Otherwise, examine the 'Current Strategic Goal' and the available data from previous steps.
 Your task is to determine the single, most logical **next action** required to achieve the goal.
 Provide ONLY the direct information needed to perform that next action.
 
@@ -225,6 +228,16 @@ export const processOutput = fromPromise(async ({ input }: {
   
   // Process output based on tool type
   switch (tool.name) {
+    case 'ask-user': {
+      // For user-directed questions, use the tool output verbatim
+      processedOutput = toolOutput;
+      break;
+    }
+    case 'answer-user': {
+      // For user-directed answers, use the tool output verbatim
+      processedOutput = toolOutput;
+      break;
+    }
     case 'read-page': {
         logger.debug(`Proccessing read page results with page length: ${toolOutput.length}`);
         // Web pages can have a lot of noise that throw off the magi, so lets clean it

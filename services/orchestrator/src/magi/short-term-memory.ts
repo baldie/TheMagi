@@ -85,7 +85,7 @@ What is the primary subject of the user's last message? Be specific and complete
     }
   }
 
-  public async summarize(forTopic: string | null): Promise<string> {
+  public async summarize(_forTopic: string | null): Promise<string> {
     const memories = this.memories;
     
     if (memories.length === 0) {
@@ -104,9 +104,8 @@ What is the primary subject of the user's last message? Be specific and complete
 ${memoryText}
     
 INSTRUCTIONS:
-From ${this.magi.name}'s perspective (using "I"), create a concise extractive summary of the exchange. Include the specific, key information details and any actions taken.
-Be sure to include an extractive summary of the CONTEXT entries${forTopic ? ' only if they are related to "' + forTopic + '"': ''}.
-Keep the summary concise but detailed and comprehensive:`;
+First, create a concise extractive summary of the conversation so far.
+Then, from ${this.magi.name}'s perspective (using "I"), briefly describe what the user said and what you did and said in reply.`;
 
     try {
       const summary = await this.magi.contactSimple(summarizationPrompt, systemPrompt);

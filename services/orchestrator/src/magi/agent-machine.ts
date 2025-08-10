@@ -17,6 +17,8 @@ import {
   evaluateGoalCompletion
 } from './agent-actions';
 import { isContextValid, canRetry, isToolValid } from './agent-guards';
+import { speakWithMagiVoice } from '../tts';
+import { allMagi } from './magi2';
 
 // ============================================================================
 // AGENT MACHINE
@@ -281,9 +283,20 @@ export const agentMachine = createMachine({
         }),
         onDone: {
           target: 'evaluatingSubGoal',
-          actions: assign({
-            processedOutput: ({ event }) => event.output,
-          }),
+          actions: [
+            assign({
+              processedOutput: ({ event }) => event.output,
+            }),
+            async ({ context }) => {
+              const toolName = context.selectedTool?.name;
+              if (toolName === 'ask-user' || toolName === 'answer-user') {
+                const magi = allMagi[context.magiName];
+                const ttsReady = await magi.makeTTSReady(context.processedOutput);
+                logger.debug(`\n🤖🔊\n${ttsReady}`);
+                void speakWithMagiVoice(ttsReady, context.magiName);
+              }
+            }
+          ],
         },
         onError: {
           target: 'evaluatingSubGoal',
