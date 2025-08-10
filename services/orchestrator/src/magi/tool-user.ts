@@ -1,9 +1,18 @@
 import { logger } from '../logger';
 import type { MagiTool } from '../mcp';
 import { mcpClientManager } from '../mcp';
-import type { Magi2, AgenticTool } from './magi2';
+import type { MagiName } from '../types/magi-types';
 import type { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
 import { MagiErrorHandler } from './error-handler';
+
+// Minimal contract needed by ToolUser (implemented by both Magi and Magi2)
+interface ToolUserMagiLike {
+  name: MagiName;
+  contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
+}
+
+// Local type to avoid importing from magi2 and creating tight coupling
+export type AgenticTool = { name: string; parameters: Record<string, unknown> };
 
 /**
  * JSON Schema type definitions
@@ -59,7 +68,7 @@ export function getRelevantContentFromRawText(userMessage: string, rawToolRespon
  * ToolUser handles tool identification and execution for the Magi system.
  */
 export class ToolUser {
-  constructor(private readonly magi: Magi2) {}
+  constructor(private readonly magi: ToolUserMagiLike) {}
 
   /**
    * Map friendly tool names to actual MCP tool names

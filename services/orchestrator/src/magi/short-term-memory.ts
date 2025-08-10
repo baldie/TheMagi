@@ -1,5 +1,10 @@
-import type { Magi2 } from './magi2';
 import type { MagiName } from '../types/magi-types';
+
+// Minimal interface to avoid tight coupling
+interface MemoryMagiLike {
+  name: MagiName;
+  contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
+}
 
 export interface Memory {
   speaker: MagiName | 'user';
@@ -9,11 +14,11 @@ export interface Memory {
 export class ShortTermMemory {
   private static readonly MAX_MEMORIES = 15;
   private memories: Memory[] = [];
-  private readonly magi: Magi2;
+  private readonly magi: MemoryMagiLike;
   private lastSummary: string = '';
   private lastSummaryHash: string = '';
 
-  constructor(magi: Magi2) {
+  constructor(magi: MemoryMagiLike) {
     this.magi = magi;
   }
 

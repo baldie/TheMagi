@@ -6,7 +6,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${YELLOW}🧪 Running all tests for TheMagi project...${NC}\n"
+echo -e "${YELLOW}🧪 Running all tests for TheMagi project (mirroring GitHub Actions)...${NC}\n"
 
 # Track overall success
 OVERALL_SUCCESS=true
@@ -41,43 +41,48 @@ run_test() {
     echo
 }
 
-# Get the project root directory
-PROJECT_ROOT="/home/baldie/David/Project/TheMagi"
+# Get the project root directory dynamically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 
-# Test each service
-run_test "Orchestrator" "cd $PROJECT_ROOT && npx eslint services/orchestrator/src/**/*.ts --quiet && cd services/orchestrator && npm test" "$PROJECT_ROOT/services/orchestrator"
-run_test "Conduit" "cd $PROJECT_ROOT && npx eslint services/conduit/src/**/*.ts --quiet && cd services/conduit && npm test" "$PROJECT_ROOT/services/conduit"
+# Root install (matches CI root npm ci for ESLint config)
+run_test "Root npm install" "npm ci" "$PROJECT_ROOT"
 
-# Test UI with Chrome headless
-if command -v google-chrome &> /dev/null || command -v chromium-browser &> /dev/null || command -v chromium &> /dev/null; then
-    run_test "UI" "npm run lint && npm test -- --watch=false --browsers=ChromeHeadless" "$PROJECT_ROOT/ui"
+# Orchestrator: install, build, lint, test
+run_test "Orchestrator" "npm ci && npm run build && npm run lint && npm test" "$PROJECT_ROOT/services/orchestrator"
+
+# Conduit: install, build, lint, test
+run_test "Conduit" "npm ci && npm run build && npm run lint && npm test" "$PROJECT_ROOT/services/conduit"
+
+# UI: install, build, lint, test with ChromeHeadless (as in CI)
+run_test "UI" "npm ci && npm run build && npm run lint && npm test -- --watch=false --browsers=ChromeHeadless" "$PROJECT_ROOT/ui"
+
+# Python TTS tests (always prepare venv and run CI-equivalent checks)
+TTS_DIR="$PROJECT_ROOT/services/tts"
+PY_BIN="python3"
+if ! command -v python3 >/dev/null 2>&1; then PY_BIN="python"; fi
+
+echo -e "${YELLOW}Setting up Python environment for TTS...${NC}"
+# Quiet setup: suppress pip output; on failure, re-run verbosely to show errors
+if (cd "$TTS_DIR" && bash -lc "$PY_BIN -m venv venv && source venv/bin/activate && pip install -q --upgrade pip && pip install -q -r requirements.txt" > /dev/null 2>&1); then
+    :
 else
-    echo -e "${YELLOW}⚠️  UI tests skipped (Chrome not available)${NC}"
-    echo -e "${YELLOW}   Run 'install-magi.sh' to install Chrome and enable UI testing${NC}"
-    echo
+    echo -e "${RED}Failed to set up Python environment for TTS${NC}"
+    echo -e "${YELLOW}Re-running setup with output to show error:${NC}"
+    (cd "$TTS_DIR" && bash -lc "$PY_BIN -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt")
+    OVERALL_SUCCESS=false
 fi
 
-# Python TTS tests (check for virtual environment and pytest)
-cd "$PROJECT_ROOT/services/tts"
-if [ -f "venv/bin/activate" ]; then
-    echo -e "${YELLOW}Testing TTS (using virtual environment)...${NC}"
-    # Test using the virtual environment
-    if bash -c "source venv/bin/activate && command -v pytest &> /dev/null && flake8 *.py && black --check *.py && pytest test_tts_service.py" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ TTS tests passed${NC}"
-    else
-        echo -e "${RED}❌ TTS tests failed${NC}"
-        echo -e "${YELLOW}Re-running with output to show error:${NC}"
-        bash -c "source venv/bin/activate && flake8 *.py && black --check *.py && pytest test_tts_service.py"
-        OVERALL_SUCCESS=false
-    fi
-    echo
-elif command -v pytest &> /dev/null; then
-    run_test "TTS" "pytest test_tts_service.py" "$PROJECT_ROOT/services/tts"
+echo -e "${YELLOW}Testing TTS...${NC}"
+if bash -lc "cd '$TTS_DIR' && source venv/bin/activate && python -m py_compile *.py && flake8 *.py && black --check *.py && pytest test_tts_service.py -v" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ TTS tests passed${NC}"
 else
-    echo -e "${YELLOW}⚠️  TTS tests skipped (pytest not available and no virtual environment)${NC}"
-    echo -e "${YELLOW}   Run 'install-magi.sh' to set up the Python environment${NC}"
-    echo
+    echo -e "${RED}❌ TTS tests failed${NC}"
+    echo -e "${YELLOW}Re-running with output to show error:${NC}"
+    bash -lc "cd '$TTS_DIR' && source venv/bin/activate && python -m py_compile *.py && flake8 *.py && black --check *.py && pytest test_tts_service.py -v"
+    OVERALL_SUCCESS=false
 fi
+echo
 
 # Final result
 if [ "$OVERALL_SUCCESS" = true ]; then

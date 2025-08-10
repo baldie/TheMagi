@@ -32,9 +32,12 @@ export default tseslint.config(
       sourceType: 'module',
       parser: tseslint.parser,
       parserOptions: {
+        // Use absolute paths to tsconfig files to avoid CWD resolution issues
         project: [
-          './services/orchestrator/tsconfig.json',
-          './services/conduit/tsconfig.json'
+          new URL('./services/orchestrator/tsconfig.json', import.meta.url)
+            .pathname,
+          new URL('./services/conduit/tsconfig.json', import.meta.url)
+            .pathname
         ]
       }
     },
