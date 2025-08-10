@@ -13,7 +13,6 @@ import {
   selectTool,
   evaluateSubGoalCompletion,
   gatherContext,
-  synthesizeContext,
   processOutput,
   evaluateGoalCompletion
 } from './agent-actions';
@@ -101,13 +100,15 @@ export const agentMachine = createMachine({
           magiName: context.magiName,
         }),
         onDone: {
-          target: 'synthesizing',
+          target: 'determiningSubGoal',
           actions: assign({
             fullContext: ({ event }) => event.output,
+            // Use gathered context directly for planning
+            promptContext: ({ event }) => event.output,
           }),
         },
         onError: {
-          target: 'synthesizing',
+          target: 'determiningSubGoal',
           actions: assign({
             fullContext: ({ context }) => {
               const parts = [
@@ -117,31 +118,13 @@ export const agentMachine = createMachine({
               ];
               return parts.join('\n');
             },
-          }),
-        },
-      },
-    },
-    
-    synthesizing: {
-      invoke: {
-        src: synthesizeContext,
-        input: ({ context }) => ({
-          strategicGoal: context.strategicGoal,
-          fullContext: context.fullContext,
-          conduitClient: context.conduitClient,
-          magiName: context.magiName,
-        }),
-        onDone: {
-          target: 'determiningSubGoal',
-          actions: assign({
-            promptContext: ({ event }) => event.output,
-          }),
-        },
-        onError: {
-          target: 'determiningSubGoal',
-          actions: assign({
             promptContext: ({ context }) => {
-              return `Goal: ${context.strategicGoal}\nRelevant Context: ${context.fullContext}`;
+              const parts = [
+                `Strategic Goal: ${context.strategicGoal}`,
+                `Working Memory: ${context.workingMemory}`,
+                `Completed Sub-goals: ${context.completedSubGoals.join(', ') || 'None'}`,
+              ];
+              return parts.join('\n');
             },
           }),
         },

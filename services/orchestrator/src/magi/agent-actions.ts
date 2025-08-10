@@ -33,11 +33,14 @@ Current Strategic Goal:\n${strategicGoal}\n
 Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
 INSTRUCTIONS:
-Examine the previous strategic goals and results.
-Gather only the most relevant information that will help in planning the next immediate step towards achieving the strategic goal.
+Examine the 'Current Strategic Goal' and the available data from previous steps.
+Your task is to determine the single, most logical **next action** required to achieve the goal.
+Provide ONLY the direct information needed to perform that next action.
 
 OUTPUT:
-Your response is a simple, bulleted list of the key facts and figures. Each point is a direct statement of a relevant piece of data found in the results.`;
+Based on your instructions, provide the single piece of information needed for the next step.
+- If the next step is to process an item from a list, your response should be to first select the right item from the list.
+- Do not extract facts or summarize content unless the source has already been chosen.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -48,34 +51,6 @@ Your response is a simple, bulleted list of the key facts and figures. Each poin
   }
 });
 
-/**
- * Synthesizes gathered context into a focused prompt context
- */
-export const synthesizeContext = fromPromise(async ({ input }: {
-  input: {
-    strategicGoal: string;
-    fullContext: string;
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}) => {
-  const { strategicGoal, fullContext, conduitClient, magiName } = input;
-  
-  const systemPrompt = `You are a context synthesizer. Create a focused, actionable context summary for tactical planning.`;
-  
-  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
-Full Context:\n${fullContext}
-
-Synthesize this into a clear, focused context that emphasizes the most relevant information for achieving the strategic goal. Keep it concise but comprehensive.`;
-
-  try {
-    const { model } = PERSONAS_CONFIG[magiName];
-    return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.2 });
-  } catch (error) {
-    logger.error(`${magiName} failed to synthesize context:`, error);
-    return `Goal: ${strategicGoal}\nRelevant Context: ${fullContext}`;
-  }
-});
 
 /**
  * Determines the next tactical sub-goal based on current context
@@ -98,6 +73,8 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   const userPrompt = `Strategic Goal:\n${strategicGoal}\n
 Context:\n${context}\n
 Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
+
+Crucial Instruction: The Context confirms that all necessary data has been gathered. Your task is to define the single next step to bring that data to the user. Do not re-gather any data mentioned in the context.
 
 What is the immediate actionable sub-goal that moves you 1 step towards the strategic goal?
 Respond with just the single sub-goal text.`;
@@ -131,16 +108,21 @@ export const selectTool = fromPromise(async ({ input }: {
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
-  const userPrompt = `Job:\n${subGoal}\n
+  const userPrompt = `The Job:\n${subGoal}\n
 Context:\n${context}\n
-Available tools:
-${toolList}
+Available tools:\n${toolList}\n
+Instructions:
+Select the tool that directly performs the action described in the Job.
+Use any information from the Context as parameters for the selected tool.
+Respond only with the complete JSON for your choice.
 
-Select the most appropriate tool and respond only with JSON:
+Format:
 {
   "tool": {
     "name": "tool_name",
-    "parameters": {}
+    "parameters": {
+      // tool-specific parameters here
+    }
   }
 }`;
 
@@ -198,27 +180,25 @@ Has the sub-goal been completed? Respond only with JSON:
  * Helper function to generate prompt for cleaning web page content
  */
 function getRelevantContentFromRawText(userMessage: string, rawToolResponse: string): string {
-  return `
-  INSTRUCTIONS
-  - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
-  - Extract Verbatim: Pull out the main content's text exactly as it is, preserving all original sentences, paragraphs, and their order. Do not summarize or add any text.
+  return `USER'S MESSAGE:
+  "${userMessage}"
 
-  EXCLUSION CRITERIA
+  INSTRUCTIONS:
+  - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
+  - Extract Verbatim: Pull out the main content's text exactly as it is, preserving all original sentences, paragraphs, and their order.Avoid summarizing, synthesizing, or interpreting any text
+  - Revelevant - Pay special attention to the user's message and the raw text to ensure that the output is relevant.
+
+  EXCLUSION CRITERIA:
   You MUST remove all of the following non-essential elements:
   - Promotional Content: Advertisements, sponsored links, affiliate marketing, and calls-to-action (e.g., "Sign up," "Download our guide").
-  - Website Navigation: Headers, footers, sidebars, menus, and breadcrumbs.
+  - Website Navigation: Headers, footers, sidebars, menus, licences, and breadcrumbs.
   - Related Links: Lists or grids of "Related Articles," "Recent Posts," "Popular Stories," or "You might also like."
   - Metadata and Threading: Author bios, user signatures, post dates, comment sections, and any replies or comments that follow the main post.
   - Off-topic Text: Any content that is not directly part of the main content's central topic.
   - Images in base64 encoded strings and markdown tokens
 
-  OUTPUT
+  OUTPUT:
   Respond ONLY with the cleaned text
-
-  USER'S TOPIC/QUESTION:
-  "${userMessage}"
-
-  Now, perform this task on the following raw text.
 
   RAW TEXT:
   ${rawToolResponse}

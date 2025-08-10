@@ -207,7 +207,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   // Default agentic tools
   'ask-user': {
     name: 'ask-user',
-    description: 'Use your ask-user tool to request information from the user',
+    description: 'This tool allows you to request information from the user',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
     responseType: 'TextResponse',
@@ -221,14 +221,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   },
   'answer-user': {
     name: 'answer-user',
-    description: 'Use your answer-user tool to respond to the user',
+    description: 'This tool allows you to respond to the user',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
     responseType: 'TextResponse',
     parameters: {
       answer: {
         type: 'string',
-        description: 'The final answer to provide to the user. This should be in conversational tone',
+        description: 'The response to provide to the user. This should be in conversational tone',
         required: true
       }
     },
