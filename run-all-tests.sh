@@ -48,8 +48,8 @@ PROJECT_ROOT="$SCRIPT_DIR"
 # Root install (matches CI root npm ci for ESLint config)
 run_test "Root npm install" "npm ci" "$PROJECT_ROOT"
 
-# Orchestrator: install, build, lint, test
-run_test "Orchestrator" "npm ci && npm run build && npm run lint && npm test" "$PROJECT_ROOT/services/orchestrator"
+# Orchestrator: install, build, lint, test (unit + integration always on)
+run_test "Orchestrator" "npm ci && npm run build && npm run lint && npm test && npm run test:integration" "$PROJECT_ROOT/services/orchestrator"
 
 # Conduit: install, build, lint, test
 run_test "Conduit" "npm ci && npm run build && npm run lint && npm test" "$PROJECT_ROOT/services/conduit"

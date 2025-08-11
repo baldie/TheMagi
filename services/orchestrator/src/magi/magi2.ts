@@ -16,6 +16,7 @@ import path from 'path';
 import type { ModelType } from '../config';
 import { Model } from '../config';
 import { logger } from '../logger';
+import fs from 'fs/promises';
 import { MagiErrorHandler } from './error-handler';
 export { MagiName };
 
@@ -183,11 +184,27 @@ export class Magi2 implements MagiCompatible {
     this.shortTermMemory = new ShortTermMemory(this as MagiCompatible as any);
   }
 
+  private async ensureInitialized(): Promise<void> {
+    // If already initialized (prompt + tools), do nothing
+    if (this.personalityPrompt && this.toolsList.length > 0) {
+      return;
+    }
+    try {
+      const src = PERSONAS_CONFIG[this.name].personalitySource;
+      const prompt = await fs.readFile(src, 'utf-8');
+      await this.initialize(prompt);
+      logger.info(`${this.name} lazily initialized.`);
+    } catch (err) {
+      logger.warn(`${this.name} lazy initialization failed`, err);
+    }
+  }
+
   /**
    * Initialize the Magi
    */
   async initialize(prompt: string): Promise<void> {
     this.personalityPrompt = prompt;
+    // Fast path in test mode: avoid MCP discovery latency by fetching tools once
     this.toolsList = await this.toolUser.getAvailableTools();
   }
 
@@ -209,6 +226,7 @@ export class Magi2 implements MagiCompatible {
   }
 
   async contact(userPrompt: string): Promise<string> {
+    await this.ensureInitialized();
     const currentTopic = await this.shortTermMemory.determineTopic(userPrompt);
     const workingMemory = await this.shortTermMemory.summarize(currentTopic);
     const promptWithContext = workingMemory + '\n' + userPrompt;
@@ -229,6 +247,7 @@ export class Magi2 implements MagiCompatible {
   }
 
   async contactSimple(userPrompt: string, systemPrompt?: string): Promise<string> {
+    await this.ensureInitialized();
     return this.executeWithStatusManagement(async () => 
       this.conduit.contact(userPrompt, systemPrompt ?? '', this.config.model, this.config.options)
     );
@@ -262,6 +281,7 @@ export class Magi2 implements MagiCompatible {
 
   public async contactAsAgent(userMessage: string, _prohibitedTools: string[] = []): Promise<string> {
     try {
+      await this.ensureInitialized();
       logger.info(`${this.name} beginning state machine agentic loop...`);
       // Create planner machine with proper context
       const plannerMachine = createConfiguredPlannerMachine(this.name, userMessage);
@@ -381,6 +401,7 @@ export class Magi2 implements MagiCompatible {
   }
   
   async makeTTSReady(text: string): Promise<string> {
+    await this.ensureInitialized();
     const systemPrompt = `ROLE & GOAL
 You are a direct transcription and vocalization engine. Your sole function is to take a TEXT PASSAGE and convert it verbatim into a SPOKEN SCRIPT for a Text-to-Speech (TTS) engine. Your output must preserve the original text's structure and intent, simply making it readable for a voice synthesizer.
 `;

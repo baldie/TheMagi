@@ -18,7 +18,12 @@ const getLogFileName = () => {
     return `${year}-${month}-${day}.log`;
 };
 
-const logFilePath = path.join(logDirectory, getLogFileName());
+// In integration tests, write to a unique per-run file and do not emit to the log stream
+const IS_TEST_MODE = process.env.MAGI_TEST_MODE === 'true';
+const logFilePath = path.join(
+  logDirectory,
+  IS_TEST_MODE ? `integration-${Date.now()}.log` : getLogFileName()
+);
 const fileStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
 /**
@@ -43,8 +48,10 @@ class Logger {
         fileStream.write(JSON.stringify(data, null, 2) + '\n');
     }
 
-    // Emit to the stream for websockets (without color)
-    logStream.emit(plainMessage);
+    // Emit to the stream for websockets (without color) unless running tests
+    if (!IS_TEST_MODE) {
+      logStream.emit(plainMessage);
+    }
 
     // Apply colors for console output
     let logMessage = '';
@@ -110,8 +117,10 @@ class Logger {
     // Write to file stream (un-colored)
     fileStream.write(plainMessage + '\n');
 
-    // Emit to the stream for websockets (without color)
-    logStream.emit(plainMessage);
+    // Emit to the stream for websockets (without color) unless running tests
+    if (!IS_TEST_MODE) {
+      logStream.emit(plainMessage);
+    }
 
     // Console output with color
     console.log(chalk.red(plainMessage));

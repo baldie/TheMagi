@@ -2,6 +2,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { logger } from './logger';
 import { logStream } from './log-stream';
+import { testHooks } from './testing/test-hooks';
+import fs from 'fs/promises';
+import { balthazar, caspar, melchior, PERSONAS_CONFIG, MagiName } from './magi/magi2';
 
 // Store connected clients for audio streaming
 const connectedClients = new Set<WebSocket>();
@@ -29,20 +32,65 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
 
     ws.on('message', async (rawMessage: Buffer) => {
       try {
+        logger.info(`[WebSocket] Raw message received (${rawMessage?.length ?? 0} bytes)`);
+      } catch {}
+      try {
         const message = rawMessage.toString();
         const parsedMessage = JSON.parse(message);
         if (parsedMessage.type === 'start-magi') {
+          try {
+            if (testHooks.isEnabled() && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ack', data: 'start-magi' }));
+              logger.info('[WebSocket] Sent ack for start-magi');
+            }
+          } catch {}
           logger.info(`[WebSocket] Received start-magi signal from client. ${message}`);
           try {
-            const response = await startCallback(parsedMessage.data?.userMessage);
+            // Test integration support: set active spec and route to a specific Magi if provided
+            const testName: string | undefined = parsedMessage.data?.testName;
+            const magi: string | undefined = parsedMessage.data?.magi; // e.g., "Balthazar"
+            const userMessage: string | undefined = parsedMessage.data?.userMessage;
+
+            // Initialize a new test run via test hooks
+            testHooks.beginRun({ testName, magi });
+
+            // If a magi is specified, prefix the message to force single-magi routing
+            const routedMessage = magi && userMessage
+              ? `${magi}: ${userMessage}`
+              : userMessage;
+
+            // In integration tests, ensure the targeted Magi is initialized like loadMagi does
+            try {
+              if (magi) {
+                const targetName = magi as MagiName;
+                const target = targetName === MagiName.Balthazar ? balthazar
+                  : targetName === MagiName.Melchior ? melchior
+                  : targetName === MagiName.Caspar ? caspar
+                  : null;
+                if (target) {
+                  const src = PERSONAS_CONFIG[target.name].personalitySource;
+                  const prompt = await fs.readFile(src, 'utf-8');
+                  await target.initialize(prompt);
+                  logger.info(`[WebSocket] ${target.name} personality initialized for test run.`);
+                }
+              }
+            } catch (initError) {
+              logger.warn('[WebSocket] Failed to pre-initialize Magi for test run', initError);
+            }
+
+            const response = await startCallback(routedMessage);
+            // Record final delivery as an implicit answer-user for testing observability
+            try { testHooks.recordToolCall('answer-user', { answer: response }); } catch (e) { logger.debug(`[WebSocket] Failed to record final answer-user: ${e instanceof Error ? e.message : String(e)}`); }
+            const meta = testHooks.endRunAndSummarize(response);
             logger.info('[WebSocket] Magi contact completed successfully');
             
             // Send the final response back to the client
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ 
-                type: 'deliberation-complete', 
-                data: { response } 
-              }));
+              const payload: any = { type: 'deliberation-complete', data: { response } };
+              if (meta) {
+                payload.data.testMeta = meta;
+              }
+              ws.send(JSON.stringify(payload));
             }
           } catch (error) {
             logger.error(`[WebSocket] Magi contact failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

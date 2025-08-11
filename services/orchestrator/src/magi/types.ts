@@ -78,6 +78,7 @@ export interface AgentContext {
   toolUser: ToolUser;
   shortTermMemory: ShortTermMemory;
   availableTools: MagiTool[];
+  hasDeliveredAnswer?: boolean;
 }
 
 /**

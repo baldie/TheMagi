@@ -24,7 +24,7 @@ describe('Conduit Service', () => {
     
     await ensureMagiConduitIsRunning();
     
-    expect(mockedAxios.get).toHaveBeenCalledWith('http://127.0.0.1:11434');
+    expect(mockedAxios.get).toHaveBeenCalledWith('http://127.0.0.1:11434/api/version');
     expect(consoleSpy).toHaveBeenCalledWith('Magi Conduit service is already running.');
     
     consoleSpy.mockRestore();

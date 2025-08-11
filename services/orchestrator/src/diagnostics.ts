@@ -148,10 +148,11 @@ async function pullModel(modelName: string): Promise<void> {
  * If a model is not available, it will be pulled from the registry.
  */
 async function ensureMagiConduitReady(): Promise<void> {
+  logger.info('Verifying conduit service is running...');
   const scriptPath = path.resolve(__dirname, '../../../scripts/start_magi_conduit.sh');
   await ensureServiceReady(
     'Magi Conduit',
-    MAGI_CONDUIT_API_BASE_URL,
+    `${MAGI_CONDUIT_API_BASE_URL}/api/version`,
     {
       cmd: 'bash',
       args: [scriptPath],
@@ -163,7 +164,7 @@ async function ensureMagiConduitReady(): Promise<void> {
     5000  // Increase initial delay to 5 seconds
   );
 
-// After service is confirmed running, verify models
+  // After service is confirmed running, verify models
   logger.info('Verifying access to LLM models via Magi Conduit...');
   try {
     const response = await axios.get(`${MAGI_CONDUIT_API_BASE_URL}/api/tags`);

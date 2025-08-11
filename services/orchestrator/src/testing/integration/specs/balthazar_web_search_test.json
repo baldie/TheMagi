@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "enabled": true
+  },
+  "test": {
+    "name": "michael_jordan_height_basic",
+    "description": "User asks for Michael Jordan's height - should search web and provide accurate answer",
+    "magi": "Balthazar",
+    "baselineDate": "2025-08-10",
+    "timeout": 30000
+  },
+  "input": {
+    "userMessage": "How tall is Michael Jordan?"
+  },
+  "toolStubs": {
+    "search-web": {
+      "response": "Search Results:\n1. Wikipedia - Michael Jordan - 6'6\" (1.98m)\nhttps://en.wikipedia.org/wiki/Michael_Jordan\n2. NBA.com - Michael Jordan Profile - 6 feet 6 inches tall\n3. Basketball Reference - Jordan, Michael - Height: 6-6\n4. ESPN - Michael Jordan Stats - 6'6\"\n5. Sports Illustrated - MJ Biography - 6 feet 6 inches",
+      "ignoreParameters": true
+    },
+    "read-page": {
+      "responses": [
+        {
+          "when": {
+            "urls": [
+              "https://en.wikipedia.org/wiki/Michael_Jordan"
+            ]
+          },
+          "response": "Michael Jeffrey Jordan (born February 17, 1963) is an American former professional basketball player and businessman. At 6 feet 6 inches (1.98 m) tall and weighing 218 pounds (99 kg), he played shooting guard and small forward. Jordan is widely considered to be the greatest basketball player of all time. He played 15 seasons in the NBA, winning six championships with the Chicago Bulls."
+        }
+      ]
+    },
+    "answer-user": {
+      "response": "Michael Jordan is 6 feet 6 inches (1.98 meters) tall.",
+      "ignoreParameters": true
+    }
+  },
+  "expectations": {
+    "finalResponse": {
+      "mustContain": [
+        "6 feet 6 inches",
+        "Michael Jordan"
+      ],
+      "mustNotContain": [
+        "I don't know",
+        "error",
+        "failed",
+        "cannot"
+      ],
+      "minLength": 20,
+      "maxLength": 500
+    },
+    "toolUsage": {
+      "mustCall": [
+        "search-web",
+        "answer-user"
+      ],
+      "mustNotCall": [
+        "ask-user"
+      ],
+      "expectedOrder": [
+        {
+          "tool": "search-web",
+          "before": "answer-user"
+        }
+      ],
+      "maxToolCalls": 10
+    },
+    "behavior": {
+      "shouldComplete": true,
+      "maxDuration": 25000,
+      "shouldSpeak": true
+    },
+    "planning": {
+      "goalCount": {
+        "min": 1,
+        "max": 5
+      },
+      "shouldPlanFor": [
+        "search",
+        "respond"
+      ]
+    }
+  }
+}

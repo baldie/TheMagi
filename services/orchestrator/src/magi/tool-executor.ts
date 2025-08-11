@@ -3,6 +3,7 @@ import type { ToolUser } from './tool-user';
 import type { MagiName } from '../types/magi-types';
 import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
+import { testHooks } from '../testing/test-hooks';
 
 /**
  * Service class for tool execution with timeout and error handling
@@ -60,11 +61,15 @@ export class ToolExecutor {
   private async executeToolInternal(tool: AgenticTool): Promise<string> {
     // Handle special tool cases
     if (tool.name === 'answer-user') {
-      return (tool.parameters.answer as string) || 'No answer provided';
+      const answerText = (tool.parameters.answer as string) || 'No answer provided';
+      try { testHooks.recordToolCall('answer-user', { answer: answerText }); } catch { /* no-op in non-test mode */ }
+      return answerText;
     }
     
     if (tool.name === 'ask-user') {
-      return (tool.parameters.question as string) || 'No question provided';
+      const questionText = (tool.parameters.question as string) || 'No question provided';
+      try { testHooks.recordToolCall('ask-user', { question: questionText }); } catch { /* no-op in non-test mode */ }
+      return questionText;
     }
     
     // Execute regular tools through ToolUser

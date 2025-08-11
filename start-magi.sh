@@ -2,6 +2,22 @@
 
 echo "[Magi System] Starting The Magi Environment..."
 
+# Argument parsing
+USE_NODEMON=true
+for arg in "$@"; do
+  case "$arg" in
+    --no-nodemon)
+      USE_NODEMON=false
+      shift
+      ;;
+  esac
+done
+
+# Environment override (optional)
+if [ "${MAGI_NO_NODEMON}" = "true" ]; then
+  USE_NODEMON=false
+fi
+
 # Check for Node.js and npm first
 if ! command -v node &> /dev/null; then
     echo "ERROR: Node.js not found in PATH"
@@ -183,11 +199,19 @@ if [ ! -d "services/conduit/dist" ]; then
 fi
 
 echo
-echo "[Magi System] Starting Orchestrator, press CTRL+C in this window to shut down the Magi."
+if [ "$USE_NODEMON" = true ]; then
+  echo "[Magi System] Starting Orchestrator with nodemon (development mode). Press CTRL+C to shut down."
+else
+  echo "[Magi System] Starting Orchestrator without nodemon (single-run mode). Press CTRL+C to shut down."
+fi
 echo
 
 # Start the orchestrator in the current window. This will block the script.
 cd services/orchestrator
-npm run dev
+if [ "$USE_NODEMON" = true ]; then
+  npm run dev
+else
+  npm start
+fi
 
 echo "[Magi System] Orchestrator has shut down."

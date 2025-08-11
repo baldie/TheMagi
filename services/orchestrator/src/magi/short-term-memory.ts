@@ -53,6 +53,9 @@ export class ShortTermMemory {
   }
 
   public async determineTopic(userMessage: string): Promise<string | null> {
+    if (process.env.MAGI_TEST_MODE === 'true') {
+      return 'Test Topic';
+    }
     if (this.memories.length === 0) {
       return null;
     }
@@ -91,6 +94,9 @@ What is the primary subject of the user's last message? Be specific and complete
   }
 
   public async summarize(_forTopic: string | null): Promise<string> {
+    if (process.env.MAGI_TEST_MODE === 'true') {
+      return '';
+    }
     const memories = this.memories;
     
     if (memories.length === 0) {

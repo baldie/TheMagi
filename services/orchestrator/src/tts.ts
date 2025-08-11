@@ -4,6 +4,7 @@ import { MagiName } from './magi/magi2';
 import { logger } from './logger';
 import { serviceManager } from './service_manager';
 import { broadcastAudioToClients } from './websocket';
+import { testHooks } from './testing/test-hooks';
 
 // Constants for TTS service
 const MAX_TEXT_LENGTH = 10000; // Maximum text length as defined in TTS service
@@ -182,6 +183,12 @@ function splitIntoSentences(text: string): string[] {
  */
 export async function speakWithMagiVoice(text: string, persona: MagiName): Promise<void> {
   try {
+    // In test mode, record and no-op
+    const isTest = typeof process !== 'undefined' && process.env && process.env.MAGI_TEST_MODE === 'true';
+    if (isTest) {
+      testHooks.recordTtsInvocation(text, persona);
+      return;
+    }
     validateInput(text);
     
     await serviceManager.startTTSService();

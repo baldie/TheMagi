@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 
 const MAGI_CONDUIT_URL = 'http://127.0.0.1:11434';
+const MAGI_CONDUIT_HEALTH_URL = `${MAGI_CONDUIT_URL}/api/version`;
 
 async function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -16,7 +17,7 @@ async function sleep(ms: number) {
 export async function ensureMagiConduitIsRunning() {
   let serviceIsRunning = false;
   try {
-    await axios.get(MAGI_CONDUIT_URL);
+    await axios.get(MAGI_CONDUIT_HEALTH_URL);
     console.info('Magi Conduit service is already running.');
     serviceIsRunning = true;
   } catch {
@@ -57,7 +58,7 @@ export async function ensureMagiConduitIsRunning() {
       while (retries > 0) {
         await sleep(2000);
         try {
-          await axios.get(MAGI_CONDUIT_URL);
+          await axios.get(MAGI_CONDUIT_HEALTH_URL);
           console.info('Magi Conduit service started successfully.');
           return;
         } catch (e) {

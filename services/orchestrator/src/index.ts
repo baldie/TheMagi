@@ -11,6 +11,7 @@ import http from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { testHooks } from './testing/test-hooks';
 
 // Track initialization state
 let isInitialized = false;
@@ -46,13 +47,29 @@ async function main() {
   loadEnvironmentVariables();
   logger.info('Magi Orchestrator is starting up...');
 
+  // Initialize test recorder if running in test mode
+  try {
+    await testHooks.initialize();
+    if (process.env.MAGI_TEST_MODE === 'true') {
+      logger.info('Test mode enabled. Test hooks initialized.');
+    }
+  } catch (e) {
+    logger.error('Failed to initialize test hooks', e);
+  }
+
   // Start the services in parallel
   try {
-    await Promise.all([
-      serviceManager.startTTSService(),
-      serviceManager.startConduitService(),
-      serviceManager.startUIService()
-    ]);
+    const startPromises: Array<Promise<void>> = [];
+    // Always ensure conduit is running
+    startPromises.push(serviceManager.startConduitService());
+    // In normal mode, start TTS and UI; in test mode, skip both
+    if (process.env.MAGI_TEST_MODE !== 'true') {
+      startPromises.push(serviceManager.startTTSService());
+      startPromises.push(serviceManager.startUIService());
+    } else {
+      logger.info('Test mode: skipping TTS and UI startup');
+    }
+    await Promise.all(startPromises);
     startHttpOrchestratorService();
   } catch (error) {
     logger.error('A critical error occurred while starting the services.', error);
@@ -63,7 +80,7 @@ async function main() {
   try {
     await runDiagnostics();
     await loadMagi();
-    
+
     isInitialized = true; 
     
     // Run background MCP verification after system is ready
@@ -126,6 +143,14 @@ function startHttpOrchestratorService(): void {
   });
 
   createWebSocketServer(server, async (userMessage) => routeMessage(userMessage));
+
+  server.on('error', (err: { code?: string }) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.info(`Previous Orchestrator instance already listening on port ${PORT}`);
+    } else {
+      console.error(`Server error: ${err}`);
+    }
+  });
 
   const PORT = process.env.PORT ?? 8080;
   server.listen(PORT, () => {

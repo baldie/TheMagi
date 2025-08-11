@@ -6,6 +6,7 @@ import type { MagiName } from '../types/magi-types';
 import type { PlannerContext, PlannerEvent } from './types';
 import { TIMEOUT_MS } from './types';
 import { PERSONAS_CONFIG } from './magi2';
+import { testHooks } from '../testing/test-hooks';
 import type { ToolUser } from './tool-user';
 import type { ShortTermMemory } from './short-term-memory';
 import type { MagiTool } from '../mcp';
@@ -61,6 +62,13 @@ FORMAT:
 {"plan": ["goal1", "goal2", "goal3", ...]}`;
 
   try {
+    if (testHooks.isEnabled()) {
+      // Deterministic plan in test mode
+      return [
+        'Search web for answer',
+        'Respond with the answer'
+      ];
+    }
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
     return response.plan ?? [`Address the user's message: ${userMessage}`];
@@ -124,6 +132,9 @@ Respond with JSON:
 }`;
 
   try {
+    if (testHooks.isEnabled()) {
+      return { shouldAdapt: false, reason: 'test-mode', newPlan: originalPlan };
+    }
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
     
@@ -257,9 +268,14 @@ export const plannerMachine = createMachine({
         }),
         onDone: {
           target: 'validatePlan',
-          actions: assign({
-            strategicPlan: ({ event }) => event.output,
-          }),
+          actions: [
+            assign({
+              strategicPlan: ({ event }) => event.output,
+            }),
+            ({ event, context }) => {
+              testHooks.recordPlan(event.output, context.magiName);
+            }
+          ],
         },
         onError: {
           target: 'failed',

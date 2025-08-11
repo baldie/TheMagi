@@ -4,6 +4,7 @@ import { mcpClientManager } from '../mcp';
 import type { MagiName } from '../types/magi-types';
 import type { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
 import { MagiErrorHandler } from './error-handler';
+import { testHooks } from '../testing/test-hooks';
 
 // Minimal contract needed by ToolUser (implemented by both Magi and Magi2)
 interface ToolUserMagiLike {
@@ -88,6 +89,17 @@ export class ToolUser {
    */
   async getAvailableTools(): Promise<MagiTool[]> {
     try {
+      // In test mode, provide a synthetic set of tools to avoid MCP dependencies
+      if (testHooks.isEnabled()) {
+        const synthetic = ['search-web', 'read-page', 'answer-user'];
+        return synthetic.map((name) => new (class extends (Object as any) {
+          name: string = name;
+          description?: string = `${name} (synthetic test tool)`;
+          inputSchema?: Record<string, any> = {};
+          instructions?: string = '';
+          toString(): string { return `Tool Name: ${this.name}`; }
+        })() as unknown as MagiTool);
+      }
       // Dynamically get tools from MCP servers
       return await mcpClientManager.getMCPToolInfoForMagi(this.magi.name);
     } catch (error) {
@@ -108,8 +120,19 @@ export class ToolUser {
     toolArguments: Record<string, any>,
   ): Promise<string> {
     try {
-      // Initialize MCP client manager if needed
-      await mcpClientManager.initialize();
+      // Test-mode tool stubbing first to avoid heavy initialization
+      const stubbed = testHooks.tryStubTool(toolName as string, toolArguments);
+      if (stubbed.used) {
+        try { testHooks.recordToolCall(toolName as string, toolArguments); } catch (err) {
+          logger.debug(`Failed to record stubbed tool call for ${this.magi.name}: ${String((err as Error)?.message || err)}`);
+        }
+        return stubbed.response;
+      }
+
+      // Initialize MCP client manager if needed (skip in test mode)
+      if (!testHooks.isEnabled()) {
+        await mcpClientManager.initialize();
+      }
 
       if (toolName === 'search-web') {
         toolArguments.urls = [toolArguments.url ?? ''];
@@ -132,6 +155,10 @@ export class ToolUser {
         logger.debug(`🛠️🛠️🛠️\n${toolResponse}\n`);
       }
       
+      try { testHooks.recordToolCall(toolName as string, toolArguments); } catch (err) {
+        logger.debug(`Failed to record tool call for ${this.magi.name}: ${String((err as Error)?.message || err)}`);
+      }
+
       return toolResponse;
     } catch (error) {
       return MagiErrorHandler.handleToolError(error, {
