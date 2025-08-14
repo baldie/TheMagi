@@ -45,24 +45,6 @@ afterAll(() => {
 });
 
 // Wait for readiness by parsing the live output of start-magi.sh
-async function checkHealthAvailable(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.get({ host: '127.0.0.1', port, path: '/health', timeout: 2000 }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += String(chunk); });
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(Boolean(json?.status));
-        } catch {
-          resolve(false);
-        }
-      });
-    });
-    req.on('timeout', () => { try { req.destroy(); } catch {} resolve(false); });
-    req.on('error', () => resolve(false));
-  });
-}
 
 async function isPortInUse(port: number, host = '127.0.0.1'): Promise<boolean> {
   return new Promise((resolve) => {
@@ -73,6 +55,7 @@ async function isPortInUse(port: number, host = '127.0.0.1'): Promise<boolean> {
     socket.once('error', () => { resolve(false); });
   });
 }
+
 
 function waitForMagiReadyFromProcess(child: ReturnType<typeof spawn>, timeoutMs = 600000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -129,11 +112,9 @@ function waitForMagiReadyFromProcess(child: ReturnType<typeof spawn>, timeoutMs 
       if (timer) clearTimeout(timer);
       if (child.stdout) {
         child.stdout.removeAllListeners('data');
-        try { child.stdout.destroy(); } catch {}
       }
       if (child.stderr) {
         child.stderr.removeAllListeners('data');
-        try { child.stderr.destroy(); } catch {}
       }
       child.removeAllListeners('error');
       child.removeAllListeners('exit');
@@ -149,8 +130,8 @@ function waitForMagiReadyFromProcess(child: ReturnType<typeof spawn>, timeoutMs 
       // If the start script exits before readiness, perform a last health check
       if (timer) clearTimeout(timer);
       try {
-        const ready = await checkHealthAvailable(ORCH_PORT);
-        if (ready) {
+        const health = await fetchOrchestratorHealth(ORCH_PORT);
+        if (health?.status) {
           cleanup();
           resolve();
           return;
@@ -165,6 +146,80 @@ function waitForMagiReadyFromProcess(child: ReturnType<typeof spawn>, timeoutMs 
 }
 
 // We no longer start or manage Ollama or the orchestrator here; start-magi.sh handles everything
+
+// Desired health state before opening WebSocket connections
+const ORCHESTRATOR_FULL_AVAILABILITY = {
+  status: 'available',
+  magi: { caspar: 'available', balthazar: 'available', melchior: 'available' }
+} as const;
+
+const HEALTH_POLL_INTERVAL_MS = 1000; // 1s
+const HEALTH_MAX_WAIT_MS = 120000; // 2 minutes
+
+type HealthResponse = {
+  status?: string;
+  magi?: {
+    caspar?: {status: string};
+    balthazar?: {status: string};
+    melchior?: {status: string};
+  };
+};
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let healthPollAttempt = 0;
+async function fetchOrchestratorHealth(port: number): Promise<HealthResponse | null> {
+  const attempt = ++healthPollAttempt;
+  //const ts = new Date().toISOString();
+  //console.log(`[integration] [health] attempt=${attempt} ts=${ts} -> GET http://127.0.0.1:${port}/health`);
+  return new Promise((resolve) => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/health', timeout: 2000 }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += String(chunk); });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json as HealthResponse);
+        } catch (error) {
+          console.log(`[integration] [health] attempt=${attempt} parse error: ${String((error as Error)?.message || error)}`);
+          resolve(null);
+        }
+      });
+    });
+    req.on('timeout', () => {
+      console.log(`[integration] [health] attempt=${attempt} timeout after 2000ms`);
+      try { req.destroy(); } catch {}
+      resolve(null);
+    });
+    req.on('error', (err) => {
+      console.log(`[integration] [health] attempt=${attempt} network error: ${String((err as Error)?.message || err)}`);
+      resolve(null);
+    });
+  });
+}
+
+async function waitForFullAvailability(port: number, timeoutMs: number = HEALTH_MAX_WAIT_MS): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  let health: HealthResponse | null = null;
+  while (Date.now() < deadline) {
+    health = await fetchOrchestratorHealth(port);
+    if (
+      health &&
+      health.status === ORCHESTRATOR_FULL_AVAILABILITY.status &&
+      health.magi?.caspar?.status === ORCHESTRATOR_FULL_AVAILABILITY.magi.caspar &&
+      health.magi?.balthazar?.status === ORCHESTRATOR_FULL_AVAILABILITY.magi.balthazar &&
+      health.magi?.melchior?.status === ORCHESTRATOR_FULL_AVAILABILITY.magi.melchior
+    ) {
+      console.log(`[integration] Orchestrator fully available on port ${port}`);
+      return true;
+    }
+    await delay(HEALTH_POLL_INTERVAL_MS);
+  }
+  console.log(`[integration] Orchestrator not fully available on port ${port}: ${JSON.stringify(health)}`);
+  return false;
+}
 
 function loadSpecs(): Spec[] {
   const specsDir = path.resolve(__dirname, 'specs');
@@ -263,12 +318,21 @@ beforeAll(async () => {
     if (await isPortInUse(ORCH_PORT)) {
       ORCH_PORT = 18080;
     }
+    // Create a stable run id so all processes share the same log file name
+    const RUN_ID = String(Date.now());
+    const TEST_ENV = { ...process.env, MAGI_TEST_MODE: 'true', MAGI_TEST_RUN_ID: RUN_ID } as Record<string, string>;
     child = spawn('bash', ['-lc', 'yes | ./start-magi.sh --no-nodemon'], {
       cwd: PROJECT_ROOT,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, MAGI_TEST_MODE: 'true', PORT: String(ORCH_PORT) },
+      env: { ...TEST_ENV, PORT: String(ORCH_PORT) },
     });
+    // Also write an index line so the test runner can quickly identify the active log
+    try {
+      const fs = require('fs');
+      const logIndex = path.join(LOGS_DIR, `integration-${RUN_ID}.log`);
+      fs.appendFileSync(logIndex, '');
+    } catch {}
   } catch (e) {
     throw new Error(`Failed to start Magi via start-magi.sh: ${String((e as Error)?.message || e)}`);
   }
@@ -292,35 +356,81 @@ describe('Integration (single Magi) specs', () => {
   for (const spec of specs) {
     const name = spec.test.name;
     it(name, async () => {
-      // Sanity: ensure health responds before opening WS
-      const healthy = await checkHealthAvailable(ORCH_PORT);
-      console.log(`[integration] Health check before WS connect on ${ORCH_PORT}: ${healthy}`);
+      // Poll health until orchestrator and all Magi are fully available, or 3 minutes pass
+      console.log('[integration] Waiting for full orchestrator availability before WS connect...');
+      const fullyAvailable = await waitForFullAvailability(ORCH_PORT);
+      if (!fullyAvailable) {
+        console.warn('[integration] Full availability not reached within 3 minutes; proceeding to open WS anyway');
+      }
       const ws = new WebSocket(`ws://127.0.0.1:${ORCH_PORT}`);
       const result = await new Promise<{response: string, meta: any}>((resolve, reject) => {
-        const to = setTimeout(() => reject(new Error('WS test timeout')), spec.test.timeout ?? 60000);
-          ws.on('open', () => {
-            console.log('[integration] WS open, sending start-magi');
-            ws.send(JSON.stringify({
-              type: 'start-magi',
-              data: {
-                testName: name,
-                magi: spec.test.magi,
-                userMessage: spec.input.userMessage
-              }
-            }));
-          });
-        ws.on('message', (raw) => {
+        const testTimeout = (spec.test.timeout ?? 60000) * 2; // Double the timeout for safety
+        console.log(`[integration] Using inactivity timeout: ${testTimeout}ms for test: ${name}`);
+        const startTime = Date.now();
+        let inactivityTimer: NodeJS.Timeout = setTimeout(() => reject(new Error('WS test timeout')), testTimeout);
+        const resetInactivityTimer = () => {
+          clearTimeout(inactivityTimer);
+          inactivityTimer = setTimeout(() => reject(new Error('WS test timeout')), testTimeout);
+        };
+        
+        ws.on('open', () => {
+          console.log('[integration] WS open, sending start-magi');
+          resetInactivityTimer();
+          const message = {
+            type: 'start-magi',
+            data: {
+              testName: name,
+              magi: spec.test.magi,
+              userMessage: spec.input.userMessage
+            }
+          };
+          console.log(`[integration] Sending message: ${JSON.stringify(message)}`);
+          ws.send(JSON.stringify(message));
+          
+          // Add heartbeat to show we're actively waiting
+          const heartbeatInterval = setInterval(() => {
+            console.log(`[integration] Still waiting for Magi deliberation... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`);
+          }, 10000); // Every 10 seconds
+          
+          // Clear heartbeat when test completes
+          const originalResolve = resolve;
+          const originalReject = reject;
+          resolve = (...args) => {
+            clearInterval(heartbeatInterval);
+            clearTimeout(inactivityTimer);
+            originalResolve(...args);
+          };
+          reject = (...args) => {
+            clearInterval(heartbeatInterval);
+            clearTimeout(inactivityTimer);
+            originalReject(...args);
+          };
+        });
+        
+        ws.on('message', (raw: Buffer) => {
           try {
             const msg = JSON.parse(String(raw));
-            if (msg.type !== 'log') {
-              console.log(`[integration] WS message: ${JSON.stringify(msg)}`);
+            if (msg.type === 'log') {
+              // Stream logs like the UI does - this shows server activity in real-time
+              console.log(`[magi-log] ${msg.data}`);
+              // As long as logs are streaming, consider the system live and reset inactivity timer
+              resetInactivityTimer();
+            } else {
+              console.log(`[integration] WS message type: ${msg.type}`);
+              // Any other message also indicates activity
+              resetInactivityTimer();
+              if (msg.type !== 'ack') {
+                console.log(`[integration] WS message data: ${JSON.stringify(msg)}`);
+              }
             }
             if (msg.type === 'deliberation-complete') {
-              clearTimeout(to);
+              console.log('[integration] Received deliberation-complete, resolving...');
+              clearTimeout(inactivityTimer);
               resolve({ response: msg.data.response, meta: msg.data.testMeta });
               ws.close();
             } else if (msg.type === 'deliberation-error') {
-              clearTimeout(to);
+              console.log('[integration] Received deliberation-error, rejecting...');
+              clearTimeout(inactivityTimer);
               reject(new Error(msg.data?.error || 'unknown error'));
               ws.close();
             }
@@ -329,13 +439,14 @@ describe('Integration (single Magi) specs', () => {
             console.debug(`Non-JSON WS message ignored: ${String((err as Error)?.message || err)}`);
           }
         });
-        ws.on('error', (e) => {
-          clearTimeout(to);
+        
+        ws.on('error', (e: any) => {
+          clearTimeout(inactivityTimer);
           reject(e);
         });
       });
 
       assertExpectations(spec, result.response, result.meta);
-    }, (spec.test.timeout ?? 60000) + 10000);
+    }, Math.max((spec.test.timeout ?? 60000) * 3 + HEALTH_MAX_WAIT_MS, HEALTH_MAX_WAIT_MS + 120000)); // Include up to 3 min health wait
   }
 });

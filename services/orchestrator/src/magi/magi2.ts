@@ -92,15 +92,15 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
     strategicPlanExamples: `EXAMPLE 3:
 message: "Who is the CEO of American Express?"
-{"plan": ["Search web for answer", "Extract content from most relevant search result", "Respond with the answer"]}
+{"plan": ["Search web for keywords related to American Express CEO", "Extract content from most relevant search result URL", "Respond with the answer"]}
 
 EXAMPLE 4:
 message: "What should I make for dinner?"
-{"plan": ["Search personal data for allergies", "Search personal data for preferences", "Respond with appropriate meal suggestions based on personal data"]}
+{"plan": ["Search web for keywords related to dinner recommendations", "Extract content from most relevant search result URL", "Respond with the answer"]}
 
 EXAMPLE 5:
-message: "What is the weather like this weekend?"
-{"plan": ["Access location information", "Search web for weather forecast based on location from previous goal", "Extract content from most relevant search result URL", "Respond with forecast"]}`,
+message: "What is the weather like this weekend in Menlo Park?"
+{"plan": ["Search web for keywords related to weather forecast in Menlo Park", "Extract content from most relevant search result URL", "Respond with the answer"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Balthazar`,
     options: { temperature: 0.4 },
   },
@@ -204,8 +204,8 @@ export class Magi2 implements MagiCompatible {
    */
   async initialize(prompt: string): Promise<void> {
     this.personalityPrompt = prompt;
-    // Fast path in test mode: avoid MCP discovery latency by fetching tools once
     this.toolsList = await this.toolUser.getAvailableTools();
+    logger.info(`${this.name} initialized with the following tools: ${this.toolsList.map(tool => tool.name).join(', ')}.`);
   }
 
     /**

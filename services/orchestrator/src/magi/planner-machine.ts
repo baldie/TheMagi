@@ -27,11 +27,9 @@ const createStrategicPlan = fromPromise(async ({ input }: {
 }) => {
   const { userMessage, conduitClient, magiName } = input;
   
-  const systemPrompt = `PERSONA\nYou are a strategic planner. Consider how you will respond to the user's message.`;
+  const systemPrompt = `PERSONA\nYou are a quick strategic planner. Consider how you will respond to the user's message.`;
   
-  const userPrompt = `USER MESSAGE:\n"${userMessage}"
-
-INSTRUCTIONS:
+  const userPrompt = `INSTRUCTIONS:
 Create a high-level plan for how to address the user's message.
 If the user's request is simple, a single goal may be sufficient.
 Each goal should be actionable. Do not over-complicate things.
@@ -42,7 +40,7 @@ message: "Tell me a joke"
 
 EXAMPLE 2:
 message: "What is 2 + 2?"
-{"plan": ["Respond with the answer to the simple math question"]}
+{"plan": ["Calculate the answer to the math question", "Respond with the result"]}
 
 ${PERSONAS_CONFIG[magiName].strategicPlanExamples}
 
@@ -58,17 +56,12 @@ EXAMPLE 8:
 message: "Help me plan my vacation."
 {"plan": ["Ask user for key vacation parameters like destination ideas, budget, travel dates, and who they are traveling with"]}
 
-FORMAT:
+USER MESSAGE:\n"${userMessage}"
+
+YOUR FORMAT:
 {"plan": ["goal1", "goal2", "goal3", ...]}`;
 
   try {
-    if (testHooks.isEnabled()) {
-      // Deterministic plan in test mode
-      return [
-        'Search web for answer',
-        'Respond with the answer'
-      ];
-    }
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
     return response.plan ?? [`Address the user's message: ${userMessage}`];
@@ -78,81 +71,6 @@ FORMAT:
   }
 });
 
-/**
- * Adapts strategic plan based on agent discoveries
- */
-const adaptStrategicPlan = fromPromise(async ({ input }: { 
-  input: { 
-    originalPlan: string[];
-    currentStepIndex: number;
-    discovery: any;
-    userMessage: string;
-    conduitClient: ConduitClient; 
-    magiName: MagiName;
-  } 
-}) => {
-  const { originalPlan, currentStepIndex, discovery, userMessage, conduitClient, magiName } = input;
-  
-  logger.debug(`${magiName} adapting strategic plan based on discovery: ${discovery.type}`);
-  
-  const systemPrompt = `You are a strategic planner. Adapt an existing strategic plan based on new discoveries made during execution.
-
-Consider:
-- The original user request and strategic plan
-- Current progress (completed steps)
-- The discovery details and implications
-- How to best incorporate this new information
-
-Maintain strategic coherence while leveraging the discovery.`;
-  
-  const userPrompt = `Original User Message: "${userMessage}"
-
-Original Strategic Plan:
-${originalPlan.map((step, i) => {
-  let status = '';
-  if (i < currentStepIndex) {
-    status = ' (COMPLETED)';
-  } else if (i === currentStepIndex) {
-    status = ' (CURRENT)';
-  }
-  return `${i + 1}. ${step}${status}`;
-}).join('\n')}
-
-Discovery Made:
-- Type: ${discovery.type}
-- Details: ${discovery.details}
-
-Based on this ne winformation, should the strategic plan be adapted? If so, provide a revised plan that incorporates this new information.
-
-Respond with JSON:
-{
-  "shouldAdapt": true/false,
-  "reason": "explanation of decision",
-  "newPlan": ["revised step 1", "revised step 2", ...] // only if shouldAdapt is true
-}`;
-
-  try {
-    if (testHooks.isEnabled()) {
-      return { shouldAdapt: false, reason: 'test-mode', newPlan: originalPlan };
-    }
-    const { model } = PERSONAS_CONFIG[magiName];
-    const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
-    
-    return {
-      shouldAdapt: response.shouldAdapt === true,
-      reason: response.reason || 'No reason provided',
-      newPlan: response.newPlan || originalPlan
-    };
-  } catch (error) {
-    logger.warn(`${magiName} failed to adapt strategic plan:`, error);
-    // Fallback: continue with original plan unless discovery indicates impossibility
-    return {
-      shouldAdapt: discovery.type === 'impossibility',
-      reason: discovery.type === 'impossibility' ? 'Cannot continue with impossible goal' : 'Failed to adapt plan, continuing',
-      newPlan: discovery.type === 'impossibility' ? [] : originalPlan
-    };
-  }
-});
 
 // ============================================================================
 // GUARDS
@@ -238,7 +156,6 @@ export const plannerMachine = createMachine({
     shortTermMemory: input.shortTermMemory,
     availableTools: input.availableTools,
     workingMemory: input.workingMemory,
-    currentDiscovery: null,
     planRevisions: [],
     accumulatedResults: [],
   }),
@@ -342,15 +259,6 @@ export const plannerMachine = createMachine({
         },
         onDone: [
           {
-            guard: ({ event }) => event.output && event.output.discovery !== undefined,
-            target: 'evaluatingDiscovery',
-            actions: assign({
-              agentResult: ({ event }) => event.output.result || 'Discovery reported',
-              currentDiscovery: ({ event }) => event.output.discovery,
-              error: () => null,
-            }),
-          },
-          {
             target: 'evaluatingProgress',
             actions: assign({
               agentResult: ({ event }) => {
@@ -374,74 +282,6 @@ export const plannerMachine = createMachine({
       },
     },
     
-    evaluatingDiscovery: {
-      invoke: {
-        src: adaptStrategicPlan,
-        input: ({ context }) => ({
-          originalPlan: context.strategicPlan,
-          currentStepIndex: context.currentStepIndex,
-          discovery: context.currentDiscovery,
-          userMessage: context.userMessage,
-          conduitClient: context.conduitClient,
-          magiName: context.magiName,
-        }),
-        onDone: [
-          {
-            guard: ({ event }) => event.output.shouldAdapt === true,
-            target: 'adaptingPlan',
-            actions: assign({
-              strategicPlan: ({ event }) => event.output.newPlan || [],
-              planRevisions: ({ context, event }) => [
-                ...context.planRevisions,
-                {
-                  reason: event.output.reason || 'Plan adaptation',
-                  originalPlan: [...context.strategicPlan],
-                  newPlan: event.output.newPlan || context.strategicPlan
-                }
-              ],
-            }),
-          },
-          {
-            target: 'evaluatingProgress',
-            actions: assign({
-              error: () => null, // Clear any previous errors
-            }),
-          },
-        ],
-        onError: {
-          target: 'evaluatingProgress',
-          actions: assign({
-            error: ({ event }) => `Failed to evaluate discovery: ${event.error}`,
-          }),
-        },
-      },
-    },
-
-    adaptingPlan: {
-      entry: [
-        assign({
-          currentStepIndex: () => 0, // Reset to start of new plan
-          currentGoal: ({ context }) => context.strategicPlan[0] || '',
-          error: () => null,
-          currentDiscovery: () => null, // Clear processed discovery
-        }),
-        ({ context }) => {
-          logger.info(`${context.magiName} adapted strategic plan based on discovery`);
-        }
-      ],
-      always: [
-        {
-          guard: isPlanValid,
-          target: 'invokingAgent'
-        },
-        {
-          target: 'failed',
-          actions: assign({
-            error: () => 'Adapted plan is invalid or empty'
-          })
-        }
-      ]
-    },
 
     evaluatingProgress: {
       always: [

@@ -29,8 +29,6 @@ export interface PlannerContext {
   shortTermMemory: ShortTermMemory;
   availableTools: MagiTool[];
   workingMemory: string;
-  // Discovery tracking
-  currentDiscovery: Discovery | null;
   planRevisions: Array<{ reason: string; originalPlan: string[]; newPlan: string[] }>;
   // Accumulated results from completed steps
   accumulatedResults: string[];
@@ -65,7 +63,6 @@ export interface AgentContext {
   retryCount: number;
   error: string | null;
   
-  // Discovery reporting
   goalCompletionResult: GoalCompletionResult | null;
   
   // Circuit breaker and reliability
@@ -79,6 +76,11 @@ export interface AgentContext {
   shortTermMemory: ShortTermMemory;
   availableTools: MagiTool[];
   hasDeliveredAnswer?: boolean;
+  
+  // Simple progress tracking
+  cycleCount: number;
+  maxCycles: number;
+  lastProgressCycle: number;
 }
 
 /**
@@ -89,7 +91,6 @@ export type PlannerEvent =
   | { type: 'PLAN_CREATED'; strategicPlan: string[] }
   | { type: 'AGENT_COMPLETED'; result: string }
   | { type: 'AGENT_FAILED'; error: string }
-  | { type: 'DISCOVERY_REPORTED'; discovery: Discovery; result: string }
   | { type: 'PLAN_EVALUATION_COMPLETE'; shouldAdapt: boolean }
   | { type: 'PLAN_ADAPTED'; newPlan: string[] }
   | { type: 'RETRY_REQUESTED' }
@@ -166,28 +167,12 @@ export interface CircuitBreakerContext {
 }
 
 /**
- * Discovery types that agents can report to planners
- */
-export type DiscoveryType = 'opportunity' | 'obstacle' | 'impossibility';
-
-/**
- * Discovery information reported by agents
- */
-export interface Discovery {
-  type: DiscoveryType;
-  details: string;
-  context: string;
-}
-
-/**
- * Enhanced goal completion result with discovery reporting
+ * Goal completion result
  */
 export interface GoalCompletionResult {
   achieved: boolean;
   confidence: number;
   reason: string;
-  hasDiscovery?: boolean;
-  discovery?: Discovery;
 }
 
 /**

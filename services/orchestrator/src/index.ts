@@ -78,7 +78,12 @@ async function main() {
 
   // Perform startup initialization
   try {
-    await runDiagnostics();
+    if (process.env.MAGI_TEST_MODE === 'true') {
+      logger.info('Test mode: skipping system diagnostics');
+      await mcpClientManager.initialize();
+    } else {
+      await runDiagnostics();
+    }
     await loadMagi();
 
     isInitialized = true; 
@@ -120,9 +125,24 @@ process.on('SIGINT', () => { void gracefulShutdown('SIGINT'); });
 // This service provides the orchestrator's health route and a websocket server for the UI to connect to.
 function startHttpOrchestratorService(): void {
   const app = express();
+  
+  // Log ALL HTTP requests
+  app.use((req, _res, next) => {
+    console.log(`🌐🌐🌐 HTTP ${req.method} ${req.url} 🌐🌐🌐`);
+    console.log(`[DEBUG] Headers:`, JSON.stringify(req.headers, null, 2));
+    next();
+  });
+  
   app.use(cors({ origin: ['http://localhost:4200', 'http://127.0.0.1:4200'] }));
+  app.use(express.json());
   // eslint-disable-next-line
   const server = http.createServer(app);
+
+  server.on('upgrade', (request, _socket, _head) => {
+    console.log('🔄🔄🔄 HTTP UPGRADE REQUEST RECEIVED! 🔄🔄🔄');
+    console.log('[DEBUG] Upgrade URL:', request.url);
+    console.log('[DEBUG] Upgrade Headers:', JSON.stringify(request.headers));
+  });
 
   app.get('/health', (_req, res) => {
     res.status(200).json(
@@ -142,6 +162,61 @@ function startHttpOrchestratorService(): void {
       });
   });
 
+  app.post('/start-magi', async (req, res) => {
+    try {
+      const { testName, magi, userMessage } = req.body.data || req.body;
+      
+      // Initialize a new test run via test hooks
+      testHooks.beginRun({ testName, magi });
+
+      // If a magi is specified, prefix the message to force single-magi routing
+      const routedMessage = magi && userMessage
+        ? `${magi}: ${userMessage}`
+        : userMessage;
+
+      // In integration tests, ensure the targeted Magi is initialized like loadMagi does
+      try {
+        if (magi) {
+          const targetName = magi;
+          const target = targetName === 'Balthazar' ? balthazar
+            : targetName === 'Melchior' ? melchior
+            : targetName === 'Caspar' ? caspar
+            : null;
+          if (target) {
+            const { PERSONAS_CONFIG } = await import('./magi/magi2');
+            const src = PERSONAS_CONFIG[target.name].personalitySource;
+            const fs = await import('fs/promises');
+            const prompt = await fs.readFile(src, 'utf-8');
+            await target.initialize(prompt);
+            logger.info(`[HTTP] ${target.name} personality initialized for test run.`);
+          }
+        }
+      } catch (initError) {
+        logger.warn('[HTTP] Failed to pre-initialize Magi for test run', initError);
+      }
+
+      const response = await routeMessage(routedMessage);
+      
+      // Record final delivery as an implicit answer-user for testing observability
+      try { testHooks.recordToolCall('answer-user', { answer: response }); } catch (e) { logger.debug(`[HTTP] Failed to record final answer-user: ${e instanceof Error ? e.message : String(e)}`); }
+      const meta = testHooks.endRunAndSummarize(response);
+      logger.info('[HTTP] Magi contact completed successfully');
+      
+      // Send the final response back to the client
+      const payload: any = { type: 'deliberation-complete', data: { response } };
+      if (meta) {
+        payload.data.testMeta = meta;
+      }
+      res.status(200).json(payload);
+    } catch (error) {
+      logger.error(`[HTTP] Magi contact failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      res.status(500).json({
+        type: 'deliberation-error',
+        data: { error: error instanceof Error ? error.message : 'Unknown error' }
+      });
+    }
+  });
+
   createWebSocketServer(server, async (userMessage) => routeMessage(userMessage));
 
   server.on('error', (err: { code?: string }) => {
@@ -153,7 +228,23 @@ function startHttpOrchestratorService(): void {
   });
 
   const PORT = process.env.PORT ?? 8080;
-  server.listen(PORT, () => {
+  const HOST = process.env.HOST ?? '127.0.0.1';
+  server.listen(Number(PORT), HOST, () => {
+    // Preserve original log phrase for integration readiness detectors
     logger.info(`Orchestrator listening on port ${PORT}`);
+    // Also log explicit host binding for debugging clarity
+    logger.info(`Orchestrator listening on ${HOST}:${PORT}`);
+    console.log('🔌🔌🔌 SERVER.LISTEN() CALLBACK EXECUTED! 🔌🔌🔌');
+  });
+  
+  server.on('listening', () => {
+    console.log('👂👂👂 SERVER LISTENING EVENT FIRED! 👂👂👂');
+    const address = server.address();
+    console.log(`[DEBUG] Server address:`, address);
+  });
+  
+  server.on('error', (error) => {
+    console.log('💥💥💥 SERVER ERROR! 💥💥💥', error);
+    logger.error('[SERVER] Error:', error);
   });
 }

@@ -91,7 +91,11 @@
       "Bash(ollama:*)",
       "Bash(printenv:*)",
       "WebFetch(domain:ollama.readthedocs.io)",
-      "WebFetch(domain:stately.ai)"
+      "WebFetch(domain:stately.ai)",
+      "Bash(npm cache clean:*)",
+      "Bash(ss:*)",
+      "Bash(./debug-phantom-websocket.sh:*)",
+      "Bash(./test-server-binding.sh:*)"
     ],
     "deny": []
   },

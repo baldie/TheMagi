@@ -16,10 +16,9 @@ import {
   processOutput,
   evaluateGoalCompletion
 } from './agent-actions';
-import { isContextValid, canRetry, isToolValid } from './agent-guards';
+import { isContextValid, canRetry, isToolValid, shouldStopForStagnation } from './agent-guards';
 import { speakWithMagiVoice } from '../tts';
 import { allMagi } from './magi2';
-import { testHooks } from '../testing/test-hooks';
 
 // ============================================================================
 // AGENT MACHINE
@@ -40,15 +39,14 @@ export const agentMachine = createMachine({
       availableTools: MagiTool[];
       workingMemory?: string;
     },
-    output: {} as { result: string; discovery?: any } | { error: string }
+    output: {} as { result: string; } | { error: string }
   },
   output: ({ context }) => {
     if (context.error) {
       return { error: context.error };
     }
     return {
-      result: context.processedOutput,
-      ...(context.goalCompletionResult?.discovery ? { discovery: context.goalCompletionResult.discovery } : {})
+      result: context.processedOutput
     };
   },
   initial: 'validateContext',
@@ -75,6 +73,9 @@ export const agentMachine = createMachine({
     circuitBreakerContext: null,
     lastExecutionTime: 0,
     hasDeliveredAnswer: false,
+    cycleCount: 0,
+    maxCycles: 30,
+    lastProgressCycle: 0,
   }),
   states: {
     validateContext: {
@@ -93,6 +94,18 @@ export const agentMachine = createMachine({
     },
 
     gatheringContext: {
+      always: [
+        {
+          target: 'failed',
+          guard: shouldStopForStagnation,
+          actions: assign({
+            error: ({ context }) => `Agent stopped: reached max cycles (${context.maxCycles}) or no progress for 5 cycles`
+          })
+        }
+      ],
+      entry: assign({
+        cycleCount: ({ context }) => context.cycleCount + 1
+      }),
       invoke: {
         src: gatherContext,
         input: ({ context }) => ({
@@ -144,6 +157,7 @@ export const agentMachine = createMachine({
           completedSubGoals: context.completedSubGoals,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
+          userMessage: context.userMessage,
         }),
         onDone: {
           target: 'selectingTool',
@@ -179,7 +193,6 @@ export const agentMachine = createMachine({
           conduitClient: context.conduitClient,
           context: context.promptContext,
           magiName: context.magiName,
-          userMessage: context.userMessage,
         }),
         onDone: {
           target: 'validatingTool',
@@ -294,11 +307,7 @@ export const agentMachine = createMachine({
               const toolName = context.selectedTool?.name;
               if (toolName === 'ask-user' || toolName === 'answer-user') {
                 const magi = allMagi[context.magiName];
-                let ttsReady = context.processedOutput;
-                // In test mode, skip LLM reformatting for TTS
-                if (process.env.MAGI_TEST_MODE !== 'true') {
-                  ttsReady = await magi.makeTTSReady(context.processedOutput);
-                }
+                const ttsReady = await magi.makeTTSReady(context.processedOutput);
                 logger.debug(`\n🤖🔊\n${ttsReady}`);
                 void speakWithMagiVoice(ttsReady, context.magiName);
               }
@@ -375,6 +384,7 @@ export const agentMachine = createMachine({
             actions: assign({
               selectedTool: ({ context }) => ({ name: 'answer-user', parameters: { answer: context.processedOutput } }),
               hasDeliveredAnswer: () => true,
+              lastProgressCycle: ({ context }) => context.cycleCount,
             }),
           },
           {
@@ -383,14 +393,7 @@ export const agentMachine = createMachine({
             actions: assign({
               fullContext: ({ context }) => `${context.fullContext}\nPrepared result for user; drafting final answer...`,
               retryCount: () => 0,
-            }),
-          },
-          {
-            guard: ({ event }) => event.output.achieved === true && event.output.hasDiscovery === true,
-            target: 'discoveryReported',
-            actions: assign({
-              goalCompletionResult: ({ event }) => event.output,
-              // processedOutput is preserved - no need to reassign
+              lastProgressCycle: ({ context }) => context.cycleCount,
             }),
           },
           {
@@ -398,14 +401,7 @@ export const agentMachine = createMachine({
             target: 'done',
             actions: assign({
               goalCompletionResult: ({ event }) => event.output,
-              // processedOutput is preserved - no need to reassign
-            }),
-          },
-          {
-            guard: ({ event }) => event.output.hasDiscovery === true,
-            target: 'discoveryReported',
-            actions: assign({
-              goalCompletionResult: ({ event }) => event.output,
+              lastProgressCycle: ({ context }) => context.cycleCount,
               // processedOutput is preserved - no need to reassign
             }),
           },
@@ -432,17 +428,7 @@ export const agentMachine = createMachine({
       type: 'final',
       entry: ({ context }) => {
         logger.debug(`${context.magiName} agent machine done state - processedOutput: ${context.processedOutput}`);
-        // In tests, record a synthetic answer-user call to reflect final response delivery
-        try {
-          testHooks.recordToolCall('answer-user', { answer: context.processedOutput });
-        } catch (err) {
-          logger.debug(`Failed to record synthetic answer-user call: ${err instanceof Error ? err.message : String(err)}`);
-        }
       }
-    },
-    
-    discoveryReported: {
-      type: 'final'
     },
     
     failed: {

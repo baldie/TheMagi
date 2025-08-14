@@ -89,17 +89,6 @@ export class ToolUser {
    */
   async getAvailableTools(): Promise<MagiTool[]> {
     try {
-      // In test mode, provide a synthetic set of tools to avoid MCP dependencies
-      if (testHooks.isEnabled()) {
-        const synthetic = ['search-web', 'read-page', 'answer-user'];
-        return synthetic.map((name) => new (class extends (Object as any) {
-          name: string = name;
-          description?: string = `${name} (synthetic test tool)`;
-          inputSchema?: Record<string, any> = {};
-          instructions?: string = '';
-          toString(): string { return `Tool Name: ${this.name}`; }
-        })() as unknown as MagiTool);
-      }
       // Dynamically get tools from MCP servers
       return await mcpClientManager.getMCPToolInfoForMagi(this.magi.name);
     } catch (error) {
@@ -129,17 +118,11 @@ export class ToolUser {
         return stubbed.response;
       }
 
-      // Initialize MCP client manager if needed (skip in test mode)
-      if (!testHooks.isEnabled()) {
-        await mcpClientManager.initialize();
-      }
-
+      await mcpClientManager.initialize();
+      
       if (toolName === 'search-web') {
         toolArguments.urls = [toolArguments.url ?? ''];
-        toolArguments.exclude_domains = ["youtube.com"];
-      }
-      if (toolName === 'read-page') {
-        toolArguments.exclude_domains = ["youtube.com"];
+        toolArguments.exclude_domains = ["youtube.com", "instagram.com", "facebook.com"];
       }
       
       // Map friendly tool names to MCP tool names
@@ -235,8 +218,6 @@ export class ToolUser {
     if (output.length > MAX_CONTENT_LENGTH) {
       output = output.substring(0, MAX_CONTENT_LENGTH) + '...';
     }
-
-    output = output.replace("Detailed Results:", "<SEARCH_RESULTS>");
     
     return output;
   }

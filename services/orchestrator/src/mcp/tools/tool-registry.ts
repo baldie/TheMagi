@@ -69,7 +69,7 @@ export interface ToolServerConfig {
   provides: string[];
 }
 
-export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_image_descriptions', 'include_raw_content', 'include_favicon', 'exclude_domains', 'include_domains']);
+export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_image_descriptions', 'include_raw_content', 'include_favicon', 'exclude_domains', 'include_domains', 'topic']);
 
 /**
  * Central registry of all available tools
@@ -95,12 +95,6 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         type: 'boolean',
         description: 'Auto-generate search parameters',
         default: false
-      },
-      topic: {
-        type: 'string',
-        description: 'Search category',
-        enum: ['general', 'news'],
-        default: 'general'
       },
       max_results: {
         type: 'number',

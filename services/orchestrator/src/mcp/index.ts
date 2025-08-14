@@ -111,6 +111,7 @@ export class McpClientManager {
       [MagiName.Caspar]: getCasparTools(),
       [MagiName.Melchior]: getMelchiorTools()
     };
+    //logger.info(`MCP server configs: ${JSON.stringify(this.serverConfigs)}`);
     return this.serverConfigs;
   }
 
@@ -270,6 +271,9 @@ export class McpClientManager {
     // Find all clients for this Magi
     const serverConfigs = this.getServerConfigs();
     const configs = serverConfigs[magiName] || [];
+    if (configs.length === 0) {
+      logger.error(`⚠️ No MCP server configs found for ${magiName}, cannot get tools!`);
+    }
     
     for (const config of configs) {
       const serverKey = `${magiName}:${config.name}`;

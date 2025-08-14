@@ -10,7 +10,7 @@
     "timeout": 30000
   },
   "input": {
-    "userMessage": "How tall is Michael Jordan?"
+    "userMessage": "b: How tall is Michael Jordan?"
   },
   "toolStubs": {
     "search-web": {
@@ -60,6 +60,10 @@
       "expectedOrder": [
         {
           "tool": "search-web",
+          "before": "read-page"
+        },
+        {
+          "tool": "read-page",
           "before": "answer-user"
         }
       ],
@@ -67,7 +71,7 @@
     },
     "behavior": {
       "shouldComplete": true,
-      "maxDuration": 25000,
+      "maxDuration": 45000,
       "shouldSpeak": true
     },
     "planning": {
@@ -77,6 +81,7 @@
       },
       "shouldPlanFor": [
         "search",
+        "extract",
         "respond"
       ]
     }

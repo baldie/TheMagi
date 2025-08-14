@@ -18,12 +18,22 @@ const getLogFileName = () => {
     return `${year}-${month}-${day}.log`;
 };
 
-// In integration tests, write to a unique per-run file and do not emit to the log stream
+// In integration tests, write to a per-run file shared by all child processes when possible
 const IS_TEST_MODE = process.env.MAGI_TEST_MODE === 'true';
-const logFilePath = path.join(
-  logDirectory,
-  IS_TEST_MODE ? `integration-${Date.now()}.log` : getLogFileName()
-);
+
+function resolveTestLogPath(): string {
+  const explicitPath = process.env.MAGI_TEST_LOG_FILE;
+  if (explicitPath && explicitPath.trim().length > 0) {
+    return path.isAbsolute(explicitPath) ? explicitPath : path.join(logDirectory, explicitPath);
+  }
+  const runId = process.env.MAGI_TEST_RUN_ID;
+  const fileName = runId && runId.trim().length > 0
+    ? `integration-${runId}.log`
+    : `integration-${Date.now()}.log`;
+  return path.join(logDirectory, fileName);
+}
+
+const logFilePath = IS_TEST_MODE ? resolveTestLogPath() : path.join(logDirectory, getLogFileName());
 const fileStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
 /**

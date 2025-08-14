@@ -1,7 +1,6 @@
 import { fromPromise } from 'xstate';
 import { logger } from '../logger';
 import { PERSONAS_CONFIG } from './magi2';
-import { testHooks } from '../testing/test-hooks';
 import type { ConduitClient } from './conduit-client';
 import type { MagiName } from '../types/magi-types';
 import type { GoalCompletionResult } from './types';
@@ -26,7 +25,9 @@ export const gatherContext = fromPromise(async ({ input }: {
 }) => {
   const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
 
-  // Test behaviors should be injected by test doubles; keep production clean.
+  if (workingMemory.trim() === '') {
+    return userMessage;
+  }
   
   const systemPrompt = `You are a data extraction robot. Your only function is to identify and list key factual data points from a given text. You do not analyze, interpret, or suggest actions.`;
   
@@ -38,8 +39,7 @@ Current Strategic Goal (not for you):\n${strategicGoal}\n
 Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
 
 INSTRUCTIONS:
-First, verify if 'Given Text' has been provided. If it has not, your only action is to report that 'no relevant context available'.
-Otherwise, examine the 'Current Strategic Goal' and the available data from previous steps.
+Examine the 'Current Strategic Goal' and the available data from previous steps.
 Your task is to determine the single, most logical **next action** required to achieve the goal.
 Provide ONLY the direct information needed to perform that next action.
 
@@ -49,15 +49,6 @@ Based on your instructions, provide the single piece of information needed for t
 - Do not extract facts or summarize content unless the source has already been chosen.`;
 
   try {
-    if (testHooks.isEnabled()) {
-      // Fast path in tests: avoid LLM round-trips
-      const parts = [
-        `Strategic Goal: ${strategicGoal}`,
-        `Working Memory: ${workingMemory}`,
-        `Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}`,
-      ];
-      return parts.join('\n');
-    }
     const { model } = PERSONAS_CONFIG[magiName];
     return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.3 });
   } catch (error) {
@@ -65,7 +56,6 @@ Based on your instructions, provide the single piece of information needed for t
     return `Strategic Goal: ${strategicGoal}\n\nWorking Memory: ${workingMemory}\n\nCompleted Sub-goals:\n${completedSubGoals.join(', ') || 'None'}`;
   }
 });
-
 
 /**
  * Determines the next tactical sub-goal based on current context
@@ -77,35 +67,27 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
     completedSubGoals: string[];
     conduitClient: ConduitClient;
     magiName: MagiName;
+    userMessage: string;
   } 
 }) => {
-  const { strategicGoal, context, completedSubGoals, conduitClient, magiName } = input;
-  
+  const { strategicGoal, context, completedSubGoals, conduitClient, magiName, userMessage } = input;
+  const noContextYet = context === userMessage;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
-  // Test behaviors should be injected by test doubles; keep production clean.
-  
-  const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable sub-goal.`;
+  const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable tak.`;
 
   const userPrompt = `Strategic Goal:\n${strategicGoal}\n
 Context:\n${context}\n
-Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
-
-Crucial Instruction: The Context confirms that all necessary data has been gathered. Your task is to define the single next step to bring that data to the user. Do not re-gather any data mentioned in the context.
-
-What is the immediate actionable sub-goal that moves you 1 step towards the strategic goal?
-Respond with just the single sub-goal text.`;
+Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}
+${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Your task is to define the single next step to make progress towards the strategic goal. Do not re-gather any data mentioned in the context.\n'}
+What is the immediate actionable task that moves you 1 step towards the strategic goal?
+Respond with just the single task description.`;
 
   try {
-    if (testHooks.isEnabled()) {
-      // Simple deterministic plan for tests
-      if (completedSubGoals.length === 0) return 'Search web for answer';
-      return 'Respond with the answer';
-    }
     const { model } = PERSONAS_CONFIG[magiName];
     return await conduitClient.contact(userPrompt, systemPrompt, model, { temperature: 0.3 });
   } catch (error) {
-    logger.error(`${magiName} failed to produce tactical sub-goal:`, error);
+    logger.error(`${magiName} failed to produce tactical task:`, error);
     return `Work towards: ${strategicGoal}`;
   }
 });
@@ -120,21 +102,11 @@ export const selectTool = fromPromise(async ({ input }: {
     conduitClient: ConduitClient;
     context: string;
     magiName: MagiName;
-    userMessage?: string;
   } 
 }) => {
-  const { subGoal, availableTools, conduitClient, magiName, context, userMessage } = input;
+  const { subGoal, availableTools, conduitClient, magiName, context } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
-
-  // Simple heuristic: map obvious sub-goals to tools without LLM round-trip
-  const normalized = subGoal.toLowerCase();
-  if (normalized.includes('search') && availableTools.some(t => t.name === 'search-web')) {
-    return { name: 'search-web', parameters: { query: userMessage ?? '' } };
-  }
-  if ((normalized.includes('respond') || normalized.includes('answer')) && availableTools.some(t => t.name === 'answer-user')) {
-    return { name: 'answer-user', parameters: { answer: 'Answer' } };
-  }
   
   const systemPrompt = `You are a tool selector. Choose the most appropriate tool for the job.`;
 
@@ -159,35 +131,11 @@ Format:
 }`;
 
   try {
-    if (testHooks.isEnabled()) {
-      const lower = subGoal.toLowerCase();
-      if (lower.includes('search')) {
-        return { name: 'search-web', parameters: { query: userMessage ?? '' } };
-      }
-      if (lower.includes('respond') || lower.includes('answer')) {
-        return { name: 'answer-user', parameters: { answer: 'Answer' } };
-      }
-      // Fallback deterministic choice for tests
-      return { name: availableTools[0]?.name || 'answer-user', parameters: {} };
-    }
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.2 });
-    const tool = response.tool as AgenticTool;
-    // If LLM selected a non-answer tool but subGoal implies responding, prefer answer-user when available
-    if ((/respond|answer/i.test(subGoal)) && tool.name !== 'answer-user' && availableTools.some(t => t.name === 'answer-user')) {
-      return { name: 'answer-user', parameters: { answer: 'Answer' } };
-    }
-    return tool;
+    return response.tool as AgenticTool;
   } catch (error) {
     logger.error(`${magiName} failed to select tool:`, error);
-    // Fallback to first available tool
-    if (availableTools.some(t => t.name === 'search-web')) {
-      return { name: 'search-web', parameters: { query: userMessage ?? '' } };
-    }
-    if (availableTools.some(t => t.name === 'answer-user')) {
-      return { name: 'answer-user', parameters: { answer: 'Answer' } };
-    }
-    return { name: availableTools[0]?.name ?? 'answer-user', parameters: {} };
   }
 });
 
@@ -204,8 +152,6 @@ export const evaluateSubGoalCompletion = fromPromise(async ({ input }: {
 }) => {
   const { subGoal, toolOutput, conduitClient, magiName } = input;
   
-  // Test behaviors should be injected by test doubles; keep production clean.
-  
   const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.`;
   
   const userPrompt = `Sub-goal:\n${subGoal}
@@ -219,9 +165,6 @@ Has the sub-goal been completed? Respond only with JSON:
 }`;
 
   try {
-    if (testHooks.isEnabled()) {
-      return toolOutput.length > 0;
-    }
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.1 });
     return response.completed === true;
@@ -294,17 +237,13 @@ export const processOutput = fromPromise(async ({ input }: {
     case 'read-page': {
         logger.debug(`Proccessing read page results with page length: ${toolOutput.length}`);
         // Web pages can have a lot of noise that throw off the magi, so lets clean it
-        if (testHooks.isEnabled()) {
-          processedOutput = toolOutput;
-        } else {
-          const relevantContentPrompt = getRelevantContentFromRawText(userMessage ?? '', toolOutput);
-          processedOutput = await conduitClient.contact(
-            relevantContentPrompt, 
-            "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.",
-            model,
-            { temperature: 0.1 }
-          );
-        }
+        const relevantContentPrompt = getRelevantContentFromRawText(userMessage ?? '', toolOutput);
+        processedOutput = await conduitClient.contact(
+          relevantContentPrompt, 
+          "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.",
+          model,
+          { temperature: 0.1 }
+        );
         const urls = (tool.parameters as { urls?: string[] })?.urls;
         const url = urls && Array.isArray(urls) && urls.length > 0 ? urls[0] : 'unknown URL';
         processedOutput = `URL: ${url}\n\nPage Summary:\n${processedOutput}`;
@@ -332,10 +271,6 @@ export const processOutput = fromPromise(async ({ input }: {
     
     default:
       try {
-        if (testHooks.isEnabled()) {
-          processedOutput = toolOutput;
-          break;
-        }
         // General processing for other tools
         const defaultSystemPrompt = `You are an output processor. Clean and organize tool output to be clear and actionable.`;
         const defaultUserPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nProcess this output to be clear, concise, and directly relevant to the sub-goal. Remove unnecessary details but preserve important information.`;
@@ -372,46 +307,20 @@ export const evaluateGoalCompletion = fromPromise(async ({ input }: {
 }): Promise<GoalCompletionResult> => {
   const { strategicGoal, completedSubGoals, processedOutput, conduitClient, magiName } = input;
   
-  // Test behaviors should be injected by test doubles; keep production clean.
-  
-  const systemPrompt = `You are a goal evaluator and discovery detector. 
-
-1. Determine if the strategic goal has been sufficiently achieved
-2. Detect if any discoveries were made that might impact strategic planning
-
-Discoveries include:
-- "opportunity": Found better tools, methods, or resources that could improve the approach
-- "obstacle": Encountered impediments or constraints that affect feasibility  
-- "impossibility": Determined that the current approach cannot succeed
-
-Focus on information that could change how the strategic planner approaches the overall task.`;
+  const systemPrompt = `You are a goal evaluator. Determine if the strategic goal has been sufficiently achieved based on the completed sub-goals and latest output.`;
   
   const userPrompt = `Strategic Goal: ${strategicGoal}\n
 Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}\n
 Latest Output: ${processedOutput}
 
-Evaluate goal completion and check for strategic discoveries. Respond only with JSON:
+Evaluate goal completion. Respond only with JSON:
 {
   "achieved": true/false,
   "confidence": 0.0-1.0,
-  "reason": "explanation",
-  "hasDiscovery": true/false,
-  "discovery": {
-    "type": "opportunity|obstacle|impossibility",
-    "details": "what was discovered",
-  }
-}
-
-Only include "discovery" if hasDiscovery is true.`;
+  "reason": "explanation"
+}`;
 
   try {
-    if (testHooks.isEnabled()) {
-      return {
-        achieved: processedOutput.length > 0,
-        confidence: 0.9,
-        reason: 'Test mode fast-path',
-      };
-    }
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.1 });
     
@@ -421,14 +330,6 @@ Only include "discovery" if hasDiscovery is true.`;
       reason: response.reason || 'No reason provided'
     };
 
-    if (response.hasDiscovery && response.discovery) {
-      result.hasDiscovery = true;
-      result.discovery = {
-        type: response.discovery.type || 'obstacle',
-        details: response.discovery.details || 'Discovery details not provided',
-        context: response.discovery.context || 'Context not provided'
-      };
-    }
 
     return result;
   } catch (error) {

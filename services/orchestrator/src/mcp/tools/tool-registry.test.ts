@@ -140,8 +140,8 @@ describe('ToolRegistry', () => {
     });
 
     it('should validate enum values', () => {
-      const result = ToolRegistry.validateParameters('search-web', {
-        query: 'test',
+      const result = ToolRegistry.validateParameters('read-page', {
+        urls: 'https://example.com',
         topic: 'invalid-topic' // Should be 'general' or 'news'
       });
       expect(result.isValid).toBe(false);
@@ -153,9 +153,9 @@ describe('ToolRegistry', () => {
         query: 'test'
       });
       expect(result.isValid).toBe(true);
-      expect(result.validated.topic).toBe('general');
       expect(result.validated.max_results).toBe(5);
       expect(result.validated.include_answer).toBe(false);
+      expect(result.validated.auto_parameters).toBe(false);
     });
 
     it('should pass validation for valid parameters', () => {

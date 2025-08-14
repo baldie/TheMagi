@@ -68,3 +68,11 @@ export const isToolValid = ({ context }: { context: AgentContext }): boolean => 
 export const shouldFollowUpWithRead = ({ context }: { context: AgentContext }): boolean => {
   return context.shouldFollowUpWithRead === true && !!context.followUpUrl?.trim();
 };
+
+/**
+ * Checks if the agent should stop due to stagnation or max cycles
+ */
+export const shouldStopForStagnation = ({ context }: { context: AgentContext }): boolean => {
+  return context.cycleCount >= context.maxCycles || 
+         (context.cycleCount - context.lastProgressCycle > 5);
+};
