@@ -29,24 +29,23 @@ export const gatherContext = fromPromise(async ({ input }: {
     return userMessage;
   }
   
-  const systemPrompt = `You are a data extraction robot. Your only function is to identify and list key factual data points from a given text. You do not analyze, interpret, or suggest actions.`;
+  const systemPrompt = `You are a data extraction robot. Your only function is consider the USER MESSAGE and to extract data from the GIVEN TEXT that is relevant to the NEXT STRATEGIC GOAL. You do not analyze, interpret, or suggest actions.`;
   
-  const userPrompt = `User's Message:\n"${userMessage}"\n
+  const userPrompt = `USER MESSAGE:\n"${userMessage}"\n
 
-Given Text:
+GIVEN TEXT:
 ${workingMemory.trim() ? workingMemory.trim() : 'None'}\n
-Current Strategic Goal (not for you):\n${strategicGoal}\n
-Completed Sub-goals:\n${completedSubGoals.join(', ') || 'None'}
+NEXT STRATEGIC GOAL (not for you):\n${strategicGoal}\n
+COMPLETED SUB-GOALS:\n${completedSubGoals.join(', ') || 'None'}
 
 INSTRUCTIONS:
-Examine the 'Current Strategic Goal' and the available data from previous steps.
-Your task is to determine the single, most logical **next action** required to achieve the goal.
+Based on the NEXT STRATEGIC GOAL, what data from the GIVEN TEXT will be useful.
 Provide ONLY the direct information needed to perform that next action.
 
 OUTPUT:
-Based on your instructions, provide the single piece of information needed for the next step.
+Based on your instructions, provide any information that could be useful for the next step.
 - If the next step is to process an item from a list, your response should be to first select the right item from the list.
-- Do not extract facts or summarize content unless the source has already been chosen.`;
+- Do not interpret or summarize any of the content. Only respond with the information.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -74,14 +73,14 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   const noContextYet = context === userMessage;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
-  const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable tak.`;
+  const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable task.`;
 
   const userPrompt = `Strategic Goal:\n${strategicGoal}\n
 Context:\n${context}\n
-Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}
+${completedSubGoals.length > 0 ? `Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
 ${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Your task is to define the single next step to make progress towards the strategic goal. Do not re-gather any data mentioned in the context.\n'}
 What is the immediate actionable task that moves you 1 step towards the strategic goal?
-Respond with just the single task description.`;
+Do not overcomplicate it, if it is straightforward. Respond with just the single task description.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -296,7 +295,7 @@ export const processOutput = fromPromise(async ({ input }: {
 /**
  * Evaluates if the overall strategic goal has been achieved and detects discoveries
  */
-export const evaluateGoalCompletion = fromPromise(async ({ input }: {
+export const evaluateStrategicGoalCompletion = fromPromise(async ({ input }: {
   input: {
     strategicGoal: string;
     completedSubGoals: string[];

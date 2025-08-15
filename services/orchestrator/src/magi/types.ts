@@ -75,7 +75,6 @@ export interface AgentContext {
   toolUser: ToolUser;
   shortTermMemory: ShortTermMemory;
   availableTools: MagiTool[];
-  hasDeliveredAnswer?: boolean;
   
   // Simple progress tracking
   cycleCount: number;

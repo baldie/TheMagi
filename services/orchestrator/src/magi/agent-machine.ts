@@ -14,7 +14,7 @@ import {
   evaluateSubGoalCompletion,
   gatherContext,
   processOutput,
-  evaluateGoalCompletion
+  evaluateStrategicGoalCompletion
 } from './agent-actions';
 import { isContextValid, canRetry, isToolValid, shouldStopForStagnation } from './agent-guards';
 import { speakWithMagiVoice } from '../tts';
@@ -244,20 +244,37 @@ export const agentMachine = createMachine({
     executingTool: {
       invoke: {
         src: fromPromise(async ({ input }: { input: { context: AgentContext } }) => {
+          let toolOutput = '';
           const { context } = input;
-          const toolExecutor = new ToolExecutor(context.toolUser, context.magiName, TIMEOUT_MS);
+
+          switch (context.selectedTool?.name) {
+            case 'ask-user':
+            case 'answer-user':
+              const magi = allMagi[context.magiName];
+              const ttsReady = await magi.makeTTSReady(context.processedOutput);
+              logger.debug(`\n🤖🔊\n${ttsReady}`);
+              void speakWithMagiVoice(ttsReady, context.magiName);
+              toolOutput = context.processedOutput;
+              break;
+
+            default:
+              const toolExecutor = new ToolExecutor(context.toolUser, context.magiName, TIMEOUT_MS);
           
-          if (!context.selectedTool) {
-            throw new Error('No tool selected');
+              if (!context.selectedTool) {
+                throw new Error('No tool selected');
+              }
+
+              const result = await toolExecutor.execute(context.selectedTool);
+              
+              if (!result.success) {
+                throw new Error(result.error ?? 'Tool execution failed');
+              }
+
+              toolOutput = result.output;
+              break;
           }
 
-          const result = await toolExecutor.execute(context.selectedTool);
-          
-          if (!result.success) {
-            throw new Error(result.error ?? 'Tool execution failed');
-          }
-
-          return result.output;
+          return toolOutput;
         }),
         input: ({ context }) => ({ context }),
         onDone: {
@@ -299,20 +316,9 @@ export const agentMachine = createMachine({
         }),
         onDone: {
           target: 'evaluatingSubGoal',
-          actions: [
-            assign({
-              processedOutput: ({ event }) => event.output,
-            }),
-            async ({ context }) => {
-              const toolName = context.selectedTool?.name;
-              if (toolName === 'ask-user' || toolName === 'answer-user') {
-                const magi = allMagi[context.magiName];
-                const ttsReady = await magi.makeTTSReady(context.processedOutput);
-                logger.debug(`\n🤖🔊\n${ttsReady}`);
-                void speakWithMagiVoice(ttsReady, context.magiName);
-              }
-            }
-          ],
+          actions: assign({
+            processedOutput: ({ event }) => event.output,
+          }),
         },
         onError: {
           target: 'evaluatingSubGoal',
@@ -344,7 +350,7 @@ export const agentMachine = createMachine({
         onDone: [
           {
             guard: ({ event }) => event.output === true,
-            target: 'evaluatingGoal',
+            target: 'evaluatingStrategicGoal',
             actions: assign({
               completedSubGoals: ({ context }) => [...context.completedSubGoals, context.currentSubGoal],
             }),
@@ -367,9 +373,9 @@ export const agentMachine = createMachine({
       }
     },
     
-    evaluatingGoal: {
+    evaluatingStrategicGoal: {
       invoke: {
-        src: evaluateGoalCompletion,
+        src: evaluateStrategicGoalCompletion,
         input: ({ context }) => ({
           strategicGoal: context.strategicGoal,
           completedSubGoals: context.completedSubGoals,
@@ -378,24 +384,6 @@ export const agentMachine = createMachine({
           magiName: context.magiName,
         }),
         onDone: [
-          {
-            guard: ({ event, context }) => event.output.achieved === true && context.hasDeliveredAnswer !== true,
-            target: 'executingTool',
-            actions: assign({
-              selectedTool: ({ context }) => ({ name: 'answer-user', parameters: { answer: context.processedOutput } }),
-              hasDeliveredAnswer: () => true,
-              lastProgressCycle: ({ context }) => context.cycleCount,
-            }),
-          },
-          {
-            guard: ({ event, context }) => event.output.achieved === true && (context.selectedTool?.name ?? '') !== 'answer-user',
-            target: 'gatheringContext',
-            actions: assign({
-              fullContext: ({ context }) => `${context.fullContext}\nPrepared result for user; drafting final answer...`,
-              retryCount: () => 0,
-              lastProgressCycle: ({ context }) => context.cycleCount,
-            }),
-          },
           {
             guard: ({ event }) => event.output.achieved === true,
             target: 'done',
