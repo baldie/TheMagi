@@ -1,7 +1,7 @@
 import { logger } from '../logger';
 import { ToolExecutor } from './tool-executor';
 import type { AgentContext } from './types';
-import { MAX_RETRIES } from './types';
+import { MAX_RETRIES, TIMEOUT_MS } from './types';
 
 // ============================================================================
 // AGENT GUARDS - Boolean checks for state machine transitions
@@ -52,7 +52,7 @@ export const isToolValid = ({ context }: { context: AgentContext }): boolean => 
     return false;
   }
 
-  const toolExecutor = new ToolExecutor(context.toolUser, context.magiName);
+  const toolExecutor = new ToolExecutor(context.toolUser, context.magiName, TIMEOUT_MS);
   const validation = toolExecutor.validateTool(context.selectedTool);
   
   if (!validation.isValid) {

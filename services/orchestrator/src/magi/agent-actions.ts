@@ -73,14 +73,18 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   const noContextYet = context === userMessage;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
-  const systemPrompt = `You are a tactical planner. Given a strategic goal and current context, determine the next specific, actionable task.`;
+  const systemPrompt = `You are a Strategic Goal Executor. You identify the single next actionable step needed to achieve the strategic goal. You look at the 'Strategic Goal' and respond with the most pragmatic action to achieve the goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
 
   const userPrompt = `Strategic Goal:\n${strategicGoal}\n
 Context:\n${context}\n
 ${completedSubGoals.length > 0 ? `Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
 ${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Your task is to define the single next step to make progress towards the strategic goal. Do not re-gather any data mentioned in the context.\n'}
-What is the immediate actionable task that moves you 1 step towards the strategic goal?
-Do not overcomplicate it, if it is straightforward. Respond with just the single task description.`;
+Determine the single most immediate actionable step needed to progress toward the Strategic Goal. This could be:
+Executing the full Strategic Goal if it's already actionable as stated
+Identifying the first sub-step if the Strategic Goal requires breakdown
+The next logical step if progress has been made but the goal isn't complete
+Frame the output as one of these actions: "analyze", "search", "read", "ask", or "answer"
+Output only the specific action command that should be executed next, no preamble`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -115,9 +119,9 @@ export const selectTool = fromPromise(async ({ input }: {
 Context:\n${context}\n
 Available tools:\n${toolList}\n
 Instructions:
-Select the tool that directly performs the action described in the Job.
-Use any information from the Context as parameters for the selected tool.
-Respond only with the complete JSON for your choice.
+Select the tool that directly performs the action described in The Job.
+Use information from the Context as parameters for the tool.
+Respond ONLY with the complete JSON.
 
 Format:
 {
@@ -135,6 +139,7 @@ Format:
     return response.tool as AgenticTool;
   } catch (error) {
     logger.error(`${magiName} failed to select tool:`, error);
+    return null;
   }
 });
 
@@ -151,7 +156,7 @@ export const evaluateSubGoalCompletion = fromPromise(async ({ input }: {
 }) => {
   const { subGoal, toolOutput, conduitClient, magiName } = input;
   
-  const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.`;
+  const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.\nIf the goal is to extract, a summary of the content is sufficient.`;
   
   const userPrompt = `Sub-goal:\n${subGoal}
 
@@ -183,7 +188,7 @@ function getRelevantContentFromRawText(userMessage: string, rawToolResponse: str
 
   INSTRUCTIONS:
   - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
-  - Extract Verbatim: Pull out the main content's text exactly as it is, preserving all original sentences, paragraphs, and their order.Avoid summarizing, synthesizing, or interpreting any text
+  - Extract Verbatim: Pull out the main content's text exactly as it is, preserving all original sentences, paragraphs, and their order. Avoid summarizing, synthesizing, or interpreting any text
   - Revelevant - Pay special attention to the user's message and the raw text to ensure that the output is relevant.
 
   EXCLUSION CRITERIA:
@@ -223,13 +228,10 @@ export const processOutput = fromPromise(async ({ input }: {
   
   // Process output based on tool type
   switch (tool.name) {
-    case 'ask-user': {
+    case 'ask-user':
+    case 'answer-user':
+    case 'summarize-info': {
       // For user-directed questions, use the tool output verbatim
-      processedOutput = toolOutput;
-      break;
-    }
-    case 'answer-user': {
-      // For user-directed answers, use the tool output verbatim
       processedOutput = toolOutput;
       break;
     }

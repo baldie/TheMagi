@@ -28,9 +28,15 @@ export function createConfiguredPlannerMachine(_magiName: MagiName, _userMessage
     actors: {
       agentMachine: agentMachine
     },
-    guards: {},
-    actions: {},
-    delays: {}
+    guards: {
+      // Add any magi-specific guards here if needed
+    },
+    actions: {
+      // Add any magi-specific actions here if needed
+    },
+    delays: {
+      // Add any magi-specific delays here if needed
+    }
   });
 }
 
@@ -46,10 +52,18 @@ export function createConfiguredAgentMachine(
   _availableTools: MagiTool[]
 ) {
   return agentMachine.provide({
-    actors: {},
-    guards: {},
-    actions: {},
-    delays: {}
+    actors: {
+      // Add any magi-specific actors here if needed
+    },
+    guards: {
+      // Add any magi-specific guards here if needed
+    },
+    actions: {
+      // Add any magi-specific actions here if needed
+    },
+    delays: {
+      // Add any magi-specific delays here if needed
+    }
   });
 }
 
@@ -140,30 +154,14 @@ message: "Play my favorite playlist"
   },
 };
 
-// Additional types needed (copied from magi.ts)
-interface HistoryEntry {
-  action: AgenticTool;
-  observation: string;
-  timestamp: Date;
-  stepDescription: string;
-}
-
-interface AgenticLoopState {
-  currentTopic: string;
-  synthesis: string;
-  goal: string;
-  executionHistory: HistoryEntry[];
-  warnings: string[];
-  prohibitedTools: string[];
-}
-
-// Minimal interface for ToolUser and ShortTermMemory compatibility
+// Interface for ToolUser and ShortTermMemory compatibility
 interface MagiCompatible {
   name: MagiName;
   withPersonality(systemPrompt: string): string;
   contact(userPrompt: string): Promise<string>;
   contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
   forget(): void;
+  ensureInitialized(): Promise<void>;
 }
 
 /**
@@ -180,11 +178,11 @@ export class Magi2 implements MagiCompatible {
   
   constructor(public name: MagiName, private readonly config: MagiConfig) {
     this.conduit = new ConduitClient(name);
-    this.toolUser = new ToolUser(this as MagiCompatible as any);
-    this.shortTermMemory = new ShortTermMemory(this as MagiCompatible as any);
+    this.toolUser = new ToolUser(this);
+    this.shortTermMemory = new ShortTermMemory(this);
   }
 
-  private async ensureInitialized(): Promise<void> {
+  public async ensureInitialized(): Promise<void> {
     // If already initialized (prompt + tools), do nothing
     if (this.personalityPrompt && this.toolsList.length > 0) {
       return;
@@ -239,8 +237,12 @@ export class Magi2 implements MagiCompatible {
       this.shortTermMemory.remember('user', userPrompt);
       this.shortTermMemory.remember(this.name, response);
     } catch (memoryError) {
-      logger.warn(`Failed to store memory for ${this.name}: ${memoryError}`);
-      // Continue execution - memory failure shouldn't break the response
+      logger.error(`Critical memory failure for ${this.name}:`, memoryError);
+      // Re-throw if memory is critical for this operation
+      if (memoryError instanceof Error && memoryError.message.includes('critical')) {
+        throw new Error(`Memory storage failed: ${memoryError.message}`);
+      }
+      // Continue execution for non-critical memory failures
     }
     
     return response;
@@ -282,6 +284,12 @@ export class Magi2 implements MagiCompatible {
   public async contactAsAgent(userMessage: string, _prohibitedTools: string[] = []): Promise<string> {
     try {
       await this.ensureInitialized();
+      
+      // Validate initialization completed successfully
+      if (!this.personalityPrompt || this.toolsList.length === 0) {
+        throw new Error(`${this.name} initialization incomplete - missing personality or tools`);
+      }
+      
       logger.info(`${this.name} beginning state machine agentic loop...`);
       // Create planner machine with proper context
       const plannerMachine = createConfiguredPlannerMachine(this.name, userMessage);
@@ -339,67 +347,6 @@ export class Magi2 implements MagiCompatible {
     }
   }
 
-  // @ts-expect-error will add later
-  private async _handleToolResponse(
-    tool: AgenticTool,
-    loopState: AgenticLoopState,
-    _userMessage: string,
-    actionHistory: string[]
-  ): Promise<{ response?: string; shouldBreak: boolean }> {
-    switch (tool.name) {
-      case 'ask-user': {
-        const response = tool.parameters.question as string;
-        logger.info(`${this.name} has a clarifying question: "${response}"`);
-        return { response, shouldBreak: true };
-      }
-
-      case 'answer-user': {
-        return { response: tool.parameters.answer as string, shouldBreak: true };
-      }
-
-      default: {
-        const toolResponse = await this.toolUser.executeWithTool(tool.name, tool.parameters);
-        
-        // Check for repetitive actions before adding to history
-        if (this.isRepetitiveAction(loopState.executionHistory, tool.name)) {
-          this.addRepetitiveActionWarning(loopState, tool.name);
-        }
-        
-        // Create structured history entry
-        const stepDescription = `${tool.name}: ${JSON.stringify(tool.parameters)}`;
-        const historyEntry: HistoryEntry = {
-          action: tool,
-          observation: toolResponse,
-          timestamp: new Date(),
-          stepDescription
-        };
-        
-        loopState.executionHistory.push(historyEntry);
-        
-        // Add action to legacy action history (still used for action tracking)
-        actionHistory.push(tool.name);
-        
-        return { shouldBreak: false };
-      }
-    }
-  }
-
-  /**
-   * Checks if an action is repetitive based on recent execution history
-   */
-  private isRepetitiveAction(executionHistory: HistoryEntry[], toolName: string): boolean {
-    const recentActions = executionHistory.slice(-2); // Last 2 actions (will be 3 total with current)
-    return recentActions.length === 2 && recentActions.every(entry => entry.action.name === toolName);
-  }
-
-  /**
-   * Adds warning to synthesis if repetitive action is detected
-   */
-  private addRepetitiveActionWarning(loopState: AgenticLoopState, toolName: string): void {
-    logger.warn(`${this.name} detected repetitive use of ${toolName} - forcing progression`);
-    loopState.warnings.push(`You have used the '${toolName}' tool three times in a row. You MUST use a different tool or provide a final answer now. Use any tool that is not '${toolName}'.`);
-  }
-  
   async makeTTSReady(text: string): Promise<string> {
     await this.ensureInitialized();
     const systemPrompt = `ROLE & GOAL

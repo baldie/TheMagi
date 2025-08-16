@@ -71,6 +71,12 @@ export class ToolExecutor {
       try { testHooks.recordToolCall('ask-user', { question: questionText }); } catch { /* no-op in non-test mode */ }
       return questionText;
     }
+
+    if (tool.name === 'summarize-info') {
+      const rawInfo = (tool.parameters.raw_info as string) || 'No information provided';
+      try { testHooks.recordToolCall('summarize-info', { raw_info: rawInfo }); } catch { /* no-op in non-test mode */ }
+      return rawInfo;
+    }
     
     // Execute regular tools through ToolUser
     return await this.toolUser.executeWithTool(tool.name, tool.parameters);

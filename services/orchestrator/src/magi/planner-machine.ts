@@ -5,6 +5,9 @@ import { agentMachine } from './agent-machine';
 import type { MagiName } from '../types/magi-types';
 import type { PlannerContext, PlannerEvent } from './types';
 import { TIMEOUT_MS } from './types';
+
+// Constants
+const EXECUTION_INIT_DELAY = 100; // Small delay to allow state stabilization
 import { PERSONAS_CONFIG } from './magi2';
 import { testHooks } from '../testing/test-hooks';
 import type { ToolUser } from './tool-user';
@@ -228,7 +231,7 @@ export const plannerMachine = createMachine({
         error: () => null,
       }),
       after: {
-        100: {
+        [EXECUTION_INIT_DELAY]: {
           target: 'invokingAgent'
         }
       }
@@ -273,7 +276,7 @@ export const plannerMachine = createMachine({
           },
         ],
         onError: {
-          target: 'evaluatingProgress',
+          target: 'handleFailure',
           actions: assign({
             agentResult: () => null,
             error: ({ event }) => `Agent failed: ${event.error}`,

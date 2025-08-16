@@ -245,33 +245,27 @@ export const agentMachine = createMachine({
       invoke: {
         src: fromPromise(async ({ input }: { input: { context: AgentContext } }) => {
           let toolOutput = '';
-          const { context } = input;
-
-          switch (context.selectedTool?.name) {
-            case 'ask-user':
-            case 'answer-user':
-              const magi = allMagi[context.magiName];
-              const ttsReady = await magi.makeTTSReady(context.processedOutput);
-              logger.debug(`\n🤖🔊\n${ttsReady}`);
-              void speakWithMagiVoice(ttsReady, context.magiName);
-              toolOutput = context.processedOutput;
-              break;
-
-            default:
-              const toolExecutor = new ToolExecutor(context.toolUser, context.magiName, TIMEOUT_MS);
           
-              if (!context.selectedTool) {
-                throw new Error('No tool selected');
-              }
+          const { toolUser, magiName, selectedTool } = input.context;
+          const toolExecutor = new ToolExecutor(toolUser, magiName, TIMEOUT_MS);
+      
+          if (!selectedTool) {
+            throw new Error('No tool selected');
+          }
 
-              const result = await toolExecutor.execute(context.selectedTool);
-              
-              if (!result.success) {
-                throw new Error(result.error ?? 'Tool execution failed');
-              }
+          const result = await toolExecutor.execute(selectedTool);
+          
+          if (!result.success) {
+            throw new Error(result.error ?? 'Tool execution failed');
+          }
 
-              toolOutput = result.output;
-              break;
+          toolOutput = result.output;
+        
+          if (selectedTool.name === 'ask-user' || selectedTool.name === 'answer-user') {
+            const magi = allMagi[magiName];
+            const ttsReady = await magi.makeTTSReady(toolOutput);
+            logger.debug(`\n🤖🔊\n${ttsReady}`);
+            void speakWithMagiVoice(ttsReady, magiName);
           }
 
           return toolOutput;

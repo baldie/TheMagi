@@ -226,7 +226,21 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         required: true
       }
     },
-  }
+  },
+  'summarize-info': {
+    name: 'summarize-info',
+    description: 'This tool allows you to summarize, analyze, or parse information',
+    category: ToolCategory.DEFAULT_AGENTIC_TOOL,
+    defaults: {},
+    responseType: 'TextResponse',
+    parameters: {
+      raw_info: {
+        type: 'string',
+        description: 'The information to summarize, analyze, or parse',
+        required: true
+      }
+    }
+  },
 };
 
 /**

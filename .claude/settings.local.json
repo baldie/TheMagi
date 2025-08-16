@@ -97,7 +97,8 @@
       "Bash(./debug-phantom-websocket.sh:*)",
       "Bash(./test-server-binding.sh:*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "acceptEdits"
   },
   "hooks": {
     "Stop": [

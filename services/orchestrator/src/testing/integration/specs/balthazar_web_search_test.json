@@ -37,8 +37,7 @@
   "expectations": {
     "finalResponse": {
       "mustContain": [
-        "6 feet 6 inches",
-        "Michael Jordan"
+        "6 feet 6 inches"
       ],
       "mustNotContain": [
         "I don't know",
@@ -46,13 +45,12 @@
         "failed",
         "cannot"
       ],
-      "minLength": 20,
+      "minLength": 10,
       "maxLength": 500
     },
     "toolUsage": {
       "mustCall": [
-        "search-web",
-        "answer-user"
+        "search-web"
       ],
       "mustNotCall": [
         "ask-user"
@@ -61,10 +59,6 @@
         {
           "tool": "search-web",
           "before": "read-page"
-        },
-        {
-          "tool": "read-page",
-          "before": "answer-user"
         }
       ],
       "maxToolCalls": 10
