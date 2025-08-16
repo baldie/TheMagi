@@ -58,9 +58,6 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
 
     ws.on('message', async (rawMessage: Buffer) => {
       console.log('🔥🔥🔥 WEBSOCKET MESSAGE HANDLER TRIGGERED! 🔥🔥🔥');
-      logger.info('[DEBUG] SIMPLE MESSAGE RECEIVED');
-      logger.info(`[DEBUG] Raw message length: ${rawMessage.length}`);
-      logger.info(`[DEBUG] Raw message type: ${typeof rawMessage}`);
       
       try {
         const message = rawMessage.toString();
@@ -69,12 +66,10 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
         logger.info(`[DEBUG] Parsed message type: ${parsedMessage.type}`);
         
         if (parsedMessage.type === 'start-magi') {
-          logger.info('[DEBUG] Got start-magi message!');
           
           // Send initial ACK
           const ackResponse = { type: 'ack', data: 'WORKING', source: 'message-handler' };
           ws.send(JSON.stringify(ackResponse));
-          logger.info(`[DEBUG] Sent WORKING ack: ${JSON.stringify(ackResponse)}`);
           
           // Extract user message and call the routing callback
           const userMessage = parsedMessage.data?.userMessage || '';

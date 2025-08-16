@@ -73,18 +73,19 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   const noContextYet = context === userMessage;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
-  const systemPrompt = `You are a Strategic Goal Executor. You identify the single next actionable step needed to achieve the strategic goal. You look at the 'Strategic Goal' and respond with the most pragmatic action to achieve the goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
+  const systemPrompt = `You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
 
   const userPrompt = `Strategic Goal:\n${strategicGoal}\n
-Context:\n${context}\n
+Context:\n${context.trim()}\n
 ${completedSubGoals.length > 0 ? `Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
-${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Your task is to define the single next step to make progress towards the strategic goal. Do not re-gather any data mentioned in the context.\n'}
-Determine the single most immediate actionable step needed to progress toward the Strategic Goal. This could be:
-Executing the full Strategic Goal if it's already actionable as stated
-Identifying the first sub-step if the Strategic Goal requires breakdown
-The next logical step if progress has been made but the goal isn't complete
-Frame the output as one of these actions: "analyze", "search", "read", "ask", or "answer"
-Output only the specific action command that should be executed next, no preamble`;
+${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Do not re-gather any data mentioned in the context.\n'}
+INSTRUCTIONS:
+What should they do to accomplish their Strategic Goal? This could be:
+* Simply executing their Strategic Goal if it's simple an actionable already
+* Identifying the first sub-step if their Strategic Goal requires breakdown
+* The next logical step if progress has been made but the goal isn't complete
+* Frame the output as one of these actions: "analyze", "search", "read", "ask", or "respond"
+Output ONLY the specific action command that should be executed next - No preamble and No examples.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
