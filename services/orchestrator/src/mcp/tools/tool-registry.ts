@@ -161,8 +161,8 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     },
   },
 
-  'personal-data': {
-    name: 'personal-data',
+  'access-data': {
+    name: 'access-data',
     description: 'Store and retrieve user personal data and preferences using vector search',
     category: ToolCategory.PERSONAL_DATA,
     defaults: { action: 'retrieve' },
@@ -258,12 +258,12 @@ export function getToolServers(): Record<string, ToolServerConfig> {
       },
       provides: ['tavily-search', 'tavily-extract']
     },
-    'personal-data': {
-      name: 'personal-data',
+    'access-data': {
+      name: 'access-data',
       command: 'ts-node',
       args: [path.join(__dirname, '..', 'servers', 'personal-data-server.ts')],
       env: {},
-      provides: ['personal-data']
+      provides: ['access-data']
     }
   };
 }

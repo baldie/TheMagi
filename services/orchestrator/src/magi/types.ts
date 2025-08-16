@@ -32,6 +32,8 @@ export interface PlannerContext {
   planRevisions: Array<{ reason: string; originalPlan: string[]; newPlan: string[] }>;
   // Accumulated results from completed steps
   accumulatedResults: string[];
+  // Track last executed tool for early termination
+  lastExecutedTool: string | null;
 }
 
 /**

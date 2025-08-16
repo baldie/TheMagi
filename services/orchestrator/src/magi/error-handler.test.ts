@@ -12,6 +12,7 @@ jest.mock('../logger', () => ({
   }
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const mockLogger = require('../logger').logger;
 
 // Mock Date.now for timing tests

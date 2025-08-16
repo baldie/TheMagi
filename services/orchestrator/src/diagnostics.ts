@@ -360,7 +360,7 @@ async function verifyMcpServers(): Promise<void> {
             logger.info(`... ${magiName}: Testing personal-data tool availability...`);
             
             // Check if personal-data tool exists
-            const hasPersonalDataTool = tools.some(tool => tool.name === 'personal-data');
+            const hasPersonalDataTool = tools.some(tool => tool.name === 'access-data');
             
             if (hasPersonalDataTool) {
               logger.info(`... ${magiName}: ✅ personal-data tool FOUND`);
@@ -369,7 +369,7 @@ async function verifyMcpServers(): Promise<void> {
                 // Test write operation
                 const testWriteResult = await mcpClientManager.executeTool(
                   MagiName.Melchior,
-                  'personal-data',
+                  'access-data',
                   {
                     action: 'store',
                     content: 'System diagnostic test data',
@@ -385,7 +385,7 @@ async function verifyMcpServers(): Promise<void> {
                   // Test read operation
                   const testReadResult = await mcpClientManager.executeTool(
                     MagiName.Melchior,
-                    'personal-data',
+                    'access-data',
                     {
                       action: 'retrieve',
                       categories: ['diagnostics']

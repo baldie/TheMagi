@@ -89,7 +89,7 @@ export type ToolResponseMap = {
   'smart-home-devices': SmartHomeResponse;
   
   // Personal data tools
-  'personal-data': PersonalDataResponse;
+  'access-data': PersonalDataResponse;
 };
 
 /**

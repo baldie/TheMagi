@@ -10,6 +10,8 @@ import type { AgenticTool } from './magi2';
 // AGENT ACTIONS - Async operations for the agent state machine
 // ============================================================================
 
+const COMMON_ACTIONS = ['ask', 'answer', 'read', 'search', 'analyze', 'summarize', 'access', 'extract', 'respond'];
+
 /**
  * Gathers context for the current strategic goal
  */
@@ -70,6 +72,12 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
   } 
 }) => {
   const { strategicGoal, context, completedSubGoals, conduitClient, magiName, userMessage } = input;
+
+  const isStraightForward = (COMMON_ACTIONS.some(action => strategicGoal.trim().toLowerCase().startsWith(action)));
+  if (isStraightForward) {
+    return strategicGoal;
+  }
+
   const noContextYet = context === userMessage;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
@@ -84,7 +92,7 @@ What should they do to accomplish their Strategic Goal? This could be:
 * Simply executing their Strategic Goal if it's simple an actionable already
 * Identifying the first sub-step if their Strategic Goal requires breakdown
 * The next logical step if progress has been made but the goal isn't complete
-* Frame the output as one of these actions: "analyze", "search", "read", "ask", or "respond"
+* Start your output with one of these words: ${COMMON_ACTIONS.join(', ')}
 Output ONLY the specific action command that should be executed next - No preamble and No examples.`;
 
   try {
@@ -106,9 +114,10 @@ export const selectTool = fromPromise(async ({ input }: {
     conduitClient: ConduitClient;
     context: string;
     magiName: MagiName;
+    userMessage: string;
   } 
 }) => {
-  const { subGoal, availableTools, conduitClient, magiName, context } = input;
+  const { subGoal, availableTools, conduitClient, magiName, context, userMessage } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
@@ -117,6 +126,7 @@ export const selectTool = fromPromise(async ({ input }: {
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
   const userPrompt = `The Job:\n${subGoal}\n
+User Message:\n${userMessage}\n
 Context:\n${context}\n
 Available tools:\n${toolList}\n
 Instructions:
@@ -252,9 +262,9 @@ export const processOutput = fromPromise(async ({ input }: {
       }
       break;
     
-    case 'personal-data': {
+    case 'access-data': {
         // Summarize the data we received back in human readable form
-        logger.debug(`Raw personal-data retrieved: ${toolOutput}`);
+        logger.debug(`Raw access-data retrieved: ${toolOutput}`);
         const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary.`;
         logger.debug(`Summary prompt:\n${summarize}`);
         processedOutput = await conduitClient.contact(

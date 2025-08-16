@@ -292,7 +292,7 @@ export class McpClientManager {
         const mcpToFriendlyMap: Record<string, string> = {
           'tavily-search': 'search-web',
           'tavily-extract': 'read-page',
-          'personal-data': 'personal-data'  // Direct mapping for personal-data tool
+          'access-data': 'access-data'  // Direct mapping for access-data tool
         };
         
         const tools = response.tools
@@ -403,7 +403,7 @@ export class McpClientManager {
         const friendlyToMcpMap: Record<string, string> = {
           'search-web': 'tavily-search',
           'read-page': 'tavily-extract',
-          'personal-data': 'personal-data'  // Direct mapping for personal-data tool
+          'access-data': 'access-data'  // Direct mapping for access-data tool
         };
         
         // Map friendly tool name to MCP tool name for lookup
@@ -440,7 +440,7 @@ export class McpClientManager {
     const friendlyToMcpMap: Record<string, string> = {
       'search-web': 'tavily-search',
       'read-page': 'tavily-extract',
-      'personal-data': 'personal-data'  // Direct mapping for personal-data tool
+      'access-data': 'access-data'  // Direct mapping for access-data tool
     };
     const mcpToolName = friendlyToMcpMap[toolName] || toolName;
     

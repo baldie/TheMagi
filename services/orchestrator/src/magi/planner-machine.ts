@@ -30,7 +30,7 @@ const createStrategicPlan = fromPromise(async ({ input }: {
 }) => {
   const { userMessage, conduitClient, magiName } = input;
   
-  const systemPrompt = `PERSONA\nYou are a quick strategic planner. Consider how you will respond to the user's message.`;
+  const systemPrompt = `PERSONA\nYou are a quick strategic planner. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the user's message.`;
   
   const userPrompt = `INSTRUCTIONS:
 Create a high-level plan for how to address the user's message.
@@ -125,6 +125,14 @@ const isPlanValid = ({ context }: { context: PlannerContext }): boolean => {
          context.strategicPlan.every(step => typeof step === 'string' && step.trim().length > 0);
 };
 
+/**
+ * Checks if the last executed tool should trigger early termination
+ */
+const shouldTerminateEarly = ({ context }: { context: PlannerContext }): boolean => {
+  const userInteractionTools = ['answer-user', 'ask-user'];
+  return context.lastExecutedTool !== null && userInteractionTools.includes(context.lastExecutedTool);
+};
+
 
 // ============================================================================
 // PLANNER MACHINE
@@ -161,6 +169,7 @@ export const plannerMachine = createMachine({
     workingMemory: input.workingMemory,
     planRevisions: [],
     accumulatedResults: [],
+    lastExecutedTool: null,
   }),
   states: {
     validateContext: {
@@ -271,6 +280,9 @@ export const plannerMachine = createMachine({
                 const result = event.output?.result || 'Agent completed';
                 return [...context.accumulatedResults, result];
               },
+              lastExecutedTool: ({ event }) => {
+                return event.output?.lastExecutedTool || null;
+              },
               error: () => null,
             }),
           },
@@ -312,6 +324,10 @@ export const plannerMachine = createMachine({
     checkingPlanCompletion: {
       always: [
         {
+          guard: shouldTerminateEarly,
+          target: 'done',
+        },
+        {
           guard: hasMoreSteps,
           target: 'invokingAgent',
           actions: assign({
@@ -319,6 +335,7 @@ export const plannerMachine = createMachine({
             currentGoal: ({ context }) => context.strategicPlan[context.currentStepIndex + 1] || '',
             agentResult: () => null,
             error: () => null,
+            lastExecutedTool: () => null,
           }),
         },
         {

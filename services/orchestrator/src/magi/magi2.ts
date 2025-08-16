@@ -87,6 +87,7 @@ export type {
 interface MagiConfig {
   model: ModelType;
   personalitySource: string;
+  strategicPersonaInstructions: string;
   strategicPlanExamples: string;
   executeGoalPrompt: string;
   options: {
@@ -104,6 +105,7 @@ export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
     model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
+    strategicPersonaInstructions: ``,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Who is the CEO of American Express?"
 {"plan": ["Search web for keywords related to American Express CEO", "Extract content from most relevant search result URL", "Respond with the answer"]}
@@ -121,15 +123,16 @@ message: "What is the weather like this weekend in Menlo Park?"
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
+    strategicPersonaInstructions: `The user has consented to you accessing their personal data. There is useful information available in there about the user and their preferences. It is recommended that you access that first before asking the user for information that might be contained within. `,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Recommend a good movie for me to watch tonight."
 {"plan": ["Search personal data for movie preferences", "Search web for highly-rated movies matching preferences", "Extract content from most relevant search result URL", "Respond with a list of movie recommendations"]}
 
-Example 4:
+EXAMPLE 4:
 message: "No, I don't like horror movies. Suggest something else."
 {"plan": ["Update user's movie preferences", "Collect a list of recommendations that are not in the horror genre", "Respond with updated list of movie recommendations"]}
 
-Example 5:
+EXAMPLE 5:
 message: "My favorite color is blue."
 {"plan": ["Save 'blue' as the user's favorite color in personal data", "Acknowledge the user's preference will be remembered and ask if there is more context to the statement."]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
@@ -138,6 +141,7 @@ message: "My favorite color is blue."
   [MagiName.Caspar]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
+    strategicPersonaInstructions: ``,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Turn off the lights in the living room."
 {"plan": ["Search smart home devices for light controls", "Send command to turn off living room lights", "Respond with confirmation that lights are off"]}

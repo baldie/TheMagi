@@ -5,7 +5,7 @@ import type { McpServerConfig } from '../index';
 /**
  * Melchior's intuitive tools - focused on personal data about the user
  * 
- * Tools assigned: personal-data, ask-user, answer-user
+ * Tools assigned: access-data, ask-user, answer-user
  * - Access user personal data and preferences
  * - User context and behavioral insights
  * - Core agentic tools for user interaction
@@ -15,7 +15,7 @@ import type { McpServerConfig } from '../index';
  * Get Melchior's tool assignments from the registry
  */
 export function getMelchiorToolAssignments(): string[] {
-  return ['personal-data', 'ask-user', 'answer-user', 'summarize-info'];
+  return ['access-data', 'ask-user', 'answer-user', 'summarize-info'];
 }
 
 /**

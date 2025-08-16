@@ -39,14 +39,15 @@ export const agentMachine = createMachine({
       availableTools: MagiTool[];
       workingMemory?: string;
     },
-    output: {} as { result: string; } | { error: string }
+    output: {} as { result: string; lastExecutedTool?: string; } | { error: string }
   },
   output: ({ context }) => {
     if (context.error) {
       return { error: context.error };
     }
     return {
-      result: context.processedOutput
+      result: context.processedOutput,
+      lastExecutedTool: context.selectedTool?.name
     };
   },
   initial: 'validateContext',
@@ -192,6 +193,7 @@ export const agentMachine = createMachine({
           availableTools: context.availableTools,
           conduitClient: context.conduitClient,
           context: context.promptContext,
+          userMessage: context.userMessage,
           magiName: context.magiName,
         }),
         onDone: {

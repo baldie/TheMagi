@@ -198,8 +198,8 @@ class PersonalDataServer {
       return {
         tools: [
           {
-            name: 'personal-data',
-            description: 'Store or Retrieve data about the user using vector similarity search. IMPORTANT: You MUST store any personal data or preferences that the user has shared with you if you have not done so already.',
+            name: 'access-data',
+            description: 'Store or Retrieve data about the user using vector similarity search. This data store already has been populated by the user.',
             inputSchema: {
               type: 'object',
               properties: {
@@ -243,7 +243,7 @@ class PersonalDataServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
-      if (name !== 'personal-data') {
+      if (name !== 'access-data') {
         throw new McpError(
           ErrorCode.MethodNotFound,
           `Unknown tool: ${name}`

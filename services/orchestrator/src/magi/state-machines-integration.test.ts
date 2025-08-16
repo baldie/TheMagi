@@ -213,7 +213,7 @@ describe('State Machines Integration Tests', () => {
       
       agentActor.subscribe((state) => {
         stateTransitions.push(state.value as string);
-        console.log(`Agent state: ${state.value}, context errors:`, state.context.error);
+        console.log(`Agent state: ${String(state.value)}, context errors:`, state.context.error);
       });
 
       agentActor.start();

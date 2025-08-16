@@ -126,6 +126,7 @@ describe('Agent Guards', () => {
   });
 
   describe('isToolValid', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mockToolExecutor = require('./tool-executor').ToolExecutor;
 
     beforeEach(() => {
