@@ -15,7 +15,7 @@ import type { McpServerConfig } from '../index';
  * Get Caspar's tool assignments from the registry
  */
 export function getCasparToolAssignments(): string[] {
-  return ['smart-home-devices', 'ask-user', 'answer-user', 'summarize-info'];
+  return ['smart-home-devices', 'ask-user', 'answer-user', 'process-info'];
 }
 
 /**

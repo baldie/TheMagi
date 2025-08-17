@@ -72,9 +72,9 @@ export class ToolExecutor {
       return questionText;
     }
 
-    if (tool.name === 'summarize-info') {
+    if (tool.name === 'process-info') {
       const rawInfo = (tool.parameters.raw_info as string) || 'No information provided';
-      try { testHooks.recordToolCall('summarize-info', { raw_info: rawInfo }); } catch { /* no-op in non-test mode */ }
+      try { testHooks.recordToolCall('process-info', { raw_info: rawInfo }); } catch { /* no-op in non-test mode */ }
       return rawInfo;
     }
     

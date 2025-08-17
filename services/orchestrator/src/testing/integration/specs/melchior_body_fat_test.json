@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "enabled": true
+  },
+  "test": {
+    "name": "body_fat_goal_calculation",
+    "description": "User asks about progress toward 15% body fat goal - should access personal data and calculate difference",
+    "magi": "Melchior",
+    "baselineDate": "2025-08-16",
+    "timeout": 30000
+  },
+  "input": {
+    "userMessage": "m: I'm trying to get down to 15% bodyfat, how far do I have to go?"
+  },
+  "toolStubs": {
+    "access-data": {
+      "responses": [
+        {
+          "when": {
+            "action": "store"
+          },
+          "response": "User's fitness goal: Reduce body fat percentage to 15% has been stored"
+        },
+        {
+          "when": {
+            "action": "retrieve"
+          },
+          "response": "Current body fat percentage: 22%"
+        }
+      ]
+    },
+    "answer-user": {
+      "response": "Based on your current body fat of 22% and your goal of 15%, you need to reduce your body fat by 7 percentage points to reach your target.",
+      "ignoreParameters": true
+    }
+  },
+  "expectations": {
+    "finalResponse": {
+      "mustContain": [
+        "7",
+        "percentage",
+        "22%",
+        "15%"
+      ],
+      "mustNotContain": [
+        "I don't know",
+        "error",
+        "failed",
+        "cannot"
+      ],
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "toolUsage": {
+      "mustCall": [
+        "access-data",
+        "process-info",
+        "answer-user"
+      ],
+      "mustNotCall": [
+        "ask-user"
+      ],
+      "expectedOrder": [
+        {
+          "tool": "access-data",
+          "before": "answer-user"
+        }
+      ],
+      "maxToolCalls": 3
+    },
+    "behavior": {
+      "shouldComplete": true,
+      "maxDuration": 45000,
+      "shouldSpeak": true
+    },
+    "planning": {
+      "goalCount": {
+        "min": 3,
+        "max": 3
+      },
+      "shouldPlanFor": [
+        "Store user's goal to reach 15% bodyfat",
+        "Access user’s personal data for fitness goals and current body fat percentage",
+        "Calculate the distance to 15% body fat based on current data",
+        "Respond with the calculated distance to goal body fat."
+      ]
+    }
+  }
+}

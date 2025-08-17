@@ -21,6 +21,23 @@ import { speakWithMagiVoice } from '../tts';
 import { allMagi } from './magi2';
 
 // ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Checks if the agent should terminate early based on the last tool used
+ */
+const shouldAgentTerminateEarly = ({ context, event }: { context: AgentContext; event: any }): boolean => {
+  // Check if event.output is true (sub-goal completed)
+  if (event.output === true) {
+    // Check if last tool was answer-user or ask-user
+    const userInteractionTools = ['answer-user', 'ask-user'];
+    return context.selectedTool !== null && userInteractionTools.includes(context.selectedTool.name);
+  }
+  return false;
+};
+
+// ============================================================================
 // AGENT MACHINE
 // ============================================================================
 
@@ -344,6 +361,13 @@ export const agentMachine = createMachine({
           magiName: context.magiName,
         }),
         onDone: [
+          {
+            guard: shouldAgentTerminateEarly,
+            target: 'done',
+            actions: assign({
+              completedSubGoals: ({ context }) => [...context.completedSubGoals, context.currentSubGoal],
+            }),
+          },
           {
             guard: ({ event }) => event.output === true,
             target: 'evaluatingStrategicGoal',

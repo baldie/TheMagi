@@ -115,8 +115,11 @@ const createSimpleCompletionPromise = (actor: any) => {
 };
 
 describe('State Machines Integration Tests', () => {
+  let actors: any[] = [];
+
   beforeEach(() => {
     jest.clearAllMocks();
+    actors = [];
     mockMcpClientManager.initialize.mockResolvedValue(undefined);
     mockMcpClientManager.getMCPToolInfoForMagi.mockResolvedValue(createMockTools());
     // Mock tool execution to return successful results
@@ -129,6 +132,16 @@ describe('State Machines Integration Tests', () => {
       console.log('Mock tool execution returning:', result);
       return result;
     });
+  });
+
+  afterEach(() => {
+    // Ensure all actors are stopped to prevent async leaks
+    actors.forEach(actor => {
+      if (actor && typeof actor.stop === 'function') {
+        actor.stop();
+      }
+    });
+    actors = [];
   });
 
   describe('Planner Machine Happy Path', () => {
@@ -150,6 +163,7 @@ describe('State Machines Integration Tests', () => {
           workingMemory: ''
         }
       });
+      actors.push(plannerActor);
 
       const stateTransitions: string[] = [];
       
@@ -184,7 +198,6 @@ describe('State Machines Integration Tests', () => {
         console.log('Final context:', finalState.context);
       }
 
-      plannerActor.stop();
     }, 10000);
   });
 
@@ -208,12 +221,12 @@ describe('State Machines Integration Tests', () => {
           workingMemory: ''
         }
       });
+      actors.push(agentActor);
 
       const stateTransitions: string[] = [];
       
       agentActor.subscribe((state) => {
         stateTransitions.push(state.value as string);
-        console.log(`Agent state: ${String(state.value)}, context errors:`, state.context.error);
       });
 
       agentActor.start();
@@ -249,7 +262,6 @@ describe('State Machines Integration Tests', () => {
       }
       expect(finalSnapshot.context.strategicGoal).toBe('Test strategic goal');
 
-      agentActor.stop();
     }, 10000);
   });
 
@@ -272,6 +284,7 @@ describe('State Machines Integration Tests', () => {
           workingMemory: ''
         }
       });
+      actors.push(plannerActor);
 
       const plannerStates: string[] = [];
 
@@ -294,7 +307,6 @@ describe('State Machines Integration Tests', () => {
       expect(finalState.context.strategicPlan).toHaveLength(2);
       expect(finalState.context.currentStepIndex).toBeGreaterThanOrEqual(0);
 
-      plannerActor.stop();
     }, 15000);
   });
 
@@ -317,6 +329,7 @@ describe('State Machines Integration Tests', () => {
           workingMemory: ''
         }
       });
+      actors.push(plannerActor);
 
       plannerActor.start();
 
@@ -325,7 +338,6 @@ describe('State Machines Integration Tests', () => {
       expect(finalState.value).toBe('failed');
       expect(finalState.context.error).toBe('Planner context validation failed');
 
-      plannerActor.stop();
     });
 
     it('should handle agent context validation failure', () => {
@@ -347,6 +359,7 @@ describe('State Machines Integration Tests', () => {
           workingMemory: ''
         }
       });
+      actors.push(agentActor);
 
       agentActor.start();
 
@@ -355,7 +368,6 @@ describe('State Machines Integration Tests', () => {
       expect(finalState.value).toBe('failed');
       expect(finalState.context.error).toBe('Context validation failed');
 
-      agentActor.stop();
     });
   });
 });

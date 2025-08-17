@@ -15,7 +15,7 @@ import type { McpServerConfig } from '../index';
  * Get Balthazar's tool assignments
  */
 export function getBalthazarToolAssignments(): string[] {
-  return ['search-web', 'read-page', 'ask-user', 'answer-user', 'summarize-info'];
+  return ['search-web', 'read-page', 'ask-user', 'answer-user', 'process-info'];
 }
 
 /**

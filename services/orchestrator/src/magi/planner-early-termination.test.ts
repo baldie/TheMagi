@@ -35,16 +35,13 @@ describe('Planner Early Termination', () => {
       }
     });
 
-    // Subscribe to state changes
-    const states: string[] = [];
-    plannerActor.subscribe((state) => {
-      states.push(state.value as string);
-    });
-
     plannerActor.start();
 
     // Wait for plan creation
     await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Stop the actor to prevent async leaks
+    plannerActor.stop();
 
     // Simulate agent completion with answer-user tool
     const context = plannerActor.getSnapshot().context;

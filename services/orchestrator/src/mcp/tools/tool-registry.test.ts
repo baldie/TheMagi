@@ -30,10 +30,10 @@ describe('ToolRegistry', () => {
       expect(servers).toHaveLength(0);
     });
 
-    it('should return personal-data server for Melchior', () => {
+    it('should return access-data server for Melchior', () => {
       const servers = ToolRegistry.getServersForMagi(MagiName.Melchior);
       expect(servers).toHaveLength(1);
-      expect(servers[0].name).toBe('personal-data');
+      expect(servers[0].name).toBe('access-data');
     });
   });
 
@@ -55,7 +55,7 @@ describe('ToolRegistry', () => {
 
     it('should not identify non-extract tools', () => {
       expect(ToolRegistry.isWebExtractTool('search-web')).toBe(false);
-      expect(ToolRegistry.isWebExtractTool('personal-data')).toBe(false);
+      expect(ToolRegistry.isWebExtractTool('access-data')).toBe(false);
     });
   });
 
@@ -97,7 +97,7 @@ describe('ToolRegistry', () => {
       expect(TOOL_REGISTRY['search-web']).toBeDefined();
       expect(TOOL_REGISTRY['read-page']).toBeDefined();
       expect(TOOL_REGISTRY['smart-home-devices']).toBeDefined();
-      expect(TOOL_REGISTRY['personal-data']).toBeDefined();
+      expect(TOOL_REGISTRY['access-data']).toBeDefined();
     });
 
     it('should have proper defaults defined', () => {

@@ -123,7 +123,7 @@ message: "What is the weather like this weekend in Menlo Park?"
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
-    strategicPersonaInstructions: `The user has consented to you accessing their personal data. There is useful information available in there about the user and their preferences. It is recommended that you access that first before asking the user for information that might be contained within. `,
+    strategicPersonaInstructions: `The user has consented to you accessing their personal data. There is useful information available in there about the user and their preferences. It is recommended that you access that first before asking the user for information that might be contained within. If the user's message reveals a goal, preference, or other personal information worth remembering, the first goal should be to remember that information`,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Recommend a good movie for me to watch tonight."
 {"plan": ["Search personal data for movie preferences", "Search web for highly-rated movies matching preferences", "Extract content from most relevant search result URL", "Respond with a list of movie recommendations"]}

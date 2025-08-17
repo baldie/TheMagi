@@ -2,7 +2,7 @@ import { fromPromise } from 'xstate';
 import { logger } from '../logger';
 import { PERSONAS_CONFIG } from './magi2';
 import type { ConduitClient } from './conduit-client';
-import type { MagiName } from '../types/magi-types';
+import { MagiName } from '../types/magi-types';
 import type { GoalCompletionResult } from './types';
 import type { AgenticTool } from './magi2';
 
@@ -10,7 +10,7 @@ import type { AgenticTool } from './magi2';
 // AGENT ACTIONS - Async operations for the agent state machine
 // ============================================================================
 
-const COMMON_ACTIONS = ['ask', 'answer', 'read', 'search', 'analyze', 'summarize', 'access', 'extract', 'respond'];
+const COMMON_ACTIONS = ['ask', 'answer', 'read', 'search', 'analyze', 'summarize', 'store', 'access', 'extract', 'respond'];
 
 /**
  * Gathers context for the current strategic goal
@@ -83,7 +83,7 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
 
   const systemPrompt = `You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
 
-  const userPrompt = `Strategic Goal:\n${strategicGoal}\n
+  const userPrompt = `Their Strategic Goal:\n${strategicGoal}\n
 Context:\n${context.trim()}\n
 ${completedSubGoals.length > 0 ? `Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
 ${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Do not re-gather any data mentioned in the context.\n'}
@@ -121,16 +121,15 @@ export const selectTool = fromPromise(async ({ input }: {
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
-  const systemPrompt = `You are a tool selector. Choose the most appropriate tool for the job.`;
+  const systemPrompt = `Persona:\nYou are a tool selector. Choose the tool that will allow you to '${subGoal}.'`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
   const userPrompt = `The Job:\n${subGoal}\n
-User Message:\n${userMessage}\n
-Context:\n${context}\n
+User Message:\n${userMessage}${context.trim() !== userMessage ? `\nContext:\n${context}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
-Select the tool that directly performs the action described in The Job.
+Choose the tool that will allow you to '${subGoal}.'
 Use information from the Context as parameters for the tool.
 Respond ONLY with the complete JSON.
 
@@ -241,7 +240,7 @@ export const processOutput = fromPromise(async ({ input }: {
   switch (tool.name) {
     case 'ask-user':
     case 'answer-user':
-    case 'summarize-info': {
+    case 'process-info': {
       // For user-directed questions, use the tool output verbatim
       processedOutput = toolOutput;
       break;

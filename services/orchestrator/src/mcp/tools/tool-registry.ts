@@ -163,7 +163,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
   'access-data': {
     name: 'access-data',
-    description: 'Store and retrieve user personal data and preferences using vector search',
+    description: 'Store and retrieve user personal data and preferences using vector search.',
     category: ToolCategory.PERSONAL_DATA,
     defaults: { action: 'retrieve' },
     responseType: 'PersonalDataResponse',
@@ -227,8 +227,8 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       }
     },
   },
-  'summarize-info': {
-    name: 'summarize-info',
+  'process-info': {
+    name: 'process-info',
     description: 'This tool allows you to summarize, analyze, or parse information',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
@@ -290,7 +290,10 @@ export class ToolRegistry {
   private static mapToMcpToolName(friendlyName: string): string {
     const mapping: Record<string, string> = {
       'search-web': 'tavily-search',
-      'read-page': 'tavily-extract'
+      'read-page': 'tavily-extract',
+      'store-data': 'access-data',
+      'remember-data': 'access-data',
+      'retrieve-data': 'access-data'
     };
     return mapping[friendlyName] || friendlyName;
   }

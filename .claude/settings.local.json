@@ -95,7 +95,10 @@
       "Bash(npm cache clean:*)",
       "Bash(ss:*)",
       "Bash(./debug-phantom-websocket.sh:*)",
-      "Bash(./test-server-binding.sh:*)"
+      "Bash(./test-server-binding.sh:*)",
+      "Bash(npm --version)",
+      "Bash(ng build:*)",
+      "WebSearch"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
