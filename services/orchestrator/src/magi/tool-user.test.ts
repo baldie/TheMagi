@@ -237,4 +237,248 @@ describe('ToolUser', () => {
       expect(result).toBe('');
     });
   });
+
+  describe('checkForDuplicatePersonalData', () => {
+    beforeEach(() => {
+      mockMcpClientManager.initialize.mockResolvedValue(undefined);
+    });
+
+    it('should detect duplicate data and return early', async () => {
+      // Mock search result with high similarity match
+      const searchResponseData = {
+        data: {
+          query: 'Similar content to store',
+          items: [
+            {
+              id: 'existing-item-1',
+              content: 'Very similar content',
+              category: 'Health & Wellness',
+              similarity_score: 0.97
+            }
+          ],
+          total_found: 1
+        },
+        categories: ['Health & Wellness'],
+        context: 'Similarity search for: Similar content to store',
+        last_updated: new Date().toISOString()
+      };
+
+      const mockSearchResult = {
+        data: {
+          text: JSON.stringify(searchResponseData, null, 2)
+        }
+      };
+
+      mockMcpClientManager.executeTool.mockResolvedValue(mockSearchResult);
+
+      const result = await toolUser.executeWithTool(
+        'access-data',
+        {
+          action: 'store',
+          content: 'Similar content to store',
+          category: 'Health & Wellness',
+          user_context: 'Test context'
+        }
+      );
+
+      // Should have called search but not the actual store
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledTimes(1);
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledWith(
+        MagiName.Balthazar,
+        'access-data',
+        {
+          action: 'search',
+          content: 'Similar content to store',
+          limit: 3
+        }
+      );
+
+      // Should return duplicate prevention message
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.data.message).toContain('Similar data already exists');
+      expect(parsedResult.existing_item.id).toBe('existing-item-1');
+    });
+
+    it('should proceed with storage when no high similarity match found', async () => {
+      // Mock search result with low similarity
+      const searchResponseData = {
+        data: {
+          query: 'Content to store',
+          items: [
+            {
+              id: 'existing-item-1',
+              content: 'Different content',
+              category: 'Health & Wellness',
+              similarity_score: 0.5
+            }
+          ],
+          total_found: 1
+        },
+        categories: ['Health & Wellness'],
+        context: 'Similarity search for: Content to store',
+        last_updated: new Date().toISOString()
+      };
+
+      const storeResponseData = {
+        data: { stored_item: { id: 'new-item-1' } },
+        categories: ['Health & Wellness'],
+        context: 'Test context'
+      };
+
+      const mockSearchResult = {
+        data: {
+          text: JSON.stringify(searchResponseData, null, 2)
+        }
+      };
+
+      const mockStoreResult = {
+        data: {
+          text: JSON.stringify(storeResponseData, null, 2)
+        }
+      };
+
+      mockMcpClientManager.executeTool
+        .mockResolvedValueOnce(mockSearchResult) // For the search call
+        .mockResolvedValueOnce(mockStoreResult); // For the store call
+
+      const result = await toolUser.executeWithTool(
+        'access-data',
+        {
+          action: 'store',
+          content: 'Content to store',
+          category: 'Health & Wellness',
+          user_context: 'Test context'
+        }
+      );
+
+      // Should have called both search and store
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledTimes(2);
+      expect(result).toContain('new-item-1');
+    });
+
+    it('should proceed with storage when different category', async () => {
+      // Mock search result with high similarity but different category
+      const searchResponseData = {
+        data: {
+          query: 'Content to store',
+          items: [
+            {
+              id: 'existing-item-1',
+              content: 'Very similar content',
+              category: 'Personal Facts', // Different category
+              similarity_score: 0.97
+            }
+          ],
+          total_found: 1
+        },
+        categories: ['Personal Facts'],
+        context: 'Similarity search for: Content to store',
+        last_updated: new Date().toISOString()
+      };
+
+      const storeResponseData = {
+        data: { stored_item: { id: 'new-item-1' } },
+        categories: ['Health & Wellness'],
+        context: 'Test context'
+      };
+
+      const mockSearchResult = {
+        data: {
+          text: JSON.stringify(searchResponseData, null, 2)
+        }
+      };
+
+      const mockStoreResult = {
+        data: {
+          text: JSON.stringify(storeResponseData, null, 2)
+        }
+      };
+
+      mockMcpClientManager.executeTool
+        .mockResolvedValueOnce(mockSearchResult)
+        .mockResolvedValueOnce(mockStoreResult);
+
+      const result = await toolUser.executeWithTool(
+        'access-data',
+        {
+          action: 'store',
+          content: 'Content to store',
+          category: 'Health & Wellness', // Different from search result
+          user_context: 'Test context'
+        }
+      );
+
+      // Should proceed with storage due to different category
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledTimes(2);
+      expect(result).toContain('new-item-1');
+    });
+
+    it('should handle search errors gracefully and proceed with storage', async () => {
+      const storeResponseData = {
+        data: { stored_item: { id: 'new-item-1' } },
+        categories: ['Health & Wellness'],
+        context: 'Test context'
+      };
+
+      const mockStoreResult = {
+        data: {
+          text: JSON.stringify(storeResponseData, null, 2)
+        }
+      };
+
+      mockMcpClientManager.executeTool
+        .mockRejectedValueOnce(new Error('Search failed')) // Search fails
+        .mockResolvedValueOnce(mockStoreResult); // Store succeeds
+
+      const result = await toolUser.executeWithTool(
+        'access-data',
+        {
+          action: 'store',
+          content: 'Content to store',
+          category: 'Health & Wellness',
+          user_context: 'Test context'
+        }
+      );
+
+      // Should proceed with storage despite search failure
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledTimes(2);
+      expect(result).toContain('new-item-1');
+    });
+
+    it('should only check for duplicates on store action', async () => {
+      const retrieveResponseData = {
+        data: { items: [], total_found: 0 },
+        categories: ['Health & Wellness'],
+        context: 'Category based retrieval',
+        last_updated: new Date().toISOString()
+      };
+
+      const mockRetrieveResult = {
+        data: {
+          text: JSON.stringify(retrieveResponseData, null, 2)
+        }
+      };
+
+      mockMcpClientManager.executeTool.mockResolvedValue(mockRetrieveResult);
+
+      await toolUser.executeWithTool(
+        'access-data',
+        {
+          action: 'retrieve',
+          categories: ['Health & Wellness']
+        }
+      );
+
+      // Should only call once for retrieve, no duplicate check
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledTimes(1);
+      expect(mockMcpClientManager.executeTool).toHaveBeenCalledWith(
+        MagiName.Balthazar,
+        'access-data',
+        {
+          action: 'retrieve',
+          categories: ['Health & Wellness']
+        }
+      );
+    });
+  });
 });

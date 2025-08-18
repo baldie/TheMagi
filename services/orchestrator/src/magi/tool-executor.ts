@@ -4,6 +4,8 @@ import type { MagiName } from '../types/magi-types';
 import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
 import { testHooks } from '../testing/test-hooks';
+import { ConduitClient } from './conduit-client';
+import { PERSONAS_CONFIG } from './magi_old';
 
 /**
  * Service class for tool execution with timeout and error handling
@@ -18,7 +20,7 @@ export class ToolExecutor {
   /**
    * Execute a tool with timeout and proper error handling
    */
-  async execute(tool: AgenticTool): Promise<ToolExecutionResult> {
+  async execute(tool: AgenticTool, conduitClient?: ConduitClient): Promise<ToolExecutionResult> {
     const startTime = Date.now();
     logger.debug(`${this.magiName} executing tool: ${tool.name}`);
     
@@ -31,7 +33,7 @@ export class ToolExecutor {
       });
 
       // Execute tool with timeout
-      const executionPromise = this.executeToolInternal(tool);
+      const executionPromise = this.executeToolInternal(tool, conduitClient);
       const output = await Promise.race([executionPromise, timeoutPromise]);
       
       const duration = Date.now() - startTime;
@@ -58,7 +60,7 @@ export class ToolExecutor {
   /**
    * Internal tool execution logic
    */
-  private async executeToolInternal(tool: AgenticTool): Promise<string> {
+  private async executeToolInternal(tool: AgenticTool, conduitClient?: ConduitClient): Promise<string> {
     // Handle special tool cases
     if (tool.name === 'answer-user') {
       const answerText = (tool.parameters.answer as string) || 'No answer provided';
@@ -73,9 +75,20 @@ export class ToolExecutor {
     }
 
     if (tool.name === 'process-info') {
+      if (!conduitClient) {
+        throw new Error('Conduit client is required for process-info tool');
+      }
       const rawInfo = (tool.parameters.raw_info as string) || 'No information provided';
       try { testHooks.recordToolCall('process-info', { raw_info: rawInfo }); } catch { /* no-op in non-test mode */ }
-      return rawInfo;
+      const { model } = PERSONAS_CONFIG[this.magiName];
+      const processingInstructions = (tool.parameters.processing_instructions as string) || 'Process the data';
+      const processedInfo = await conduitClient.contact(
+        `Processing Instructions:\n${processingInstructions}\n(IMPORTANT: Be very concise and to the point.)\n\nData to process:\n${rawInfo}\nOnly provide the answer.`,
+        "Persona:\nYou are an expert information processor.",
+        model,
+        { temperature: 0.3 }
+      );
+      return processedInfo;
     }
     
     // Execute regular tools through ToolUser

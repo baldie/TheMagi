@@ -8,6 +8,17 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}🧪 Running all tests for TheMagi project (mirroring GitHub Actions)...${NC}\n"
 
+# Parse command line arguments
+SKIP_INTEGRATION=false
+for arg in "$@"; do
+    case $arg in
+        -skip-integration)
+            SKIP_INTEGRATION=true
+            echo -e "${YELLOW}⏭️  Skipping integration tests as requested${NC}\n"
+            ;;
+    esac
+done
+
 # Track overall success
 OVERALL_SUCCESS=true
 
@@ -48,8 +59,12 @@ PROJECT_ROOT="$SCRIPT_DIR"
 # Root install (matches CI root npm ci for ESLint config)
 run_test "Root npm install" "npm ci" "$PROJECT_ROOT"
 
-# Orchestrator: install, build, lint, test (unit + integration always on)
-run_test "Orchestrator" "npm ci && npm run build && npm run lint && npm test && npm run test:integration" "$PROJECT_ROOT/services/orchestrator"
+# Orchestrator: install, build, lint, test (integration tests conditional)
+if [ "$SKIP_INTEGRATION" = true ]; then
+    run_test "Orchestrator" "npm ci && npm run build && npm run lint && SKIP_INTEGRATION=true npm test" "$PROJECT_ROOT/services/orchestrator"
+else
+    run_test "Orchestrator" "npm ci && npm run build && npm run lint && npm test && npm run test:integration" "$PROJECT_ROOT/services/orchestrator"
+fi
 
 # Conduit: install, build, lint, test
 run_test "Conduit" "npm ci && npm run build && npm run lint && npm test" "$PROJECT_ROOT/services/conduit"

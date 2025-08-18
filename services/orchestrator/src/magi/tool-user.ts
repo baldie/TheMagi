@@ -5,6 +5,7 @@ import type { MagiName } from '../types/magi-types';
 import type { WebSearchResponse, WebExtractResponse, SmartHomeResponse, PersonalDataResponse, TextResponse, GetToolResponse, AnyToolResponse } from '../mcp/tool-response-types';
 import { MagiErrorHandler } from './error-handler';
 import { testHooks } from '../testing/test-hooks';
+import { MCP_TOOL_MAPPING } from '../mcp/tools/tool-registry';
 
 // Minimal contract needed by ToolUser (implemented by both Magi and Magi2)
 interface ToolUserMagiLike {
@@ -75,12 +76,7 @@ export class ToolUser {
    * Map friendly tool names to actual MCP tool names
    */
   private mapToMcpToolName(toolName: string): string {
-    const mapping: Record<string, string> = {
-      'search-web': 'tavily-search',
-      'read-page': 'tavily-extract'
-    };
-    
-    return mapping[toolName] || toolName;
+    return MCP_TOOL_MAPPING[toolName] || toolName;
   }
 
   /**
@@ -127,6 +123,14 @@ export class ToolUser {
       
       // Map friendly tool names to MCP tool names
       const mcpToolName = this.mapToMcpToolName(toolName);
+      
+      // Check if similar data already exists before storing personal data
+      if (mcpToolName === 'access-data' && toolArguments.action === 'store') {
+        const duplicateCheckResult = await this.checkForDuplicatePersonalData(toolArguments);
+        if (duplicateCheckResult) {
+          return duplicateCheckResult;
+        }
+      }
       
       // Execute the tool with Magi-determined arguments
       const toolResult = await mcpClientManager.executeTool(this.magi.name, mcpToolName, toolArguments);
@@ -280,6 +284,57 @@ export class ToolUser {
       return data;
     }
     return JSON.stringify(data);
+  }
+
+  /**
+   * Check if similar personal data already exists before storing
+   */
+  private async checkForDuplicatePersonalData(toolArguments: Record<string, any>): Promise<string | null> {
+    try {
+      const searchResult = await mcpClientManager.executeTool(
+        this.magi.name, 
+        'access-data', 
+        {
+          action: 'search',
+          content: toolArguments.content,
+          limit: 3
+        }
+      );
+      
+      // Extract and parse the tool output first
+      const searchOutput = this.extractToolOutput(searchResult);
+      let searchData;
+      try {
+        searchData = JSON.parse(searchOutput);
+      } catch (error) {
+        logger.debug(`Failed to parse search result: ${String((error as Error)?.message || error)}`);
+        return null;
+      }
+      
+      if (searchData?.data?.items && Array.isArray(searchData.data.items)) {
+        // Check if any item has very high similarity (> 0.95) and same category
+        const highSimilarityMatch = searchData.data.items.find((item: any) => 
+          item.similarity_score > 0.95 && 
+          item.category === toolArguments.category
+        );
+        
+        if (highSimilarityMatch) {
+          logger.debug(`Similar data already exists for ${this.magi.name}, skipping storage`);
+          return JSON.stringify({
+            data: { message: 'Similar data already exists, no need to store again' },
+            categories: [toolArguments.category],
+            context: toolArguments.user_context || 'Duplicate prevention',
+            existing_item: highSimilarityMatch
+          });
+        }
+      }
+      
+      return null; // No duplicate found
+    } catch (error) {
+      // If search fails, continue with storage to avoid blocking
+      logger.debug(`Failed to check for existing data: ${String((error as Error)?.message || error)}`);
+      return null;
+    }
   }
 
   /**

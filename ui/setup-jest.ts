@@ -1,6 +1,8 @@
-import 'jest-preset-angular/setup-jest';
+import { setupZoneTestEnv } from 'jest-preset-angular/setup-env/zone';
 import '@jest/globals';
 import { jest } from '@jest/globals';
+
+setupZoneTestEnv();
 
 // Mock window.AudioContext for tests
 const mockAudioContext = {

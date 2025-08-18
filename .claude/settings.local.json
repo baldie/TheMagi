@@ -98,7 +98,8 @@
       "Bash(./test-server-binding.sh:*)",
       "Bash(npm --version)",
       "Bash(ng build:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(./run-all-tests.sh:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

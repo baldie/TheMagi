@@ -15,6 +15,15 @@ export enum ToolCategory {
   DEFAULT_AGENTIC_TOOL = "default_agentic_tool"
 }
 
+export const MCP_TOOL_MAPPING: Record<string, string> = {
+  'search-web': 'tavily-search',
+  'read-page': 'tavily-extract',
+  'store-info': 'access-data',
+  'store-data': 'access-data',
+  'remember-data': 'access-data',
+  'retrieve-data': 'access-data'
+};
+
 /**
  * Parameter definition for structured tool parameters
  */
@@ -238,7 +247,12 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         type: 'string',
         description: 'The information to summarize, analyze, or parse',
         required: true
-      }
+      },
+      processing_instructions: {
+        type: 'string',
+        description: 'Instructions for how to process the information',
+        required: false
+      },
     }
   },
 };
@@ -288,14 +302,7 @@ export class ToolRegistry {
    * Map friendly tool names back to MCP tool names for server lookup
    */
   private static mapToMcpToolName(friendlyName: string): string {
-    const mapping: Record<string, string> = {
-      'search-web': 'tavily-search',
-      'read-page': 'tavily-extract',
-      'store-data': 'access-data',
-      'remember-data': 'access-data',
-      'retrieve-data': 'access-data'
-    };
-    return mapping[friendlyName] || friendlyName;
+    return MCP_TOOL_MAPPING[friendlyName] || friendlyName;
   }
 
   /**

@@ -3,8 +3,12 @@ import { logger } from '../logger';
 import { PERSONAS_CONFIG } from './magi2';
 import type { ConduitClient } from './conduit-client';
 import { MagiName } from '../types/magi-types';
-import type { GoalCompletionResult } from './types';
+import type { GoalCompletionResult, AgentContext } from './types';
 import type { AgenticTool } from './magi2';
+import { ToolExecutor } from './tool-executor';
+import { TIMEOUT_MS } from './types';
+import { speakWithMagiVoice } from '../tts';
+import { allMagi } from './magi2';
 
 // ============================================================================
 // AGENT ACTIONS - Async operations for the agent state machine
@@ -166,12 +170,10 @@ export const evaluateSubGoalCompletion = fromPromise(async ({ input }: {
 }) => {
   const { subGoal, toolOutput, conduitClient, magiName } = input;
   
-  const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.\nIf the goal is to extract, a summary of the content is sufficient.`;
-  
-  const userPrompt = `Sub-goal:\n${subGoal}
+  const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.\nIf the goal is to extract, a summary of the content is sufficient.\nFocus on the final state, not just the action.`;
 
-Tool Output:\n${toolOutput}
-
+  const userPrompt = `Sub-goal:\n${subGoal}\n
+Tool Output:\n${toolOutput}\n
 Has the sub-goal been completed? Respond only with JSON:
 {
   "completed": true/false,
@@ -302,6 +304,41 @@ export const processOutput = fromPromise(async ({ input }: {
   }
   
   return processedOutput;
+});
+
+/**
+ * Executes a tool using the ToolExecutor with proper TTS handling
+ */
+export const executeTool = fromPromise(async ({ input }: {
+  input: {
+    context: AgentContext;
+  }
+}) => {
+  let toolOutput = '';
+  
+  const { toolUser, magiName, selectedTool, conduitClient } = input.context;
+  const toolExecutor = new ToolExecutor(toolUser, magiName, TIMEOUT_MS);
+
+  if (!selectedTool) {
+    throw new Error('No tool selected');
+  }
+
+  const result = await toolExecutor.execute(selectedTool, conduitClient);
+  
+  if (!result.success) {
+    throw new Error(result.error ?? 'Tool execution failed');
+  }
+
+  toolOutput = result.output;
+
+  if (selectedTool.name === 'ask-user' || selectedTool.name === 'answer-user') {
+    const magi = allMagi[magiName];
+    const ttsReady = await magi.makeTTSReady(toolOutput);
+    logger.debug(`\n🤖🔊\n${ttsReady}`);
+    void speakWithMagiVoice(ttsReady, magiName);
+  }
+
+  return toolOutput;
 });
 
 /**

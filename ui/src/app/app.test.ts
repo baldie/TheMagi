@@ -1,36 +1,23 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterModule } from '@angular/router';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { Component } from '@angular/core';
 import { describe, beforeEach, it, expect } from '@jest/globals';
-
-@Component({
-  selector: 'app-root',
-  template: '<div>Mock Template</div>',
-  styles: ['']
-})
-class MockAppComponent {
-  balthasarStatus = 'offline';
-  casperStatus = 'offline';
-  melchiorStatus = 'offline';
-}
+import { AppComponent } from './app';
 
 describe('AppComponent', () => {
-  let component: MockAppComponent;
-  let fixture: ComponentFixture<MockAppComponent>;
+  let component: AppComponent;
+  let fixture: ComponentFixture<AppComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [
         RouterModule.forRoot([]),
-        HttpClientTestingModule
-      ],
-      declarations: [
-        MockAppComponent
-      ],
+        HttpClientTestingModule,
+        AppComponent
+      ]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(MockAppComponent);
+    fixture = TestBed.createComponent(AppComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

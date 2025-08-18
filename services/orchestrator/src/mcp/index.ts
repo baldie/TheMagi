@@ -7,7 +7,7 @@ import type { GetToolResponse, WebSearchResponse, WebExtractResponse } from './t
 import { getBalthazarToolAssignments, getBalthazarToolServers } from './tools/balthazar-tools';
 import { getCasparToolAssignments,getCasparTools } from './tools/caspar-tools';
 import { getMelchiorToolAssignments, getMelchiorTools } from './tools/melchior-tools';
-import { EXCLUDED_TOOL_PARAMS, TOOL_REGISTRY, ToolRegistry } from './tools/tool-registry';
+import { EXCLUDED_TOOL_PARAMS, MCP_TOOL_MAPPING, TOOL_REGISTRY, ToolRegistry } from './tools/tool-registry';
 
 /**
  * Information about a single MCP tool
@@ -111,7 +111,6 @@ export class McpClientManager {
       [MagiName.Caspar]: getCasparTools(),
       [MagiName.Melchior]: getMelchiorTools()
     };
-    //logger.info(`MCP server configs: ${JSON.stringify(this.serverConfigs)}`);
     return this.serverConfigs;
   }
 
@@ -289,11 +288,12 @@ export class McpClientManager {
         const myTools = getToolAssigmentsForAllMagi()[magiName];
         
         // Create mapping from MCP tool names to friendly names
-        const mcpToFriendlyMap: Record<string, string> = {
-          'tavily-search': 'search-web',
-          'tavily-extract': 'read-page',
-          'access-data': 'access-data'  // Direct mapping for access-data tool
-        };
+        const mcpToFriendlyMap: Record<string, string> = {};
+        for (const [friendlyName, mcpName] of Object.entries(MCP_TOOL_MAPPING)) {
+          mcpToFriendlyMap[mcpName] = friendlyName;
+        }
+        // Add direct mappings for tools that don't need name conversion
+        mcpToFriendlyMap['access-data'] = 'access-data';
         
         const tools = response.tools
         .filter((tool: Tool) => {
@@ -400,11 +400,9 @@ export class McpClientManager {
         logger.debug(`${config.name} server has tools: [${availableTools.join(', ')}], looking for: ${toolName}`);
         
         // Create mapping from friendly names to MCP tool names for server lookup
-        const friendlyToMcpMap: Record<string, string> = {
-          'search-web': 'tavily-search',
-          'read-page': 'tavily-extract',
-          'access-data': 'access-data'  // Direct mapping for access-data tool
-        };
+        const friendlyToMcpMap: Record<string, string> = { ...MCP_TOOL_MAPPING };
+        // Add direct mappings for tools that don't need name conversion
+        friendlyToMcpMap['access-data'] = 'access-data';
         
         // Map friendly tool name to MCP tool name for lookup
         const mcpToolName = friendlyToMcpMap[toolName] || toolName;
@@ -437,12 +435,7 @@ export class McpClientManager {
     }
 
     // Create mapping for error logging
-    const friendlyToMcpMap: Record<string, string> = {
-      'search-web': 'tavily-search',
-      'read-page': 'tavily-extract',
-      'access-data': 'access-data'  // Direct mapping for access-data tool
-    };
-    const mcpToolName = friendlyToMcpMap[toolName] || toolName;
+    const mcpToolName = MCP_TOOL_MAPPING[toolName] || toolName;
     
     logger.warn(`Tool ${toolName} (mapped to ${mcpToolName}) not found in any MCP server for ${magiName}`);
     return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;

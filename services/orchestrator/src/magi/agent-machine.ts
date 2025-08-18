@@ -1,5 +1,4 @@
-import { createMachine, assign, fromPromise } from 'xstate';
-import { ToolExecutor } from './tool-executor';
+import { createMachine, assign } from 'xstate';
 import type { ConduitClient } from './conduit-client';
 import type { MagiName } from '../types/magi-types';
 import type { AgentContext, AgentEvent } from './types';
@@ -14,11 +13,10 @@ import {
   evaluateSubGoalCompletion,
   gatherContext,
   processOutput,
-  evaluateStrategicGoalCompletion
+  evaluateStrategicGoalCompletion,
+  executeTool
 } from './agent-actions';
 import { isContextValid, canRetry, isToolValid, shouldStopForStagnation } from './agent-guards';
-import { speakWithMagiVoice } from '../tts';
-import { allMagi } from './magi2';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -262,33 +260,7 @@ export const agentMachine = createMachine({
     
     executingTool: {
       invoke: {
-        src: fromPromise(async ({ input }: { input: { context: AgentContext } }) => {
-          let toolOutput = '';
-          
-          const { toolUser, magiName, selectedTool } = input.context;
-          const toolExecutor = new ToolExecutor(toolUser, magiName, TIMEOUT_MS);
-      
-          if (!selectedTool) {
-            throw new Error('No tool selected');
-          }
-
-          const result = await toolExecutor.execute(selectedTool);
-          
-          if (!result.success) {
-            throw new Error(result.error ?? 'Tool execution failed');
-          }
-
-          toolOutput = result.output;
-        
-          if (selectedTool.name === 'ask-user' || selectedTool.name === 'answer-user') {
-            const magi = allMagi[magiName];
-            const ttsReady = await magi.makeTTSReady(toolOutput);
-            logger.debug(`\n🤖🔊\n${ttsReady}`);
-            void speakWithMagiVoice(ttsReady, magiName);
-          }
-
-          return toolOutput;
-        }),
+        src: executeTool,
         input: ({ context }) => ({ context }),
         onDone: {
           target: 'processingOutput',
@@ -365,6 +337,7 @@ export const agentMachine = createMachine({
             guard: shouldAgentTerminateEarly,
             target: 'done',
             actions: assign({
+              processedOutput: ({ context }) => context.toolOutput, // let the Magi's question or answer be the final output
               completedSubGoals: ({ context }) => [...context.completedSubGoals, context.currentSubGoal],
             }),
           },
