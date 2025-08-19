@@ -1,6 +1,5 @@
 import type { ConduitClient } from './conduit-client';
 import type { ToolUser } from './tool-user';
-import type { ShortTermMemory } from './short-term-memory';
 import type { MagiName } from '../types/magi-types';
 import type { MagiTool } from '../mcp';
 import type { AgenticTool } from './magi2';
@@ -26,7 +25,6 @@ export interface PlannerContext {
   magiName: MagiName;
   conduitClient: ConduitClient;
   toolUser: ToolUser;
-  shortTermMemory: ShortTermMemory;
   availableTools: MagiTool[];
   workingMemory: string;
   planRevisions: Array<{ reason: string; originalPlan: string[]; newPlan: string[] }>;
@@ -46,8 +44,6 @@ export interface AgentContext {
   currentSubGoal: string;
   
   // Memory and context
-  fullContext: string;
-  promptContext: string;
   workingMemory: string;
   
   // Tool execution
@@ -75,7 +71,6 @@ export interface AgentContext {
   magiName: MagiName;
   conduitClient: ConduitClient;
   toolUser: ToolUser;
-  shortTermMemory: ShortTermMemory;
   availableTools: MagiTool[];
   
   // Simple progress tracking

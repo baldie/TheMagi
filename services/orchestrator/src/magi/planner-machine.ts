@@ -11,7 +11,6 @@ const EXECUTION_INIT_DELAY = 100; // Small delay to allow state stabilization
 import { PERSONAS_CONFIG } from './magi2';
 import { testHooks } from '../testing/test-hooks';
 import type { ToolUser } from './tool-user';
-import type { ShortTermMemory } from './short-term-memory';
 import type { MagiTool } from '../mcp';
 
 // ============================================================================
@@ -220,7 +219,6 @@ export const plannerMachine = createMachine({
       magiName: MagiName;
       conduitClient: ConduitClient;
       toolUser: ToolUser;
-      shortTermMemory: ShortTermMemory;
       availableTools: MagiTool[];
       workingMemory: string;
     }
@@ -236,7 +234,6 @@ export const plannerMachine = createMachine({
     magiName: input.magiName,
     conduitClient: input.conduitClient,
     toolUser: input.toolUser,
-    shortTermMemory: input.shortTermMemory,
     availableTools: input.availableTools,
     workingMemory: input.workingMemory,
     planRevisions: [],
@@ -362,7 +359,6 @@ export const plannerMachine = createMachine({
             magiName: context.magiName,
             conduitClient: context.conduitClient,
             toolUser: context.toolUser,
-            shortTermMemory: context.shortTermMemory,
             availableTools: context.availableTools,
             workingMemory: baseMemory + accumulatedContext,
           };

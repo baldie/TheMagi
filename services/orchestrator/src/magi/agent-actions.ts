@@ -31,7 +31,9 @@ export const gatherContext = fromPromise(async ({ input }: {
 }) => {
   const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
 
-  if (workingMemory.trim() === '') {
+  // No context to gather
+  const noContextToGather = workingMemory.trim() === '';
+  if (noContextToGather) {
     return userMessage;
   }
   
@@ -41,9 +43,8 @@ export const gatherContext = fromPromise(async ({ input }: {
 
 GIVEN TEXT:
 ${workingMemory.trim() ? workingMemory.trim() : 'None'}\n
-NEXT STRATEGIC GOAL (not for you):\n${strategicGoal}\n
-COMPLETED SUB-GOALS:\n${completedSubGoals.join(', ') || 'None'}
-
+NEXT STRATEGIC GOAL (not for you):\n${strategicGoal}
+${completedSubGoals.length > 0 ? `\nCOMPLETED SUB-GOALS:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
 INSTRUCTIONS:
 Based on the NEXT STRATEGIC GOAL, what data from the GIVEN TEXT will be useful.
 Provide ONLY the direct information needed to perform that next action.
@@ -75,20 +76,20 @@ export const determineNextTacticalGoal = fromPromise(async ({ input }: {
     userMessage: string;
   } 
 }) => {
-  const { strategicGoal, context, completedSubGoals, conduitClient, magiName, userMessage } = input;
+  const { strategicGoal, context: workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
 
   const isStraightForward = (COMMON_ACTIONS.some(action => strategicGoal.trim().toLowerCase().startsWith(action)));
   if (isStraightForward) {
     return strategicGoal;
   }
 
-  const noContextYet = context === userMessage;
+  const noContextYet = workingMemory === userMessage;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
   const systemPrompt = `You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
 
   const userPrompt = `Their Strategic Goal:\n${strategicGoal}\n
-Context:\n${context.trim()}\n
+Context:\n${workingMemory.trim()}\n
 ${completedSubGoals.length > 0 ? `Completed Tasks:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
 ${noContextYet ? '\n' : 'Crucial Instruction: The Context is all the data that has been gathered so far. Do not re-gather any data mentioned in the context.\n'}
 INSTRUCTIONS:
@@ -121,20 +122,20 @@ export const selectTool = fromPromise(async ({ input }: {
     userMessage: string;
   } 
 }) => {
-  const { subGoal, availableTools, conduitClient, magiName, context, userMessage } = input;
+  const { subGoal, availableTools, conduitClient, magiName, context: workingMemory, userMessage } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
-  const systemPrompt = `Persona:\nYou are a tool selector. Choose the tool that will allow you to '${subGoal}.'`;
+  const systemPrompt = `Persona:\nYou are a straightforward tool picker. Pick the tool that will allow you to '${subGoal}.'`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
   const userPrompt = `The Job:\n${subGoal}\n
-User Message:\n${userMessage}${context.trim() !== userMessage ? `\nContext:\n${context}\n` : ''}
+User Message:\n${userMessage}\n${workingMemory.trim() !== userMessage ? `\Data Gathered so far:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
-Choose the tool that will allow you to '${subGoal}.'
-Use information from the Context as parameters for the tool.
+Pick the tool that will allow you to '${subGoal}.'
+Use the data gathered so far as parameters for the tool.
 Respond ONLY with the complete JSON.
 
 Format:
@@ -170,7 +171,10 @@ export const evaluateSubGoalCompletion = fromPromise(async ({ input }: {
 }) => {
   const { subGoal, toolOutput, conduitClient, magiName } = input;
   
-  const systemPrompt = `You are an evaluation agent. Determine if the sub-goal has been completed based on the tool output.\nIf the goal is to extract, a summary of the content is sufficient.\nFocus on the final state, not just the action.`;
+  const systemPrompt = `PERSONA:\nYou are an outcome-focused evaluation agent. Your job is to determine if a desired state has been achieved.
+INSTRUCTION:\nEvaluate if the sub-goal has been completed by focusing on the final state described in the tool output, not the action taken.
+A goal is "completed" if the state it aims to achieve is true. For example, if a goal is to "add X" and the tool reports "X already exists," the goal is complete because the final state is that X exists.
+If the goal is to extract information, a summary is sufficient for completion.`
 
   const userPrompt = `Sub-goal:\n${subGoal}\n
 Tool Output:\n${toolOutput}\n
@@ -264,9 +268,9 @@ export const processOutput = fromPromise(async ({ input }: {
       break;
     
     case 'access-data': {
-        // Summarize the data we received back in human readable form
-        logger.debug(`Raw access-data retrieved: ${toolOutput}`);
-        const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary.`;
+        // Summarize the data we stored or retrieved in human readable form
+        logger.debug(`Raw access-data: ${toolOutput}`);
+        const summarize = `You have just attempted to ${tool.parameters.action} the following data:\n${toolOutput}, which resulted in the following output:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary (no preamble).`;
         logger.debug(`Summary prompt:\n${summarize}`);
         processedOutput = await conduitClient.contact(
           summarize,
@@ -355,7 +359,7 @@ export const evaluateStrategicGoalCompletion = fromPromise(async ({ input }: {
 }): Promise<GoalCompletionResult> => {
   const { strategicGoal, completedSubGoals, processedOutput, conduitClient, magiName } = input;
   
-  const systemPrompt = `You are a goal evaluator. Determine if the strategic goal has been sufficiently achieved based on the completed sub-goals and latest output.`;
+  const systemPrompt = `You are an outcome-focused evaluation agent. Your job is to determine if a desired state of the strategic goal has been achieved. Evaluate if the strategic goal has been completed by focusing on the final state described in the tool output, not the action taken.\n\nThe strategic goal is "achieved" if the state it aims to achieve is true. For example, if a strategic-goal is to "add X" and the tool reports "X already exists," the strategic goal is achieved because the final state is that X exists. Evaluate if the sub-goal has been completed by focusing on the final state described in the tool output, not the action taken. An output indicating that data is a "duplicate" is direct confirmation that the final state is true, and the goal is therefore achieved.`;
   
   const userPrompt = `Strategic Goal: ${strategicGoal}\n
 Completed Sub-goals: ${completedSubGoals.join(', ') || 'None'}\n

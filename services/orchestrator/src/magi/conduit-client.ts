@@ -154,9 +154,7 @@ export class ConduitClient {
       }
     }
     
-    const parsedData = JSON.parse(cleanedJSON);
-    logger.debug(`${this.magiName} successfully parsed JSON data:\n${JSON.stringify(parsedData)}`);
-    return parsedData;
+    return JSON.parse(cleanedJSON);
   }
 
   /**

@@ -3,7 +3,6 @@ import { agentMachine } from './agent-machine';
 import { plannerMachine } from './planner-machine';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
-import { ShortTermMemory } from './short-term-memory';
 import type { MagiTool } from '../mcp';
 import { MagiName, PERSONAS_CONFIG } from './magi2';
 import { mcpClientManager } from '../mcp';
@@ -60,14 +59,6 @@ const createMockConduitClient = (magiName: MagiName, shouldComplete: boolean = t
   });
   jest.spyOn(client, 'contact').mockResolvedValue('Test tactical sub-goal response');
   return client;
-};
-
-const createMockShortTermMemory = (magiName: MagiName): ShortTermMemory => {
-  const mockMagi = { 
-    name: magiName, 
-    contactSimple: jest.fn().mockResolvedValue('Test summary') 
-  };
-  return new ShortTermMemory(mockMagi);
 };
 
 const createMockTools = (): MagiTool[] => ([
@@ -149,7 +140,6 @@ describe('State Machines Integration Tests', () => {
       const magiName = MagiName.Caspar;
       const conduitClient = createMockConduitClient(magiName);
       const toolUser = new ToolUser({ name: magiName, config: PERSONAS_CONFIG[magiName] } as any);
-      const shortTermMemory = createMockShortTermMemory(magiName);
       const availableTools = createMockTools();
       
       const plannerActor = createActor(plannerMachine, {
@@ -158,7 +148,6 @@ describe('State Machines Integration Tests', () => {
           magiName,
           conduitClient,
           toolUser,
-          shortTermMemory,
           availableTools,
           workingMemory: ''
         }
@@ -206,7 +195,6 @@ describe('State Machines Integration Tests', () => {
       const magiName = MagiName.Balthazar;
       const conduitClient = createMockConduitClient(magiName, true);
       const toolUser = new ToolUser({ name: magiName, config: PERSONAS_CONFIG[magiName] } as any);
-      const shortTermMemory = createMockShortTermMemory(magiName);
       const availableTools = createMockTools();
       
       const agentActor = createActor(agentMachine, {
@@ -216,7 +204,6 @@ describe('State Machines Integration Tests', () => {
           magiName,
           conduitClient,
           toolUser,
-          shortTermMemory,
           availableTools,
           workingMemory: ''
         }
@@ -270,7 +257,6 @@ describe('State Machines Integration Tests', () => {
       const magiName = MagiName.Melchior;
       const conduitClient = createMockConduitClient(magiName);
       const toolUser = new ToolUser({ name: magiName, config: PERSONAS_CONFIG[magiName] } as any);
-      const shortTermMemory = createMockShortTermMemory(magiName);
       const availableTools = createMockTools();
 
       const plannerActor = createActor(plannerMachine, {
@@ -279,7 +265,6 @@ describe('State Machines Integration Tests', () => {
           magiName,
           conduitClient,
           toolUser,
-          shortTermMemory,
           availableTools,
           workingMemory: ''
         }
@@ -315,7 +300,6 @@ describe('State Machines Integration Tests', () => {
       const magiName = MagiName.Caspar;
       const conduitClient = createMockConduitClient(magiName);
       const toolUser = new ToolUser({ name: magiName, config: PERSONAS_CONFIG[magiName] } as any);
-      const shortTermMemory = createMockShortTermMemory(magiName);
       const availableTools = createMockTools();
       
       const plannerActor = createActor(plannerMachine, {
@@ -324,7 +308,6 @@ describe('State Machines Integration Tests', () => {
           magiName,
           conduitClient,
           toolUser,
-          shortTermMemory,
           availableTools,
           workingMemory: ''
         }
@@ -344,7 +327,6 @@ describe('State Machines Integration Tests', () => {
       const magiName = MagiName.Balthazar;
       const conduitClient = createMockConduitClient(magiName);
       const toolUser = new ToolUser({ name: magiName, config: PERSONAS_CONFIG[magiName] } as any);
-      const shortTermMemory = createMockShortTermMemory(magiName);
       const availableTools = createMockTools();
       
       const agentActor = createActor(agentMachine, {
@@ -354,7 +336,6 @@ describe('State Machines Integration Tests', () => {
           magiName,
           conduitClient,
           toolUser,
-          shortTermMemory,
           availableTools,
           workingMemory: ''
         }

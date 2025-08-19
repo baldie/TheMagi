@@ -9,7 +9,6 @@ const mockConduitClient = {
 } as any;
 
 const mockToolUser = {} as any;
-const mockShortTermMemory = {} as any;
 const mockAvailableTools = [] as any;
 
 describe('Planner Early Termination', () => {
@@ -29,7 +28,6 @@ describe('Planner Early Termination', () => {
         magiName: 'Caspar' as MagiName,
         conduitClient: mockConduitClient,
         toolUser: mockToolUser,
-        shortTermMemory: mockShortTermMemory,
         availableTools: mockAvailableTools,
         workingMemory: ''
       }

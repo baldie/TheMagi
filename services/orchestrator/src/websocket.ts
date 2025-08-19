@@ -81,7 +81,6 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
           } catch (err) {
             logger.debug('[WebSocket] testHooks.beginRun failed (non-fatal)', err);
           }
-          logger.info(`[DEBUG] Calling startCallback with message: ${userMessage}`);
           console.log(`[WS] Invoking startCallback at ${new Date().toISOString()}`);
 
           // Start heartbeat only in test mode so integration tests consider the server live

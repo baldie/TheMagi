@@ -4,7 +4,6 @@ import type { MagiName } from '../types/magi-types';
 import type { AgentContext, AgentEvent } from './types';
 import { TIMEOUT_MS } from './types';
 import type { ToolUser } from './tool-user';
-import type { ShortTermMemory } from './short-term-memory';
 import type { MagiTool } from '../mcp';
 import { logger } from '../logger';
 import { 
@@ -50,7 +49,6 @@ export const agentMachine = createMachine({
       magiName: MagiName;
       conduitClient: ConduitClient;
       toolUser: ToolUser;
-      shortTermMemory: ShortTermMemory;
       availableTools: MagiTool[];
       workingMemory?: string;
     },
@@ -70,8 +68,6 @@ export const agentMachine = createMachine({
     userMessage: input.userMessage,
     strategicGoal: input.strategicGoal,
     currentSubGoal: '',
-    fullContext: '',
-    promptContext: '',
     workingMemory: input.workingMemory ?? '',
     selectedTool: null,
     toolInput: {},
@@ -84,7 +80,6 @@ export const agentMachine = createMachine({
     magiName: input.magiName,
     conduitClient: input.conduitClient,
     toolUser: input.toolUser,
-    shortTermMemory: input.shortTermMemory,
     availableTools: input.availableTools,
     circuitBreakerContext: null,
     lastExecutionTime: 0,
@@ -135,23 +130,13 @@ export const agentMachine = createMachine({
         onDone: {
           target: 'determiningSubGoal',
           actions: assign({
-            fullContext: ({ event }) => event.output,
-            // Use gathered context directly for planning
-            promptContext: ({ event }) => event.output,
+            workingMemory: ({ event }) => event.output,
           }),
         },
         onError: {
           target: 'determiningSubGoal',
           actions: assign({
-            fullContext: ({ context }) => {
-              const parts = [
-                `Strategic Goal: ${context.strategicGoal}`,
-                `Working Memory: ${context.workingMemory}`,
-                `Completed Sub-goals: ${context.completedSubGoals.join(', ') || 'None'}`,
-              ];
-              return parts.join('\n');
-            },
-            promptContext: ({ context }) => {
+            workingMemory: ({ context }) => {
               const parts = [
                 `Strategic Goal: ${context.strategicGoal}`,
                 `Working Memory: ${context.workingMemory}`,
@@ -169,7 +154,7 @@ export const agentMachine = createMachine({
         src: determineNextTacticalGoal,
         input: ({ context }) => ({
           strategicGoal: context.strategicGoal,
-          context: context.promptContext,
+          context: context.workingMemory,
           completedSubGoals: context.completedSubGoals,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
@@ -207,7 +192,7 @@ export const agentMachine = createMachine({
           subGoal: context.currentSubGoal,
           availableTools: context.availableTools,
           conduitClient: context.conduitClient,
-          context: context.promptContext,
+          context: context.workingMemory,
           userMessage: context.userMessage,
           magiName: context.magiName,
         }),
@@ -351,7 +336,7 @@ export const agentMachine = createMachine({
           {
             target: 'gatheringContext',
             actions: assign({
-              fullContext: ({ context }) => `${context.fullContext}\nSubgoal "${context.currentSubGoal}" failed: needs more work`,
+              workingMemory: ({ context }) => `${context.workingMemory}\nSubgoal "${context.currentSubGoal}" failed: needs more work`,
               retryCount: () => 0,
             }),
           }
@@ -359,7 +344,7 @@ export const agentMachine = createMachine({
         onError: {
           target: 'gatheringContext',
           actions: assign({
-            fullContext: ({ context }) => `${context.fullContext}\nSubgoal evaluation failed, continuing...`,
+            workingMemory: ({ context }) => `${context.workingMemory}\nSubgoal evaluation failed, continuing...`,
             retryCount: () => 0,
           }),
         }
@@ -389,7 +374,7 @@ export const agentMachine = createMachine({
           {
             target: 'gatheringContext',
             actions: assign({
-              fullContext: ({ context }) => `${context.fullContext}\nCompleted: ${context.currentSubGoal} -> ${context.processedOutput}`,
+              workingMemory: ({ context }) => `${context.workingMemory}\nCompleted: ${context.currentSubGoal} -> ${context.processedOutput}`,
               retryCount: () => 0,
               goalCompletionResult: ({ event }) => event.output,
             }),
@@ -398,7 +383,7 @@ export const agentMachine = createMachine({
         onError: {
           target: 'gatheringContext',
           actions: assign({
-            fullContext: ({ context }) => `${context.fullContext}\nGoal evaluation failed, continuing...`,
+            workingMemory: ({ context }) => `${context.workingMemory}\nGoal evaluation failed, continuing...`,
             retryCount: () => 0,
           }),
         },

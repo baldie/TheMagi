@@ -48,7 +48,6 @@ export function createConfiguredAgentMachine(
   _magiName: MagiName,
   _conduitClient: ConduitClient,
   _toolUser: ToolUser,
-  _shortTermMemory: ShortTermMemory,
   _availableTools: MagiTool[]
 ) {
   return agentMachine.provide({
@@ -310,7 +309,6 @@ export class Magi2 implements MagiCompatible {
             magiName: this.name,
             conduitClient: this.conduit,
             toolUser: this.toolUser,
-            shortTermMemory: this.shortTermMemory,
             availableTools: this.toolsList.filter(tool => !_prohibitedTools.includes(tool.name)),
             workingMemory
           }
