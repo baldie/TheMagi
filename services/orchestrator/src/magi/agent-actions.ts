@@ -131,7 +131,7 @@ export const selectTool = fromPromise(async ({ input }: {
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
   const userPrompt = `The Job:\n${subGoal}\n
-User Message:\n${userMessage}\n${workingMemory.trim() !== userMessage ? `\Data Gathered so far:\n${workingMemory}\n` : ''}
+User Message:\n${userMessage}\n${workingMemory.trim() !== userMessage ? `\nData Gathered so far:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
 Pick the tool that will allow you to '${subGoal}.'
