@@ -60,7 +60,7 @@ export class MemoryService {
       return memory;
     } catch (error) {
       // If file doesn't exist, return empty memory structure
-      this.logger.info('No existing memory found, creating new memory structure');
+      this.logger.info(`No existing memory found, creating new memory structure: ${String(error)}`);
       return this.createEmptyMemory();
     }
   }
@@ -85,7 +85,8 @@ export class MemoryService {
   extractMemoryFromResponse(response: string): MagiMemory {
     try {
       // Look for JSON structure in response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonRegex = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/;
+      const jsonMatch = jsonRegex.exec(response);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         return {
@@ -200,6 +201,25 @@ Focus on information that would be useful for future conversations. Be concise a
       context: [...new Set([...existing.context, ...newMemory.context])],
       outcomes: [...new Set([...existing.outcomes, ...newMemory.outcomes])]
     };
+  }
+
+  /**
+   * Store a single fact for Melchior
+   */
+  async storeFact(fact: string): Promise<void> {
+    try {
+      const currentMemory = await this.loadUserMemory();
+      
+      // Add fact to Melchior's memory if not already present
+      if (!currentMemory.melchior_memory.facts.includes(fact)) {
+        currentMemory.melchior_memory.facts.push(fact);
+        currentMemory.last_updated = new Date().toISOString();
+        await this.saveUserMemory(currentMemory);
+        this.logger.info(`Stored fact in Melchior's memory: ${fact}`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to store fact:', error);
+    }
   }
 
   /**

@@ -1,10 +1,10 @@
-import { createMachine, assign, fromPromise } from 'xstate';
+import { setup, assign, fromPromise } from 'xstate';
 import { logger } from '../logger';
 import type { ConduitClient } from './conduit-client';
 import { agentMachine } from './agent-machine';
 import { MagiName } from '../types/magi-types';
 import type { PlannerContext, PlannerEvent } from './types';
-import { TIMEOUT_MS } from './types';
+import type { MemoryService } from '../memory';
 
 // Constants
 const EXECUTION_INIT_DELAY = 100; // Small delay to allow state stabilization
@@ -14,27 +14,55 @@ import type { ToolUser } from './tool-user';
 import type { MagiTool } from '../mcp';
 
 // ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+interface PlannerInput {
+  userMessage: string;
+  magiName: MagiName;
+  conduitClient: ConduitClient;
+  toolUser: ToolUser;
+  availableTools: MagiTool[];
+  workingMemory: string;
+  memoryService?: MemoryService;
+}
+
+interface CreatePlanInput {
+  userMessage: string;
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+}
+
+interface CheckMemoryInput {
+  userMessage: string;
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+  memoryService?: MemoryService;
+}
+
+interface FinalizePlanInput {
+  strategicPlan: string[];
+}
+
+
+// ============================================================================
 // ASYNC ACTIONS
 // ============================================================================
 
 /**
  * Creates a strategic plan from user message using LLM
  */
-const createStrategicPlan = fromPromise(async ({ input }: { 
-  input: { 
-    userMessage: string; 
-    conduitClient: ConduitClient; 
-    magiName: MagiName;
-  } 
-}) => {
+const createStrategicPlan = fromPromise<string[], CreatePlanInput>(async ({ input }) => {
   const { userMessage, conduitClient, magiName } = input;
   
-  const systemPrompt = `PERSONA\nYou are a quick strategic planner. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the user's message.`;
+  const systemPrompt = `PERSONA\nYou are a literal and direct task-planning engine. Your purpose is to create a sequence of computational or data-retrieval actions. You do not provide advice, warnings, or conversational filler. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the user's message.`;
   
   const userPrompt = `INSTRUCTIONS:
-Create a high-level plan for how to address the user's message.
-If the user's request is simple, a single goal may be sufficient.
-Each goal should be actionable. Do not over-complicate things.
+1. Create a plan that can be expressed as a sequence of high level goals for how to address the user's message.
+2. If the user's request is simple, a single goal may be sufficient.
+3. Each goal should express ONLY ONE action that you can take.
+4. Do not over-complicate things.
+5. A plan can have at most ONE goal that communicates with the user, and it must be the absolute final goal.
 
 EXAMPLE 1:
 message: "Tell me a joke"
@@ -74,61 +102,37 @@ YOUR FORMAT:
 });
 
 /**
- * Finalizes the current sub-goal by making a call to the conduit
+ * Checks if user message contains memorable information and stores it in memory
  */
-const finalizePlan = fromPromise(async ({ input }: { input: {
-  strategicPlan: string[];
-  userMessage: string;
-  conduitClient: ConduitClient;
-  magiName: MagiName;
-}}) => {
-  const { strategicPlan, conduitClient, magiName, userMessage } = input;
-  if (magiName === MagiName.Melchior) {
-    const { model } = PERSONAS_CONFIG[magiName];
+const checkAndStoreMemory = fromPromise<void, CheckMemoryInput>(async ({ input }) => {
+  const { conduitClient, magiName, userMessage, memoryService } = input;
+  
+  if (magiName !== MagiName.Melchior || !memoryService) {
+    return; // Only Melchior handles memory, and only if service is available
+  }
 
-    const systemPrompt = `You are a very observant AI.`;
-    const userPrompt = `INSTRUCTIONS:
+  const { model } = PERSONAS_CONFIG[magiName];
+
+  const systemPrompt = `You are a very observant AI.`;
+  const userPrompt = `INSTRUCTIONS:
 Check if the user's message reveals a goal, preference, or other personal information worth storing.
-Return JSON with "response" and "reasoning" properties.
+Return JSON with "shouldStore" (boolean) and "fact" (string) and "reasoning" (string) properties.
 
-If there is something that should be stored, set response to:
-'Store <information here>'
-
-Otherwise set response to:
-'N/A'
+If there is something that should be stored, set shouldStore to true and fact to the information.
+Otherwise set shouldStore to false.
 
 Example 1:
-{"response": "Store user purchased a Pixel 10 on today's date", "reasoning": "User explicitly shared they made a purchase, which is a personal fact worth storing."}
+{"shouldStore": true, "fact": "user purchased a Pixel 10 on today's date", "reasoning": "User explicitly shared they made a purchase, which is a personal fact worth storing."}
 
 Example 2:
-{"response": "N/A", "reasoning": "This is a question seeking information, not revealing personal information about the user."}
+{"shouldStore": false, "fact": "", "reasoning": "This is a question seeking information, not revealing personal information about the user."}
 
 Example 3:
-{"response": "Store user does not like horror movies", "reasoning": "User explicitly stated a preference that will be useful for future recommendations."}
-
-Example 4:
-{"response": "N/A", "reasoning": "User is not explicitly sharing their height, just asking for a comparison."}
-
-Example 5:
-{"response": "Store user's dog's name is Lucky and he's 6 years old", "reasoning": "User shared specific personal facts about their pet that could be referenced in future conversations."}
-
-Example 6:
-{"response": "N/A", "reasoning": "This is a question seeking information about something they already own, not revealing new information."}
-
-Example 7:
-{"response": "Store user's goal to lose 20 pounds by summer", "reasoning": "User shared a specific personal goal with timeline that should be tracked."}
-
-Example 8:
-{"response": "Store user is allergic to peanuts", "reasoning": "This is important health information that affects food recommendations and safety."}
-
-Example 9:
-{"response": "N/A", "reasoning": "This is a temporary state, not a permanent fact or preference worth storing long-term."}
-
-Example 10:
-{"response": "Store user works as a software engineer in Seattle", "reasoning": "User shared their profession and work location, which are stable personal facts."}
+{"shouldStore": true, "fact": "user does not like horror movies", "reasoning": "User explicitly stated a preference that will be useful for future recommendations."}
 
 User Message: ${userMessage}`;
-    
+  
+  try {
     const jsonResponse = await conduitClient.contactForJSON(
       userPrompt,
       systemPrompt,
@@ -136,13 +140,23 @@ User Message: ${userMessage}`;
       { temperature: 0.3 }
     );
 
-    logger.debug(`${magiName} has prepended a new strategic goal: ${jsonResponse.response} with reasoning: ${jsonResponse.reasoning}`);
-
-    if (jsonResponse.response !== 'N/A') {
-      strategicPlan.unshift(jsonResponse.response);
+    if (jsonResponse.shouldStore && jsonResponse.fact) {
+      await memoryService.storeFact(jsonResponse.fact);
+      logger.debug(`${magiName} stored fact: ${jsonResponse.fact} (reasoning: ${jsonResponse.reasoning})`);
+    } else {
+      logger.debug(`${magiName} found no memorable information (reasoning: ${jsonResponse.reasoning})`);
     }
+  } catch (error) {
+    logger.warn(`${magiName} failed to check/store memory:`, error);
   }
-  return strategicPlan;
+});
+
+/**
+ * Finalizes the plan without memory concerns
+ */
+const finalizePlan = fromPromise<string[], FinalizePlanInput>(async ({ input }) => {
+  // Plan finalization no longer handles memory - just returns the plan as-is
+  return input.strategicPlan;
 });
 
 
@@ -200,8 +214,7 @@ const isPlanValid = ({ context }: { context: PlannerContext }): boolean => {
  * Checks if the last executed tool should trigger early termination
  */
 export const shouldTerminateEarly = ({ context }: { context: PlannerContext }): boolean => {
-  const userInteractionTools = ['answer-user', 'ask-user'];
-  return context.lastExecutedTool !== null && userInteractionTools.includes(context.lastExecutedTool);
+  return context.lastExecutedTool !== null && context.lastExecutedTool === 'respond-to-user';
 };
 
 
@@ -209,20 +222,20 @@ export const shouldTerminateEarly = ({ context }: { context: PlannerContext }): 
 // PLANNER MACHINE
 // ============================================================================
 
-export const plannerMachine = createMachine({
-  id: 'planner',
+export const plannerMachine = setup({
   types: {
     context: {} as PlannerContext,
     events: {} as PlannerEvent,
-    input: {} as {
-      userMessage: string;
-      magiName: MagiName;
-      conduitClient: ConduitClient;
-      toolUser: ToolUser;
-      availableTools: MagiTool[];
-      workingMemory: string;
-    }
+    input: {} as PlannerInput,
   },
+  actors: {
+    createStrategicPlan,
+    checkAndStoreMemory,
+    finalizePlan,
+    agentMachine,
+  },
+}).createMachine({
+  id: 'planner',
   initial: 'validateContext',
   context: ({ input }) => ({
     userMessage: input.userMessage,
@@ -236,6 +249,7 @@ export const plannerMachine = createMachine({
     toolUser: input.toolUser,
     availableTools: input.availableTools,
     workingMemory: input.workingMemory,
+    memoryService: input.memoryService,
     planRevisions: [],
     accumulatedResults: [],
     lastExecutedTool: null,
@@ -258,14 +272,14 @@ export const plannerMachine = createMachine({
 
     creatingPlan: {
       invoke: {
-        src: createStrategicPlan,
+        src: 'createStrategicPlan',
         input: ({ context }) => ({
           userMessage: context.userMessage,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
         }),
         onDone: {
-          target: 'finalizingPlan',
+          target: 'checkingMemory',
           actions: [
             assign({
               strategicPlan: ({ event }) => event.output,
@@ -284,14 +298,34 @@ export const plannerMachine = createMachine({
       },
     },
 
-    finalizingPlan: {
+    checkingMemory: {
       invoke: {
-        src: finalizePlan,
+        src: 'checkAndStoreMemory',
         input: ({ context }) => ({
-          strategicPlan: context.strategicPlan,
           userMessage: context.userMessage,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
+          memoryService: context.memoryService,
+        }),
+        onDone: {
+          target: 'finalizingPlan',
+        },
+        onError: {
+          target: 'finalizingPlan',
+          actions: [
+            ({ context }) => {
+              logger.warn(`${context.magiName} memory check failed, continuing with plan`);
+            }
+          ],
+        },
+      },
+    },
+
+    finalizingPlan: {
+      invoke: {
+        src: 'finalizePlan',
+        input: ({ context }) => ({
+          strategicPlan: context.strategicPlan,
         }),
         onDone: {
           target: 'validatePlan',
@@ -343,13 +377,13 @@ export const plannerMachine = createMachine({
     
     invokingAgent: {
       invoke: {
-        src: agentMachine,
+        src: 'agentMachine',
         input: ({ context }) => {
           // Build enhanced working memory with accumulated results
           const baseMemory = context.workingMemory;
           const accumulatedContext = context.accumulatedResults.length > 0 
-            ? `\n\nPrevious strategic goals and results:\n${context.accumulatedResults.map((result, index) => 
-                `Strategic Goal #${index + 1}: "${context.strategicPlan[index]}"\n\nResult:\n${result}`
+            ? `\n\n${context.accumulatedResults.map((item, index) => 
+                `Strategic Goal #${index + 1}: "${item.goal}"\nStrategic Goal #${index + 1} Result: ${item.result}`
               ).join('\n\n')}`
             : '';
           
@@ -368,14 +402,14 @@ export const plannerMachine = createMachine({
             target: 'evaluatingProgress',
             actions: assign({
               agentResult: ({ event }) => {
-                return event.output?.result || 'Agent completed';
+                return 'result' in event.output ? event.output.result : 'Agent completed';
               },
               accumulatedResults: ({ context, event }) => {
-                const result = event.output?.result || 'Agent completed';
-                return [...context.accumulatedResults, result];
+                const result = 'result' in event.output ? event.output.result : 'Agent completed';
+                return [...context.accumulatedResults, { goal: context.currentGoal, result }];
               },
               lastExecutedTool: ({ event }) => {
-                return event.output?.lastExecutedTool || null;
+                return 'result' in event.output ? (event.output.lastExecutedTool || null) : null;
               },
               error: () => null,
             }),
@@ -456,10 +490,6 @@ export const plannerMachine = createMachine({
       }
     },
   },
-}, {
-  delays: {
-    TIMEOUT: TIMEOUT_MS
-  }
 });
 
 export type PlannerMachine = typeof plannerMachine;

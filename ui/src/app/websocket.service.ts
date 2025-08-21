@@ -19,12 +19,12 @@ export interface AudioMessage {
   providedIn: 'root'
 })
 export class WebsocketService implements OnDestroy {
-  private connectionStatusSubject = new BehaviorSubject<boolean>(false);
+  private readonly connectionStatusSubject = new BehaviorSubject<boolean>(false);
   public connectionStatus$ = this.connectionStatusSubject.asObservable();
   private socket$: WebSocketSubject<WebSocketMessage> | null = null;
-  private logSubject = new Subject<string>();
-  private processStatusSubject = new Subject<boolean>();
-  private audioSubject = new Subject<AudioMessage>();
+  private readonly logSubject = new Subject<string>();
+  private readonly processStatusSubject = new Subject<boolean>();
+  private readonly audioSubject = new Subject<AudioMessage>();
   private readonly WS_ENDPOINT = 'ws://localhost:8080';
   private isConnecting = false;
 
@@ -131,6 +131,8 @@ export class WebsocketService implements OnDestroy {
         case 'audio':
           this.audioSubject.next(msg.data as AudioMessage);
           break;
+        case 'ack':
+            break;
         default:
           this.logSubject.next(`[CLIENT] Unknown message type: ${msg.type}`);
       }
@@ -142,16 +144,16 @@ export class WebsocketService implements OnDestroy {
   public startMagi(userMessage?: string): void {
     try {
       if (!this.socket$ || this.socket$.closed) {
-        this.logSubject.next('[CLIENT] WebSocket not connected - cannot start Magi');
+        this.logSubject.next('[CLIENT] WebSocket not connected - cannot contact Magi');
         return;
       }
       
-      const message: WebSocketMessage = { type: 'start-magi', data: { userMessage } };
+      const message: WebSocketMessage = { type: 'contact-magi', data: { userMessage } };
       this.processStatusSubject.next(true);
       this.socket$.next(message);
     } catch (error) {
       const errorMsg = this.formatError(error);
-      this.logSubject.next(`[CLIENT] Failed to start Magi: ${errorMsg}`);
+      this.logSubject.next(`[CLIENT] Failed to contact Magi: ${errorMsg}`);
       this.processStatusSubject.next(false);
     }
   }

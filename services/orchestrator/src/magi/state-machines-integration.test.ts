@@ -45,7 +45,7 @@ const createMockConduitClient = (magiName: MagiName, shouldComplete: boolean = t
       return { plan: ['Test goal 1', 'Test goal 2'] };
     }
     if (userPrompt.includes('tool') && userPrompt.includes('JSON')) {
-      return { tool: { name: 'answer-user', parameters: { answer: 'Test answer' } } };
+      return { tool: { name: 'respond-to-user', parameters: { response: 'Test answer' } } };
     }
     if (userPrompt.includes('Sub-goal:') && userPrompt.includes('Has the sub-goal been completed')) {
       // Sub-goal evaluation - return boolean value based on shouldComplete
@@ -63,15 +63,15 @@ const createMockConduitClient = (magiName: MagiName, shouldComplete: boolean = t
 
 const createMockTools = (): MagiTool[] => ([
   {
-    name: 'answer-user',
-    description: 'Provide an answer to the user',
+    name: 'respond-to-user',
+    description: 'Communicate with the user',
     inputSchema: {
       type: 'object',
       properties: {
-        answer: { type: 'string' }
+        response: { type: 'string' }
       }
     },
-    toString: () => 'Name: answer-user\nDescription: Provide an answer to the user',
+    toString: () => 'Name: respond-to-user\nDescription: Communicate with the user',
     formatTypeInfo: (value: any) => value.type || 'unknown'
   } as unknown as MagiTool
 ]);

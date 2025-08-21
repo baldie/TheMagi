@@ -159,8 +159,8 @@ describe('ToolRegistry', () => {
     });
 
     it('should pass validation for valid parameters', () => {
-      const result = ToolRegistry.validateParameters('ask-user', {
-        question: 'How are you?'
+      const result = ToolRegistry.validateParameters('respond-to-user', {
+        response: 'How are you?'
       });
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);

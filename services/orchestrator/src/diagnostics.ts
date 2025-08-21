@@ -60,9 +60,14 @@ async function ensureServiceReady(
       logger.info(`... ${serviceName} service is now ready!`);
       return;
     } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : 
-                          typeof e === 'object' && e && 'code' in e ? String(e.code) : 
-                          'Unknown error';
+      let errorMessage: string;
+      if (e instanceof Error) {
+        errorMessage = e.message;
+      } else if (typeof e === 'object' && e && 'code' in e) {
+        errorMessage = String(e.code);
+      } else {
+        errorMessage = 'Unknown error';
+      }
       logger.warn(`... ${serviceName} is still not responding. (${errorMessage})`);
       
       if (attempt < maxRetries) {

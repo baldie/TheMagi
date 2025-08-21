@@ -4,7 +4,7 @@ import type { MagiName } from '../types/magi-types';
 import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
 import { testHooks } from '../testing/test-hooks';
-import { ConduitClient } from './conduit-client';
+import type { ConduitClient } from './conduit-client';
 import { PERSONAS_CONFIG } from './magi_old';
 
 /**
@@ -62,16 +62,10 @@ export class ToolExecutor {
    */
   private async executeToolInternal(tool: AgenticTool, conduitClient?: ConduitClient): Promise<string> {
     // Handle special tool cases
-    if (tool.name === 'answer-user') {
-      const answerText = (tool.parameters.answer as string) || 'No answer provided';
-      try { testHooks.recordToolCall('answer-user', { answer: answerText }); } catch { /* no-op in non-test mode */ }
-      return answerText;
-    }
-    
-    if (tool.name === 'ask-user') {
-      const questionText = (tool.parameters.question as string) || 'No question provided';
-      try { testHooks.recordToolCall('ask-user', { question: questionText }); } catch { /* no-op in non-test mode */ }
-      return questionText;
+    if (tool.name === 'respond-to-user') {
+      const responseText = (tool.parameters.response as string) || 'No response provided';
+      try { testHooks.recordToolCall('respond-to-user', { response: responseText }); } catch { /* no-op in non-test mode */ }
+      return responseText;
     }
 
     if (tool.name === 'process-info') {
@@ -83,7 +77,7 @@ export class ToolExecutor {
       const { model } = PERSONAS_CONFIG[this.magiName];
       const processingInstructions = (tool.parameters.processing_instructions as string) || 'Process the data';
       const processedInfo = await conduitClient.contact(
-        `Processing Instructions:\n${processingInstructions}\n(IMPORTANT: Be very concise and to the point.)\n\nData to process:\n${rawInfo}\nOnly provide the answer.`,
+        `Processing Instructions:\n${processingInstructions}\n(IMPORTANT: Be very concise and to the point.)\n\nData to process:\n${rawInfo}\nOnly provide the answer in a complete sentence.`,
         "Persona:\nYou are an expert information processor.",
         model,
         { temperature: 0.3 }

@@ -118,7 +118,9 @@ function waitForMagiReadyFromProcess(child: ReturnType<typeof spawn>, timeoutMs 
       }
       child.removeAllListeners('error');
       child.removeAllListeners('exit');
-      try { child.unref(); } catch {}
+      try { child.unref(); } catch {
+        // Ignore unref errors
+      }
     }
 
     let timer: NodeJS.Timeout | null = setTimeout(checkTimeout, 500);
@@ -136,7 +138,9 @@ function waitForMagiReadyFromProcess(child: ReturnType<typeof spawn>, timeoutMs 
           resolve();
           return;
         }
-      } catch {}
+      } catch {
+        // Ignore health check errors
+      }
       if (!readyPatterns.some(r => r.test(stdoutBuffer)) && !readyPatterns.some(r => r.test(stderrBuffer))) {
         cleanup();
         reject(new Error(`start-magi.sh exited early with code ${code ?? 'unknown'} before readiness`));
@@ -172,8 +176,6 @@ function delay(ms: number): Promise<void> {
 let healthPollAttempt = 0;
 async function fetchOrchestratorHealth(port: number): Promise<HealthResponse | null> {
   const attempt = ++healthPollAttempt;
-  //const ts = new Date().toISOString();
-  //console.log(`[integration] [health] attempt=${attempt} ts=${ts} -> GET http://127.0.0.1:${port}/health`);
   return new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port, path: '/health', timeout: 2000 }, (res) => {
       let data = '';
@@ -190,7 +192,9 @@ async function fetchOrchestratorHealth(port: number): Promise<HealthResponse | n
     });
     req.on('timeout', () => {
       console.log(`[integration] [health] attempt=${attempt} timeout after 2000ms`);
-      try { req.destroy(); } catch {}
+      try { req.destroy(); } catch {
+        // Ignore destroy errors
+      }
       resolve(null);
     });
     req.on('error', (err) => {
@@ -329,10 +333,12 @@ beforeAll(async () => {
     });
     // Also write an index line so the test runner can quickly identify the active log
     try {
-      const fs = require('fs');
+      // fs already imported at top
       const logIndex = path.join(LOGS_DIR, `integration-${RUN_ID}.log`);
       fs.appendFileSync(logIndex, '');
-    } catch {}
+    } catch {
+      // Ignore log file creation errors
+    }
   } catch (e) {
     throw new Error(`Failed to start Magi via start-magi.sh: ${String((e as Error)?.message || e)}`);
   }

@@ -208,30 +208,16 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   },
 
   // Default agentic tools
-  'ask-user': {
-    name: 'ask-user',
-    description: 'This tool allows you to request information from the user',
+  'respond-to-user': {
+    name: 'respond-to-user',
+    description: 'This tool allows you to ask questions of the user or provide answers to the user',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: {},
     responseType: 'TextResponse',
     parameters: {
-      question: {
+      response: {
         type: 'string',
-        description: 'The question to ask the user',
-        required: true
-      }
-    },
-  },
-  'answer-user': {
-    name: 'answer-user',
-    description: 'This tool allows you to respond to the user',
-    category: ToolCategory.DEFAULT_AGENTIC_TOOL,
-    defaults: {},
-    responseType: 'TextResponse',
-    parameters: {
-      answer: {
-        type: 'string',
-        description: 'The response to provide to the user. This should be in conversational tone',
+        description: 'The response to provide to the user. This can be a question, answer, or any other communication. Use conversational tone.',
         required: true
       }
     },
@@ -393,30 +379,33 @@ export class ToolRegistry {
     const errors: string[] = [];
     const validated = { ...parameters };
 
-    // Check required parameters
+    // First pass: Apply defaults for missing parameters
+    for (const [paramName, paramDef] of Object.entries(definition.parameters)) {
+      if (validated[paramName] === undefined && paramDef.default !== undefined) {
+        validated[paramName] = paramDef.default;
+      }
+    }
+    
+    // Second pass: Check required parameters and validate types
     for (const [paramName, paramDef] of Object.entries(definition.parameters)) {
       if (paramDef.required && (validated[paramName] === undefined || validated[paramName] === null)) {
         errors.push(`Missing required parameter: ${paramName}`);
       }
 
       // Type validation
-      if (validated[paramName] !== undefined) {
-        const value = validated[paramName];
-        const expectedType = paramDef.type;
+      if (validated[paramName] === undefined)
+        continue;
+      
+      const value = validated[paramName];
+      const expectedType = paramDef.type;
 
-        if (!this.isValidType(value, expectedType)) {
-          errors.push(`Parameter '${paramName}' expected ${expectedType}, got ${typeof value}`);
-        }
-
-        // Enum validation
-        if (paramDef.enum && !paramDef.enum.includes(value)) {
-          errors.push(`Parameter '${paramName}' must be one of: ${paramDef.enum.join(', ')}`);
-        }
+      if (!this.isValidType(value, expectedType)) {
+        errors.push(`Parameter '${paramName}' expected ${expectedType}, got ${typeof value}`);
       }
 
-      // Apply defaults
-      if (validated[paramName] === undefined && paramDef.default !== undefined) {
-        validated[paramName] = paramDef.default;
+      // Enum validation
+      if (paramDef.enum && !paramDef.enum.includes(value)) {
+        errors.push(`Parameter '${paramName}' must be one of: ${paramDef.enum.join(', ')}`);
       }
     }
 

@@ -18,7 +18,17 @@
     </div>
     
     <div class="log-fulltext-section">
-      <h4>Full Text</h4>
+      <div>
+        <h4>Full Text</h4>
+        <button type="button" class="copy-btn" (click)="copyLogText()" [class.success]="copySuccess" [attr.aria-label]="copySuccess ? 'Copied!' : 'Copy log text'">
+          <svg *ngIf="!copySuccess" class="copy-icon" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z"></path>
+          </svg>
+          <svg *ngIf="copySuccess" class="success-icon" focusable="false" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path>
+          </svg>
+        </button>
+      </div>
       <pre class="log-fulltext">{{ selectedLog.fullText }}</pre>
     </div>
   </div>

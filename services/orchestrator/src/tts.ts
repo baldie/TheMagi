@@ -27,7 +27,7 @@ async function streamAudioToClients(audioBuffer: Buffer, persona: MagiName, sequ
   for (let i = 0; i < totalChunks; i++) {
     const start = i * chunkSize;
     const end = Math.min(start + chunkSize, audioBuffer.length);
-    const chunk = audioBuffer.slice(start, end);
+    const chunk = audioBuffer.subarray(start, end);
     
     const isLastChunk = (i === totalChunks - 1);
     broadcastAudioToClients(chunk, persona, isLastChunk, sequenceNumber);
@@ -149,9 +149,9 @@ async function makeBatchTTSRequest(texts: string[], persona: MagiName): Promise<
   }
   
   // Sort results by sequence number and decode audio data
-  return results
-    .sort((a, b) => a.sequence_number - b.sequence_number)
-    .map(result => {
+  const sortedResults = [...results].sort((a: any, b: any) => a.sequence_number - b.sequence_number);
+  return sortedResults
+    .map((result: any) => {
       if (!result.audio_data) {
         throw new Error(`No audio data for sequence ${result.sequence_number}`);
       }
@@ -167,7 +167,8 @@ async function makeBatchTTSRequest(texts: string[], persona: MagiName): Promise<
 function splitIntoSentences(text: string): string[] {
     // This regex splits the text by periods, question marks, or exclamation marks,
     // followed by whitespace or the end of the string. It keeps the delimiters.
-    const sentences = text.match(/[^.!?]+[.!?]+\s*|[^.!?]+$/g);
+    const sentenceRegex = /[^.!?]*?[.!?]+\s*|[^.!?]+$/g;
+    const sentences = text.match(sentenceRegex);
     return sentences ? sentences.map(s => s.trim()).filter(s => s.length > 0) : [];
 }
 

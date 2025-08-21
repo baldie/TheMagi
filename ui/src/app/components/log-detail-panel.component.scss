@@ -109,11 +109,51 @@
     }
     
     .log-fulltext-section {
+      div {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      
       h4 {
         color: #ffa500;
         font-size: 1rem;
-        margin: 0 0 8px 0;
+        margin: 0;
         font-family: 'Courier New', Courier, monospace;
+      }
+      
+      .copy-btn {
+        background: transparent;
+        border: 1px solid #666;
+        color: #666;
+        padding: 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        width: 32px;
+        height: 32px;
+        
+        .copy-icon, .success-icon {
+          width: 16px;
+          height: 16px;
+          fill: currentColor;
+        }
+        
+        &:hover:not(.success) {
+          border-color: #ffa500;
+          color: #ffa500;
+          background: rgba(255, 165, 0, 0.1);
+        }
+        
+        &.success {
+          border-color: #28a745;
+          color: #28a745;
+          background: rgba(40, 167, 69, 0.1);
+        }
       }
       
       .log-fulltext {

@@ -135,7 +135,6 @@ function startHttpOrchestratorService(): void {
   
   app.use(cors({ origin: ['http://localhost:4200', 'http://127.0.0.1:4200'] }));
   app.use(express.json());
-  // eslint-disable-next-line
   const server = http.createServer(app);
 
   server.on('upgrade', (request, _socket, _head) => {
@@ -162,57 +161,58 @@ function startHttpOrchestratorService(): void {
       });
   });
 
-  app.post('/start-magi', async (req, res) => {
+  async function initializeMagiForTest(magiName: string): Promise<void> {
+    let target = null;
+    if (magiName === 'Balthazar') {
+      target = balthazar;
+    } else if (magiName === 'Melchior') {
+      target = melchior;
+    } else if (magiName === 'Caspar') {
+      target = caspar;
+    }
+
+    if (!target) return;
+    
+    const { PERSONAS_CONFIG } = await import('./magi/magi2');
+    const src = PERSONAS_CONFIG[target.name].personalitySource;
+    const fs = await import('fs/promises');
+    const prompt = await fs.readFile(src, 'utf-8');
+    await target.initialize(prompt);
+    logger.info(`[HTTP] ${target.name} personality initialized for test run.`);
+  }
+
+  app.post('/contact-magi', async (req, res) => {
     try {
       const { testName, magi, userMessage } = req.body.data || req.body;
       
-      // Initialize a new test run via test hooks
       testHooks.beginRun({ testName, magi });
 
-      // If a magi is specified, prefix the message to force single-magi routing
-      const routedMessage = magi && userMessage
-        ? `${magi}: ${userMessage}`
-        : userMessage;
+      const routedMessage = magi && userMessage ? `${magi}: ${userMessage}` : userMessage;
 
-      // In integration tests, ensure the targeted Magi is initialized like loadMagi does
-      try {
-        if (magi) {
-          const targetName = magi;
-          const target = targetName === 'Balthazar' ? balthazar
-            : targetName === 'Melchior' ? melchior
-            : targetName === 'Caspar' ? caspar
-            : null;
-          if (target) {
-            const { PERSONAS_CONFIG } = await import('./magi/magi2');
-            const src = PERSONAS_CONFIG[target.name].personalitySource;
-            const fs = await import('fs/promises');
-            const prompt = await fs.readFile(src, 'utf-8');
-            await target.initialize(prompt);
-            logger.info(`[HTTP] ${target.name} personality initialized for test run.`);
-          }
+      if (magi) {
+        try {
+          await initializeMagiForTest(magi);
+        } catch (initError) {
+          logger.warn('[HTTP] Failed to pre-initialize Magi for test run', initError);
         }
-      } catch (initError) {
-        logger.warn('[HTTP] Failed to pre-initialize Magi for test run', initError);
       }
 
       const response = await routeMessage(routedMessage);
       
-      // Record final delivery as an implicit answer-user for testing observability
-      try { testHooks.recordToolCall('answer-user', { answer: response }); } catch (e) { logger.debug(`[HTTP] Failed to record final answer-user: ${e instanceof Error ? e.message : String(e)}`); }
+      try { testHooks.recordToolCall('respond-to-user', { response }); } catch (e) { logger.debug(`[HTTP] Failed to record final respond-to-user: ${e instanceof Error ? e.message : String(e)}`); }
       const meta = testHooks.endRunAndSummarize(response);
       logger.info('[HTTP] Magi contact completed successfully');
       
-      // Send the final response back to the client
       const payload: any = { type: 'deliberation-complete', data: { response } };
-      if (meta) {
-        payload.data.testMeta = meta;
-      }
+      if (meta) payload.data.testMeta = meta;
+      
       res.status(200).json(payload);
     } catch (error) {
-      logger.error(`[HTTP] Magi contact failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error(`[HTTP] Magi contact failed: ${errorMessage}`);
       res.status(500).json({
         type: 'deliberation-error',
-        data: { error: error instanceof Error ? error.message : 'Unknown error' }
+        data: { error: errorMessage }
       });
     }
   });
@@ -223,7 +223,7 @@ function startHttpOrchestratorService(): void {
     if (err.code === 'EADDRINUSE') {
       logger.info(`Previous Orchestrator instance already listening on port ${PORT}`);
     } else {
-      console.error(`Server error: ${err}`);
+      console.error(`Server error: ${JSON.stringify(err)}`);
     }
   });
 

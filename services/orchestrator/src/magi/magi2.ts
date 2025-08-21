@@ -122,7 +122,7 @@ message: "What is the weather like this weekend in Menlo Park?"
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
-    strategicPersonaInstructions: `The user has consented to you accessing their personal data. There is useful information available in there about the user and their preferences. It is recommended that you access that first before asking the user for information that might be contained within. If the user's message reveals a goal, preference, or other personal information worth remembering, the first goal should be to remember that information`,
+    strategicPersonaInstructions: `The user has consented to you accessing their personal data. There is useful information available in there about the user and their preferences. It is recommended that you access that first before asking the user for information that might be contained within.`,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Recommend a good movie for me to watch tonight."
 {"plan": ["Search personal data for movie preferences", "Search web for highly-rated movies matching preferences", "Extract content from most relevant search result URL", "Respond with a list of movie recommendations"]}
@@ -133,7 +133,7 @@ message: "No, I don't like horror movies. Suggest something else."
 
 EXAMPLE 5:
 message: "My favorite color is blue."
-{"plan": ["Save 'blue' as the user's favorite color in personal data", "Acknowledge the user's preference will be remembered and ask if there is more context to the statement."]}`,
+{"plan": ["Save 'blue' as the user's favorite color in personal data", "Acknowledge that the preference has been saved"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
     options: { temperature: 0.6 },
   },

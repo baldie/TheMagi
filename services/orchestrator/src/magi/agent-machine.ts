@@ -24,14 +24,9 @@ import { isContextValid, canRetry, isToolValid, shouldStopForStagnation } from '
 /**
  * Checks if the agent should terminate early based on the last tool used
  */
-const shouldAgentTerminateEarly = ({ context, event }: { context: AgentContext; event: any }): boolean => {
-  // Check if event.output is true (sub-goal completed)
-  if (event.output === true) {
-    // Check if last tool was answer-user or ask-user
-    const userInteractionTools = ['answer-user', 'ask-user'];
-    return context.selectedTool !== null && userInteractionTools.includes(context.selectedTool.name);
-  }
-  return false;
+const shouldAgentTerminateEarly = ({ context }: { context: AgentContext; event: any }): boolean => {
+  // Check if last tool was a response
+  return context.selectedTool !== null && context.selectedTool.name === 'respond-to-user';
 };
 
 // ============================================================================
@@ -130,7 +125,7 @@ export const agentMachine = createMachine({
         onDone: {
           target: 'determiningSubGoal',
           actions: assign({
-            workingMemory: ({ event }) => event.output,
+            workingMemory: ({ event }) => event.output || '',
           }),
         },
         onError: {
@@ -163,7 +158,7 @@ export const agentMachine = createMachine({
         onDone: {
           target: 'selectingTool',
           actions: assign({
-            currentSubGoal: ({ event }) => event.output,
+            currentSubGoal: ({ event }) => event.output || '',
             retryCount: () => 0,
           }),
         },
@@ -199,7 +194,7 @@ export const agentMachine = createMachine({
         onDone: {
           target: 'validatingTool',
           actions: assign({
-            selectedTool: ({ event }) => event.output,
+            selectedTool: ({ event }) => event.output || null,
           }),
         },
         onError: [
@@ -250,7 +245,7 @@ export const agentMachine = createMachine({
         onDone: {
           target: 'processingOutput',
           actions: assign({
-            toolOutput: ({ event }) => event.output,
+            toolOutput: ({ event }) => event.output || '',
             error: () => null,
           }),
         },
@@ -287,7 +282,7 @@ export const agentMachine = createMachine({
         onDone: {
           target: 'evaluatingSubGoal',
           actions: assign({
-            processedOutput: ({ event }) => event.output,
+            processedOutput: ({ event }) => event.output || '',
           }),
         },
         onError: {
@@ -363,10 +358,10 @@ export const agentMachine = createMachine({
         }),
         onDone: [
           {
-            guard: ({ event }) => event.output.achieved === true,
+            guard: ({ event }) => event.output?.achieved === true,
             target: 'done',
             actions: assign({
-              goalCompletionResult: ({ event }) => event.output,
+              goalCompletionResult: ({ event }) => event.output || null,
               lastProgressCycle: ({ context }) => context.cycleCount,
               // processedOutput is preserved - no need to reassign
             }),
@@ -376,7 +371,7 @@ export const agentMachine = createMachine({
             actions: assign({
               workingMemory: ({ context }) => `${context.workingMemory}\nCompleted: ${context.currentSubGoal} -> ${context.processedOutput}`,
               retryCount: () => 0,
-              goalCompletionResult: ({ event }) => event.output,
+              goalCompletionResult: ({ event }) => event.output || null,
             }),
           },
         ],

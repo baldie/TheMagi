@@ -29,7 +29,7 @@
         }
       ]
     },
-    "answer-user": {
+    "respond-to-user": {
       "response": "Michael Jordan is 6 feet 6 inches (1.98 meters) tall.",
       "ignoreParameters": true
     }
@@ -53,7 +53,7 @@
         "search-web"
       ],
       "mustNotCall": [
-        "ask-user"
+        "respond-to-user"
       ],
       "expectedOrder": [
         {

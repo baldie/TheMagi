@@ -57,7 +57,6 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
     let heartbeatTimer: NodeJS.Timeout | null = null;
 
     ws.on('message', async (rawMessage: Buffer) => {
-      console.log('🔥🔥🔥 WEBSOCKET MESSAGE HANDLER TRIGGERED! 🔥🔥🔥');
       
       try {
         const message = rawMessage.toString();
@@ -65,7 +64,7 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
         const parsedMessage = JSON.parse(message);
         logger.info(`[DEBUG] Parsed message type: ${parsedMessage.type}`);
         
-        if (parsedMessage.type === 'start-magi') {
+        if (parsedMessage.type === 'contact-magi') {
           
           // Send initial ACK
           const ackResponse = { type: 'ack', data: 'WORKING', source: 'message-handler' };
@@ -90,11 +89,15 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
                 if (ws.readyState === WebSocket.OPEN) {
                   try {
                     ws.send(JSON.stringify({ type: 'log', data: '[heartbeat] server is working' }));
-                  } catch {}
+                  } catch {
+                    // Ignore heartbeat send errors
+                  }
                 }
               }, 5000);
             }
-          } catch {}
+          } catch {
+            // Ignore heartbeat setup errors
+          }
           
           try {
             const response = await startCallback(userMessage);

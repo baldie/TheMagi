@@ -1,13 +1,21 @@
 <div class="advanced-panel" [class.visible]="displayLogs">
   <div class="panel-header">
-    <h3>Server Logs</h3>
+    <div>
+      <h3>Server Logs</h3>
+      <label class="emoji-filter">
+        <input type="checkbox" 
+               [checked]="filterByEmoji['🤖']"
+               (change)="toggleEmojiFilter('🤖')">
+        🤖
+      </label>
+    </div>
     <button class="clear-logs-btn" (click)="clearLogs()">Clear Logs</button>
   </div>
   <div class="logs-container" 
        #logsContainer
        (scroll)="onLogsScroll()">
     <div class="log-row" 
-         *ngFor="let log of serverLogs; let i = index"
+         *ngFor="let log of filteredLogs; let i = index"
          [class.selected]="selectedLogIndex === i"
          [class]="'log-type-' + log.logType.toLowerCase()"
          (click)="selectLog(i)">

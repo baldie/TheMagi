@@ -29,7 +29,7 @@
         }
       ]
     },
-    "answer-user": {
+    "respond-to-user": {
       "response": "Based on your current body fat of 22% and your goal of 15%, you need to reduce your body fat by 7 percentage points to reach your target.",
       "ignoreParameters": true
     }
@@ -55,15 +55,15 @@
       "mustCall": [
         "access-data",
         "process-info",
-        "answer-user"
+        "respond-to-user"
       ],
       "mustNotCall": [
-        "ask-user"
+        "respond-to-user"
       ],
       "expectedOrder": [
         {
           "tool": "access-data",
-          "before": "answer-user"
+          "before": "respond-to-user"
         }
       ],
       "maxToolCalls": 3

@@ -26,6 +26,25 @@ export class LogsPanelComponent implements AfterViewChecked {
   selectedLogIndex: number | null = null;
   private isUserScrolling = false;
   private shouldAutoScroll = true;
+  
+  // Emoji filter state
+  filterByEmoji: { [key: string]: boolean } = {
+    '🤖': false
+  };
+  
+  get filteredLogs(): LogEntry[] {
+    const activeFilters = Object.entries(this.filterByEmoji)
+      .filter(([emoji, isActive]) => isActive)
+      .map(([emoji, isActive]) => emoji);
+    
+    if (activeFilters.length === 0) {
+      return this.serverLogs;
+    }
+    
+    return this.serverLogs.filter(log => 
+      activeFilters.some(emoji => log.title.includes(emoji))
+    );
+  }
 
   ngAfterViewChecked() {
     if (this.shouldAutoScroll && this.displayLogs && this.logsContainer) {
@@ -56,10 +75,14 @@ export class LogsPanelComponent implements AfterViewChecked {
 
   selectLog(index: number) {
     this.selectedLogIndex = index;
-    const selectedLog = this.serverLogs[index];
+    const selectedLog = this.filteredLogs[index];
     if (selectedLog) {
       this.logSelected.emit(selectedLog);
     }
+  }
+  
+  toggleEmojiFilter(emoji: string) {
+    this.filterByEmoji[emoji] = !this.filterByEmoji[emoji];
   }
 
   formatTime(timeStamp: Date): string {

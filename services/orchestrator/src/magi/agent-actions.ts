@@ -1,34 +1,83 @@
 import { fromPromise } from 'xstate';
 import { logger } from '../logger';
-import { PERSONAS_CONFIG } from './magi2';
+import { PERSONAS_CONFIG, allMagi } from './magi2';
 import type { ConduitClient } from './conduit-client';
-import { MagiName } from '../types/magi-types';
+import type { MagiName } from '../types/magi-types';
 import type { GoalCompletionResult, AgentContext } from './types';
 import type { AgenticTool } from './magi2';
 import { ToolExecutor } from './tool-executor';
 import { TIMEOUT_MS } from './types';
 import { speakWithMagiVoice } from '../tts';
-import { allMagi } from './magi2';
+
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
+interface GatherContextInput {
+  userMessage: string;
+  strategicGoal: string;
+  workingMemory: string;
+  completedSubGoals: string[];
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+}
+
+interface DetermineNextTacticalGoalInput {
+  strategicGoal: string;
+  context: string;
+  completedSubGoals: string[];
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+  userMessage: string;
+}
+
+interface SelectToolInput {
+  subGoal: string;
+  availableTools: any[];
+  conduitClient: ConduitClient;
+  context: string;
+  userMessage: string;
+  magiName: MagiName;
+}
+
+interface ExecuteToolInput {
+  context: AgentContext;
+}
+
+interface ProcessOutputInput {
+  tool: AgenticTool | null;
+  toolOutput: string;
+  currentSubGoal: string;
+  userMessage: string;
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+}
+
+interface EvaluateSubGoalInput {
+  subGoal: string;
+  toolOutput: string;
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+}
+
+interface EvaluateStrategicGoalInput {
+  strategicGoal: string;
+  completedSubGoals: string[];
+  processedOutput: string;
+  conduitClient: ConduitClient;
+  magiName: MagiName;
+}
 
 // ============================================================================
 // AGENT ACTIONS - Async operations for the agent state machine
 // ============================================================================
 
-const COMMON_ACTIONS = ['ask', 'answer', 'read', 'search', 'analyze', 'summarize', 'store', 'access', 'extract', 'respond'];
+const COMMON_ACTIONS = ['read', 'search', 'analyze', 'calculate', 'summarize', 'store', 'access', 'extract', 'respond'];
 
 /**
  * Gathers context for the current strategic goal
  */
-export const gatherContext = fromPromise(async ({ input }: {
-  input: {
-    userMessage: string;
-    strategicGoal: string;
-    workingMemory: string;
-    completedSubGoals: string[];
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}) => {
+export const gatherContext = fromPromise<string, GatherContextInput>(async ({ input }) => {
   const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
 
   // No context to gather
@@ -46,13 +95,11 @@ ${workingMemory.trim() ? workingMemory.trim() : 'None'}\n
 NEXT STRATEGIC GOAL (not for you):\n${strategicGoal}
 ${completedSubGoals.length > 0 ? `\nCOMPLETED SUB-GOALS:\n${completedSubGoals.join(', ') || 'None'}\n` : ''}
 INSTRUCTIONS:
-Based on the NEXT STRATEGIC GOAL, what data from the GIVEN TEXT will be useful.
-Provide ONLY the direct information needed to perform that next action.
+Provide ALL the available information needed to ${strategicGoal}
+If the next step is to process an item from a list, your response should be to first select the right item from the list.
 
 OUTPUT:
-Based on your instructions, provide any information that could be useful for the next step.
-- If the next step is to process an item from a list, your response should be to first select the right item from the list.
-- Do not interpret or summarize any of the content. Only respond with the information.`;
+Do not interpret or summarize any of the content. Only respond with the information in complete sentences.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -66,16 +113,7 @@ Based on your instructions, provide any information that could be useful for the
 /**
  * Determines the next tactical sub-goal based on current context
  */
-export const determineNextTacticalGoal = fromPromise(async ({ input }: { 
-  input: { 
-    strategicGoal: string; 
-    context: string; 
-    completedSubGoals: string[];
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-    userMessage: string;
-  } 
-}) => {
+export const determineNextTacticalGoal = fromPromise<string, DetermineNextTacticalGoalInput>(async ({ input }) => {
   const { strategicGoal, context: workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
 
   const isStraightForward = (COMMON_ACTIONS.some(action => strategicGoal.trim().toLowerCase().startsWith(action)));
@@ -112,26 +150,17 @@ Output ONLY the specific action command that should be executed next - No preamb
 /**
  * Selects the appropriate tool for the current sub-goal
  */
-export const selectTool = fromPromise(async ({ input }: { 
-  input: { 
-    subGoal: string; 
-    availableTools: any[];
-    conduitClient: ConduitClient;
-    context: string;
-    magiName: MagiName;
-    userMessage: string;
-  } 
-}) => {
+export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async ({ input }) => {
   const { subGoal, availableTools, conduitClient, magiName, context: workingMemory, userMessage } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
-  const systemPrompt = `Persona:\nYou are a straightforward tool picker. Pick the tool that will allow you to '${subGoal}.'`;
+  const systemPrompt = `Persona:\nYou are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data.`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
-  const userPrompt = `The Job:\n${subGoal}\n
-User Message:\n${userMessage}\n${workingMemory.trim() !== userMessage ? `\nData Gathered so far:\n${workingMemory}\n` : ''}
+  const userPrompt = `Action to Perform:\n${subGoal}\n
+User Message:\n${userMessage}\n${workingMemory.trim() !== userMessage ? `\nInput for Next Action:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
 Pick the tool that will allow you to '${subGoal}.'
@@ -161,24 +190,17 @@ Format:
 /**
  * Evaluates if a sub-goal has been completed
  */
-export const evaluateSubGoalCompletion = fromPromise(async ({ input }: {
-  input: {
-    subGoal: string;
-    toolOutput: string;
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}) => {
+export const evaluateSubGoalCompletion = fromPromise<boolean, EvaluateSubGoalInput>(async ({ input }) => {
   const { subGoal, toolOutput, conduitClient, magiName } = input;
   
-  const systemPrompt = `PERSONA:\nYou are an outcome-focused evaluation agent. Your job is to determine if a desired state has been achieved.
-INSTRUCTION:\nEvaluate if the sub-goal has been completed by focusing on the final state described in the tool output, not the action taken.
+  const systemPrompt = `PERSONA:\nYou are an outcome-focused evaluation agent. Your job is to determine if a desired state has been achieved.\n
+INSTRUCTION:\nEvaluate if the tool task has been completed by focusing on the final state described in the tool output, not the action taken.
 A goal is "completed" if the state it aims to achieve is true. For example, if a goal is to "add X" and the tool reports "X already exists," the goal is complete because the final state is that X exists.
-If the goal is to extract information, a summary is sufficient for completion.`
+If the goal is to extract information, a summary is sufficient for completion. A summary of a web page means the content has been successfully extracted.`
 
-  const userPrompt = `Sub-goal:\n${subGoal}\n
+  const userPrompt = `Tool Task:\n${subGoal}\n
 Tool Output:\n${toolOutput}\n
-Has the sub-goal been completed? Respond only with JSON:
+Has the tool task been completed? Respond only with JSON:
 {
   "completed": true/false,
   "reason": "explanation"
@@ -189,7 +211,7 @@ Has the sub-goal been completed? Respond only with JSON:
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.1 });
     return response.completed === true;
   } catch (error) {
-    logger.error(`${magiName} failed to evaluate sub-goal completion:`, error);
+    logger.error(`${magiName} failed to evaluate tool task completion:`, error);
     // Fallback: consider it complete if we have meaningful output
     return toolOutput.length > 0;
   }
@@ -228,25 +250,19 @@ function getRelevantContentFromRawText(userMessage: string, rawToolResponse: str
  * Processes tool output for clarity and relevance
  * Depending on the tool, we might want to process the output differently
  */
-export const processOutput = fromPromise(async ({ input }: {
-  input: {
-    tool: AgenticTool;
-    toolOutput: string;
-    currentSubGoal: string;
-    userMessage?: string;
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}) => {
+export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ input }) => {
   const { tool, toolOutput, currentSubGoal, userMessage, conduitClient, magiName } = input;
   const { model } = PERSONAS_CONFIG[magiName];
   let processedOutput;
   
+  // If no tool, return basic processing
+  if (!tool) {
+    return toolOutput.length > 5000 ? toolOutput.substring(0, 5000) + '... [truncated]' : toolOutput;
+  }
+  
   // Process output based on tool type
   switch (tool.name) {
-    case 'ask-user':
-    case 'answer-user':
-    case 'process-info': {
+    case 'respond-to-user': {
       // For user-directed questions, use the tool output verbatim
       processedOutput = toolOutput;
       break;
@@ -270,11 +286,11 @@ export const processOutput = fromPromise(async ({ input }: {
     case 'access-data': {
         // Summarize the data we stored or retrieved in human readable form
         logger.debug(`Raw access-data: ${toolOutput}`);
-        const summarize = `You have just attempted to ${tool.parameters.action} the following data:\n${toolOutput}, which resulted in the following output:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${magiName}, speak in the first person and only provide the summary (no preamble).`;
+        const summarize = `In an attempt to ${currentSubGoal}, you have just ${tool.parameters.action} data, which resulted in:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language.  When referring to ${magiName}, speak in the first person and only provide the summary (no preamble).`;
         logger.debug(`Summary prompt:\n${summarize}`);
         processedOutput = await conduitClient.contact(
           summarize,
-          "You are a summary assistant.",
+          "You have access to the user's data.",
           model,
           { temperature: 0.1 }
         );
@@ -313,11 +329,7 @@ export const processOutput = fromPromise(async ({ input }: {
 /**
  * Executes a tool using the ToolExecutor with proper TTS handling
  */
-export const executeTool = fromPromise(async ({ input }: {
-  input: {
-    context: AgentContext;
-  }
-}) => {
+export const executeTool = fromPromise<string, ExecuteToolInput>(async ({ input }) => {
   let toolOutput = '';
   
   const { toolUser, magiName, selectedTool, conduitClient } = input.context;
@@ -335,7 +347,7 @@ export const executeTool = fromPromise(async ({ input }: {
 
   toolOutput = result.output;
 
-  if (selectedTool.name === 'ask-user' || selectedTool.name === 'answer-user') {
+  if (selectedTool.name === 'respond-to-user') {
     const magi = allMagi[magiName];
     const ttsReady = await magi.makeTTSReady(toolOutput);
     logger.debug(`\n🤖🔊\n${ttsReady}`);
@@ -348,15 +360,7 @@ export const executeTool = fromPromise(async ({ input }: {
 /**
  * Evaluates if the overall strategic goal has been achieved and detects discoveries
  */
-export const evaluateStrategicGoalCompletion = fromPromise(async ({ input }: {
-  input: {
-    strategicGoal: string;
-    completedSubGoals: string[];
-    processedOutput: string;
-    conduitClient: ConduitClient;
-    magiName: MagiName;
-  }
-}): Promise<GoalCompletionResult> => {
+export const evaluateStrategicGoalCompletion = fromPromise<GoalCompletionResult, EvaluateStrategicGoalInput>(async ({ input }) => {
   const { strategicGoal, completedSubGoals, processedOutput, conduitClient, magiName } = input;
   
   const systemPrompt = `You are an outcome-focused evaluation agent. Your job is to determine if a desired state of the strategic goal has been achieved. Evaluate if the strategic goal has been completed by focusing on the final state described in the tool output, not the action taken.\n\nThe strategic goal is "achieved" if the state it aims to achieve is true. For example, if a strategic-goal is to "add X" and the tool reports "X already exists," the strategic goal is achieved because the final state is that X exists. Evaluate if the sub-goal has been completed by focusing on the final state described in the tool output, not the action taken. An output indicating that data is a "duplicate" is direct confirmation that the final state is true, and the goal is therefore achieved.`;
