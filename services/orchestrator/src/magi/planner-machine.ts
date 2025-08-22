@@ -18,7 +18,7 @@ import type { MagiTool } from '../mcp';
 // ============================================================================
 
 interface PlannerInput {
-  userMessage: string;
+  message: string;
   magiName: MagiName;
   conduitClient: ConduitClient;
   toolUser: ToolUser;
@@ -28,13 +28,13 @@ interface PlannerInput {
 }
 
 interface CreatePlanInput {
-  userMessage: string;
+  message: string;
   conduitClient: ConduitClient;
   magiName: MagiName;
 }
 
 interface CheckMemoryInput {
-  userMessage: string;
+  message: string;
   conduitClient: ConduitClient;
   magiName: MagiName;
   memoryService?: MemoryService;
@@ -53,7 +53,7 @@ interface FinalizePlanInput {
  * Creates a strategic plan from user message using LLM
  */
 const createStrategicPlan = fromPromise<string[], CreatePlanInput>(async ({ input }) => {
-  const { userMessage, conduitClient, magiName } = input;
+  const { message, conduitClient, magiName } = input;
   
   const systemPrompt = `PERSONA\nYou are a literal and direct task-planning engine. Your purpose is to create a sequence of computational or data-retrieval actions. You do not provide advice, warnings, or conversational filler. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the user's message.`;
   
@@ -86,7 +86,7 @@ EXAMPLE 8:
 message: "Help me plan my vacation."
 {"plan": ["Ask user for key vacation parameters like destination ideas, budget, travel dates, and who they are traveling with"]}
 
-USER MESSAGE:\n"${userMessage}"
+USER MESSAGE:\n"${message}"
 
 YOUR FORMAT:
 {"plan": ["goal1", "goal2", "goal3", ...]}`;
@@ -94,10 +94,10 @@ YOUR FORMAT:
   try {
     const { model } = PERSONAS_CONFIG[magiName];
     const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
-    return response.plan ?? [`Address the user's message: ${userMessage}`];
+    return response.plan ?? [`Address the user's message: ${message}`];
   } catch (error) {
     logger.warn(`${magiName} failed to create strategic plan, using fallback:`, error);
-    return [`Address the user's message: ${userMessage}`];
+    return [`Address the user's message: ${message}`];
   }
 });
 
@@ -105,7 +105,7 @@ YOUR FORMAT:
  * Checks if user message contains memorable information and stores it in memory
  */
 const checkAndStoreMemory = fromPromise<void, CheckMemoryInput>(async ({ input }) => {
-  const { conduitClient, magiName, userMessage, memoryService } = input;
+  const { conduitClient, magiName, message, memoryService } = input;
   
   if (magiName !== MagiName.Melchior || !memoryService) {
     return; // Only Melchior handles memory, and only if service is available
@@ -130,7 +130,7 @@ Example 2:
 Example 3:
 {"shouldStore": true, "fact": "user does not like horror movies", "reasoning": "User explicitly stated a preference that will be useful for future recommendations."}
 
-User Message: ${userMessage}`;
+User Message: ${message}`;
   
   try {
     const jsonResponse = await conduitClient.contactForJSON(
@@ -170,7 +170,7 @@ const finalizePlan = fromPromise<string[], FinalizePlanInput>(async ({ input }) 
 const isPlannerContextValid = ({ context }: { context: PlannerContext }): boolean => {
   const errors: string[] = [];
 
-  if (!context.userMessage?.trim()) {
+  if (!context.message?.trim()) {
     errors.push('Missing user message');
   }
 
@@ -238,7 +238,7 @@ export const plannerMachine = setup({
   id: 'planner',
   initial: 'validateContext',
   context: ({ input }) => ({
-    userMessage: input.userMessage,
+    message: input.message,
     strategicPlan: [],
     currentStepIndex: 0,
     currentGoal: '',
@@ -274,7 +274,7 @@ export const plannerMachine = setup({
       invoke: {
         src: 'createStrategicPlan',
         input: ({ context }) => ({
-          userMessage: context.userMessage,
+          message: context.message,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
         }),
@@ -302,7 +302,7 @@ export const plannerMachine = setup({
       invoke: {
         src: 'checkAndStoreMemory',
         input: ({ context }) => ({
-          userMessage: context.userMessage,
+          message: context.message,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
           memoryService: context.memoryService,
@@ -388,7 +388,7 @@ export const plannerMachine = setup({
             : '';
           
           return {
-            userMessage: context.userMessage,
+            message: context.message,
             strategicGoal: context.currentGoal,
             magiName: context.magiName,
             conduitClient: context.conduitClient,

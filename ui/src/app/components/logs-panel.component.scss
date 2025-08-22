@@ -30,6 +30,7 @@
   .logs-container {
     height: calc(100% - 25px);
     overflow-y: auto;
+    margin-bottom: 5px;
     scrollbar-width: thin;
     scrollbar-color: #ffa500 rgba(255, 165, 0, 0.2);
     

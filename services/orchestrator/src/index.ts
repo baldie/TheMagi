@@ -1,7 +1,6 @@
 import { serviceManager } from './service_manager';
 import { logger } from './logger';
 import { loadMagi } from './loading';
-import { routeMessage } from './ready';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics, runBackgroundMcpVerification } from './diagnostics';
 import { balthazar, caspar, melchior } from './magi/magi2';
@@ -161,63 +160,8 @@ function startHttpOrchestratorService(): void {
       });
   });
 
-  async function initializeMagiForTest(magiName: string): Promise<void> {
-    let target = null;
-    if (magiName === 'Balthazar') {
-      target = balthazar;
-    } else if (magiName === 'Melchior') {
-      target = melchior;
-    } else if (magiName === 'Caspar') {
-      target = caspar;
-    }
 
-    if (!target) return;
-    
-    const { PERSONAS_CONFIG } = await import('./magi/magi2');
-    const src = PERSONAS_CONFIG[target.name].personalitySource;
-    const fs = await import('fs/promises');
-    const prompt = await fs.readFile(src, 'utf-8');
-    await target.initialize(prompt);
-    logger.info(`[HTTP] ${target.name} personality initialized for test run.`);
-  }
-
-  app.post('/contact-magi', async (req, res) => {
-    try {
-      const { testName, magi, userMessage } = req.body.data || req.body;
-      
-      testHooks.beginRun({ testName, magi });
-
-      const routedMessage = magi && userMessage ? `${magi}: ${userMessage}` : userMessage;
-
-      if (magi) {
-        try {
-          await initializeMagiForTest(magi);
-        } catch (initError) {
-          logger.warn('[HTTP] Failed to pre-initialize Magi for test run', initError);
-        }
-      }
-
-      const response = await routeMessage(routedMessage);
-      
-      try { testHooks.recordToolCall('respond-to-user', { response }); } catch (e) { logger.debug(`[HTTP] Failed to record final respond-to-user: ${e instanceof Error ? e.message : String(e)}`); }
-      const meta = testHooks.endRunAndSummarize(response);
-      logger.info('[HTTP] Magi contact completed successfully');
-      
-      const payload: any = { type: 'deliberation-complete', data: { response } };
-      if (meta) payload.data.testMeta = meta;
-      
-      res.status(200).json(payload);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      logger.error(`[HTTP] Magi contact failed: ${errorMessage}`);
-      res.status(500).json({
-        type: 'deliberation-error',
-        data: { error: errorMessage }
-      });
-    }
-  });
-
-  createWebSocketServer(server, async (userMessage) => routeMessage(userMessage));
+  createWebSocketServer(server);
 
   server.on('error', (err: { code?: string }) => {
     if (err.code === 'EADDRINUSE') {

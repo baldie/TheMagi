@@ -1,5 +1,5 @@
 import { ShortTermMemory } from './short-term-memory';
-import { MagiName } from '../types/magi-types';
+import { MagiName, MessageParticipant } from '../types/magi-types';
 import type { Magi2 } from './magi2';
 
 jest.mock('./magi2');
@@ -18,18 +18,18 @@ describe('ShortTermMemory', () => {
 
   describe('remember method', () => {
     it('should store a memory for a magi', () => {
-      memory.remember('user', 'test message');
+      memory.remember(MessageParticipant.User, 'test message');
       
       const memories = memory.getMemories();
       expect(memories).toHaveLength(1);
       expect(memories[0]).toEqual({
-        speaker: 'user',
+        speaker: MessageParticipant.User,
         message: 'test message'
       });
     });
 
     it('should store multiple memories for the same magi', () => {
-      memory.remember('user', 'first message');
+      memory.remember(MessageParticipant.User, 'first message');
       memory.remember(MagiName.Caspar, 'second message');
       
       const memories = memory.getMemories();
@@ -47,7 +47,7 @@ describe('ShortTermMemory', () => {
     });
 
     it('should return all memories for the instance', () => {
-      memory.remember('user', 'message1');
+      memory.remember(MessageParticipant.User, 'message1');
       memory.remember(MagiName.Melchior, 'message2');
       
       const memories = memory.getMemories();
@@ -59,8 +59,8 @@ describe('ShortTermMemory', () => {
       const casparMemory = new ShortTermMemory(mockMagi);
       const melchiorMemory = new ShortTermMemory(mockMagi2);
       
-      casparMemory.remember('user', 'caspar message');
-      melchiorMemory.remember('user', 'melchior message');
+      casparMemory.remember(MessageParticipant.User, 'caspar message');
+      melchiorMemory.remember(MessageParticipant.User, 'melchior message');
       
       const casparMemories = casparMemory.getMemories();
       const melchiorMemories = melchiorMemory.getMemories();
@@ -81,7 +81,7 @@ describe('ShortTermMemory', () => {
     });
 
     it('should call magi with proper parameters when memories exist', async () => {
-      memory.remember('user', 'test message');
+      memory.remember(MessageParticipant.User, 'test message');
       
       const summary = await memory.summarize(null);
       
@@ -93,7 +93,7 @@ describe('ShortTermMemory', () => {
     });
 
     it('should handle magi errors gracefully', async () => {
-      memory.remember('user', 'test message');
+      memory.remember(MessageParticipant.User, 'test message');
       mockMagi.contactSimple = jest.fn().mockRejectedValue(new Error('Connection failed'));
       
       const summary = await memory.summarize(null);
@@ -102,7 +102,7 @@ describe('ShortTermMemory', () => {
     });
 
     it('should format memories properly in the prompt', async () => {
-      memory.remember('user', 'user message');
+      memory.remember(MessageParticipant.User, 'user message');
       memory.remember(MagiName.Melchior, 'magi message');
       
       await memory.summarize(null);

@@ -18,6 +18,7 @@ import { Model } from '../config';
 import { logger } from '../logger';
 import fs from 'fs/promises';
 import { MagiErrorHandler } from './error-handler';
+import type { MessageParticipant } from '../types/magi-types';
 export { MagiName };
 
 /**
@@ -161,7 +162,7 @@ message: "Play my favorite playlist"
 interface MagiCompatible {
   name: MagiName;
   withPersonality(systemPrompt: string): string;
-  contact(userPrompt: string): Promise<string>;
+  contact(speaker: MessageParticipant, message: string): Promise<string>;
   contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
   forget(): void;
   ensureInitialized(): Promise<void>;
@@ -226,18 +227,18 @@ export class Magi2 implements MagiCompatible {
     return this.status;
   }
 
-  async contact(userPrompt: string): Promise<string> {
+  async contact(speaker: MessageParticipant, message: string): Promise<string> {
     await this.ensureInitialized();
-    const currentTopic = await this.shortTermMemory.determineTopic(userPrompt);
+    const currentTopic = await this.shortTermMemory.determineTopic(speaker, message);
     const workingMemory = await this.shortTermMemory.summarize(currentTopic);
-    const promptWithContext = workingMemory + '\n' + userPrompt;
+    const promptWithContext = workingMemory + '\n' + message;
     const response = await this.executeWithStatusManagement(async () => 
       this.conduit.contact(promptWithContext, this.withPersonality(''), this.config.model, this.config.options)
     );
     
     // Store the interaction in short-term memory
     try {
-      this.shortTermMemory.remember('user', userPrompt);
+      this.shortTermMemory.remember(speaker, message);
       this.shortTermMemory.remember(this.name, response);
     } catch (memoryError) {
       logger.error(`Critical memory failure for ${this.name}:`, memoryError);
@@ -284,7 +285,7 @@ export class Magi2 implements MagiCompatible {
     return output.result ?? 'Task completed successfully.';
   }
 
-  public async contactAsAgent(userMessage: string, _prohibitedTools: string[] = []): Promise<string> {
+  public async contactAsAgent(message: string, sender: MessageParticipant, _prohibitedTools: string[] = []): Promise<string> {
     try {
       await this.ensureInitialized();
       
@@ -295,17 +296,17 @@ export class Magi2 implements MagiCompatible {
       
       logger.info(`${this.name} beginning state machine agentic loop...`);
       // Create planner machine with proper context
-      const plannerMachine = createConfiguredPlannerMachine(this.name, userMessage);
+      const plannerMachine = createConfiguredPlannerMachine(this.name, message);
 
       return await this.executeWithStatusManagement(async () => {
         // Initialize memory context
-        const currentTopic = await this.shortTermMemory.determineTopic(userMessage);
+        const currentTopic = await this.shortTermMemory.determineTopic(sender, message);
         const workingMemory = await this.shortTermMemory.summarize(currentTopic);
 
         // Create and start the planner actor
         const plannerActor = createActor(plannerMachine, {
           input: {
-            userMessage,
+            message,
             magiName: this.name,
             conduitClient: this.conduit,
             toolUser: this.toolUser,
@@ -319,7 +320,7 @@ export class Magi2 implements MagiCompatible {
         
         // Wait for the machine to complete
         const response = await this.waitForActorCompletion(plannerActor);
-        this.shortTermMemory.remember('user', userMessage);
+        this.shortTermMemory.remember(sender, message);
         this.shortTermMemory.remember(this.name, response);
 
         return response;

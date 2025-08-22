@@ -144,7 +144,7 @@ describe('State Machines Integration Tests', () => {
       
       const plannerActor = createActor(plannerMachine, {
         input: {
-          userMessage: 'Test user message',
+          message: 'Test user message',
           magiName,
           conduitClient,
           toolUser,
@@ -199,7 +199,7 @@ describe('State Machines Integration Tests', () => {
       
       const agentActor = createActor(agentMachine, {
         input: {
-          userMessage: 'Test user message',
+          message: 'Test user message',
           strategicGoal: 'Test strategic goal',
           magiName,
           conduitClient,
@@ -261,7 +261,7 @@ describe('State Machines Integration Tests', () => {
 
       const plannerActor = createActor(plannerMachine, {
         input: {
-          userMessage: 'Help me with a complex task',
+          message: 'Help me with a complex task',
           magiName,
           conduitClient,
           toolUser,
@@ -304,7 +304,7 @@ describe('State Machines Integration Tests', () => {
       
       const plannerActor = createActor(plannerMachine, {
         input: {
-          userMessage: '', // Invalid: empty message
+          message: '', // Invalid: empty message
           magiName,
           conduitClient,
           toolUser,
@@ -331,7 +331,7 @@ describe('State Machines Integration Tests', () => {
       
       const agentActor = createActor(agentMachine, {
         input: {
-          userMessage: '',
+          message: '',
           strategicGoal: '', // Invalid: empty goal
           magiName,
           conduitClient,

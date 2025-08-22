@@ -38,7 +38,7 @@ interface JsonSchema {
 /**
  * A single prompt that takes the raw text from a webpage, and extracts the content that is relevant to the user's original query
  */
-export function getRelevantContentFromRawText(userMessage: string, rawToolResponse: string): string {
+export function getRelevantContentFromRawText(message: string, rawToolResponse: string): string {
   return `
   INSTRUCTIONS
   - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
@@ -57,7 +57,7 @@ export function getRelevantContentFromRawText(userMessage: string, rawToolRespon
   Respond ONLY with the cleaned text
 
   USER'S TOPIC/QUESTION:
-  "${userMessage}"
+  "${message}"
 
   Now, perform this task on the following raw text.
 
@@ -384,29 +384,29 @@ export class ToolUser {
     return parameters;
   }
 
-  async executeAgenticTool(tool: AgenticTool, userMessage: string): Promise<string> {
+  async executeAgenticTool(tool: AgenticTool, message: string): Promise<string> {
     let toolResponse = await this.executeWithTool(
       tool.name, 
       tool.parameters, 
     );
 
     // Use the centralized processOutput logic from agent-actions
-    toolResponse = await this.processToolOutput(tool.name, toolResponse, userMessage);
+    toolResponse = await this.processToolOutput(tool.name, toolResponse, message);
     return toolResponse;
   }
 
   /**
    * Process tool output using the same logic as the state machine
    */
-  private async processToolOutput(toolName: string, toolOutput: string, userMessage?: string): Promise<string> {
+  private async processToolOutput(toolName: string, toolOutput: string, message?: string): Promise<string> {
     let processedOutput = toolOutput;
     
     // Process output based on tool type
     switch (toolName) {
       case 'read-page':
         // Web pages can have a lot of noise that throw off the magi, so lets clean it
-        if (userMessage) {
-          const relevantContentPrompt = getRelevantContentFromRawText(userMessage, toolOutput);
+        if (message) {
+          const relevantContentPrompt = getRelevantContentFromRawText(message, toolOutput);
           processedOutput = await this.magi.contactSimple(relevantContentPrompt, "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.");
         }
         break;

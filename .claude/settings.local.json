@@ -99,7 +99,8 @@
       "Bash(npm --version)",
       "Bash(ng build:*)",
       "WebSearch",
-      "Bash(./run-all-tests.sh:*)"
+      "Bash(./run-all-tests.sh:*)",
+      "WebFetch(domain:event-driven.io)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

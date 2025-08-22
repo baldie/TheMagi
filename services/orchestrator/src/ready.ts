@@ -1,8 +1,8 @@
-import type { Magi2 } from './magi/magi2';
-import { balthazar, caspar, melchior, MagiName, allMagi } from './magi/magi2';
+import { balthazar, caspar, melchior, MagiName } from './magi/magi2';
 import { logger } from './logger';
 import { speakWithMagiVoice } from './tts';
 import { MemoryService } from './memory';
+import { MessageParticipant } from './types/magi-types';
 
 /**
  * Retry a function with exponential backoff.
@@ -23,7 +23,7 @@ async function retry<T>(
   }
 }
 
-async function runSealedEnvelopePhase(userMessage: string, memoryService: MemoryService): Promise<string> {
+async function runSealedEnvelopePhase(message: string, memoryService: MemoryService): Promise<string> {
   logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
 
   // Load user memory and inject context
@@ -32,20 +32,20 @@ async function runSealedEnvelopePhase(userMessage: string, memoryService: Memory
   const melchiorMemoryContext = memoryService.generateMemoryContext(userMemory, 'melchior');
   const casparMemoryContext = memoryService.generateMemoryContext(userMemory, 'caspar');
 
-  const basePrompt = `Regarding "${userMessage}", what are your thoughts? Be concise and on topic.`;
+  const basePrompt = `Regarding "${message}", what are your thoughts? Be concise and on topic.`;
 
   // During the sealed envelope phase, the magi cannot ask the user any questions
   const prohibitedTools = ['respond-to-user'];
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(`${balthazarMemoryContext}\n\n${basePrompt}`, prohibitedTools));
+  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(`${balthazarMemoryContext}\n\n${basePrompt}`, MessageParticipant.System, prohibitedTools));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(async () => melchior.contactAsAgent(`${melchiorMemoryContext}\n\n${basePrompt}`, prohibitedTools));
+  const melchiorResponse = await retry(async () => melchior.contactAsAgent(`${melchiorMemoryContext}\n\n${basePrompt}`, MessageParticipant.System, prohibitedTools));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(async () => caspar.contactAsAgent(`${casparMemoryContext}\n\n${basePrompt}`, prohibitedTools));
+  const casparResponse = await retry(async () => caspar.contactAsAgent(`${casparMemoryContext}\n\n${basePrompt}`, MessageParticipant.System, prohibitedTools));
 
   const sealedEnvelope = `
     
@@ -108,7 +108,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
       What is your response? Be very concise.
       `;
       
-      const response = await retry(async () => currentMagi.contact(debatePrompt));
+      const response = await retry(async () => currentMagi.contact(MessageParticipant.System, debatePrompt));
       roundResponses += `\n${currentMagi.name}'s Round ${round} response:\n${response}\n---`;
       logger.info(`${currentMagi.name} has contributed to Round ${round}.`);
     }
@@ -168,9 +168,9 @@ async function extractAndStoreMemory(inquiry: string, deliberationTranscript: st
     const memoryPrompt = memoryService.createMemoryExtractionPrompt(inquiry, deliberationTranscript);
     
     // Extract memory from each Magi
-    const casparMemoryResponse = await retry(() => caspar.contact(memoryPrompt));
-    const melchiorMemoryResponse = await retry(() => melchior.contact(memoryPrompt));
-    const balthazarMemoryResponse = await retry(() => balthazar.contact(memoryPrompt));
+    const casparMemoryResponse = await retry(() => caspar.contact(MessageParticipant.System, memoryPrompt));
+    const melchiorMemoryResponse = await retry(() => melchior.contact(MessageParticipant.System, memoryPrompt));
+    const balthazarMemoryResponse = await retry(() => balthazar.contact(MessageParticipant.System, memoryPrompt));
     
     // Parse memory from responses
     const casparMemory = memoryService.extractMemoryFromResponse(casparMemoryResponse);
@@ -190,72 +190,28 @@ async function extractAndStoreMemory(inquiry: string, deliberationTranscript: st
 }
 
 /**
- * Route User's Message based on prefix or fallback to deliberation
- * @param userMessage - The user's question or request potentially with prefix
- * @returns The response from either direct User's Message or deliberation
- */
-export async function routeMessage(userMessage?: string): Promise<string> {
-  if (!userMessage) {
-    return beginDeliberation(userMessage);
-  }
-
-  const trimmedUserMessage = userMessage.trim();
-
-  const magiDirect = async (magi: Magi2, userMessage: string): Promise<string> => {
-    logger.debug(`Directly routing User's Message to ${magi.name}`);
-    const response = await magi.contactAsAgent(userMessage);
-    logger.debug(`Received response from ${magi.name}:\n${response}`);
-    return response;
-  }
-
-  // Regex patterns for each Magi: (short|full name)[:,]
-  const melchiorRegex = /^(m|melchior)[:,]\s*/i;
-  const melchiorMatch = melchiorRegex.exec(trimmedUserMessage);
-  if (melchiorMatch) {
-    const melchiorUserMessage = trimmedUserMessage.substring(melchiorMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Melchior], melchiorUserMessage);
-  }
-
-  const balthazarRegex = /^(b|balthazar)[:,]\s*/i;
-  const balthazarMatch = balthazarRegex.exec(trimmedUserMessage);
-  if (balthazarMatch) {
-    const balthazarUserMessage = trimmedUserMessage.substring(balthazarMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Balthazar], balthazarUserMessage);
-  }
-
-  const casparRegex = /^(c|caspar)[:,]\s*/i;
-  const casparMatch = casparRegex.exec(trimmedUserMessage);
-  if (casparMatch) {
-    const casparUserMessage = trimmedUserMessage.substring(casparMatch[0].length);
-    return await magiDirect(allMagi[MagiName.Caspar], casparUserMessage);
-  }
-  
-  return beginDeliberation(userMessage);
-}
-
-/**
  * Main function that runs the deliberation process according to the V0 PRD.
- * @param userMessage - The user's question or request
+ * @param message - The user's question or request
  * @returns The final synthesized response or a summary of the impasse.
  */
-export async function beginDeliberation(userMessage?: string): Promise<string> {
+export async function beginDeliberation(message?: string): Promise<string> {
   const memoryService = new MemoryService(logger);
 
   try {
     logger.info('--- MAGI DELIBERATION INITIATED ---');
-    logger.info('Starting deliberation proceedings', { userMessage });
+    logger.info('Starting deliberation proceedings', { message });
 
     // V0 placeholders from PRD
     logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
 
-    const sealedEnvelope = await runSealedEnvelopePhase(userMessage ?? '', memoryService);
+    const sealedEnvelope = await runSealedEnvelopePhase(message ?? '', memoryService);
     const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
 
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });
 
     // Extract and store memory from this conversation
-    await extractAndStoreMemory(userMessage ?? '', sealedEnvelope, memoryService);
+    await extractAndStoreMemory(message ?? '', sealedEnvelope, memoryService);
 
     // Trigger TTS for the final response using Caspar's voice (primary spokesperson)
     try {

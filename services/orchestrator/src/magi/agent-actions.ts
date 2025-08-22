@@ -14,7 +14,7 @@ import { speakWithMagiVoice } from '../tts';
 // ============================================================================
 
 interface GatherContextInput {
-  userMessage: string;
+  message: string;
   strategicGoal: string;
   workingMemory: string;
   completedSubGoals: string[];
@@ -28,7 +28,7 @@ interface DetermineNextTacticalGoalInput {
   completedSubGoals: string[];
   conduitClient: ConduitClient;
   magiName: MagiName;
-  userMessage: string;
+  message: string;
 }
 
 interface SelectToolInput {
@@ -36,7 +36,7 @@ interface SelectToolInput {
   availableTools: any[];
   conduitClient: ConduitClient;
   context: string;
-  userMessage: string;
+  message: string;
   magiName: MagiName;
 }
 
@@ -48,7 +48,7 @@ interface ProcessOutputInput {
   tool: AgenticTool | null;
   toolOutput: string;
   currentSubGoal: string;
-  userMessage: string;
+  message: string;
   conduitClient: ConduitClient;
   magiName: MagiName;
 }
@@ -78,17 +78,17 @@ const COMMON_ACTIONS = ['read', 'search', 'analyze', 'calculate', 'summarize', '
  * Gathers context for the current strategic goal
  */
 export const gatherContext = fromPromise<string, GatherContextInput>(async ({ input }) => {
-  const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
+  const { strategicGoal, workingMemory, completedSubGoals, conduitClient, magiName, message } = input;
 
   // No context to gather
   const noContextToGather = workingMemory.trim() === '';
   if (noContextToGather) {
-    return userMessage;
+    return message;
   }
   
   const systemPrompt = `You are a data extraction robot. Your only function is consider the USER MESSAGE and to extract data from the GIVEN TEXT that is relevant to the NEXT STRATEGIC GOAL. You do not analyze, interpret, or suggest actions.`;
   
-  const userPrompt = `USER MESSAGE:\n"${userMessage}"\n
+  const userPrompt = `USER MESSAGE:\n"${message}"\n
 
 GIVEN TEXT:
 ${workingMemory.trim() ? workingMemory.trim() : 'None'}\n
@@ -114,14 +114,14 @@ Do not interpret or summarize any of the content. Only respond with the informat
  * Determines the next tactical sub-goal based on current context
  */
 export const determineNextTacticalGoal = fromPromise<string, DetermineNextTacticalGoalInput>(async ({ input }) => {
-  const { strategicGoal, context: workingMemory, completedSubGoals, conduitClient, magiName, userMessage } = input;
+  const { strategicGoal, context: workingMemory, completedSubGoals, conduitClient, magiName, message } = input;
 
   const isStraightForward = (COMMON_ACTIONS.some(action => strategicGoal.trim().toLowerCase().startsWith(action)));
   if (isStraightForward) {
     return strategicGoal;
   }
 
-  const noContextYet = workingMemory === userMessage;
+  const noContextYet = workingMemory === message;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
   const systemPrompt = `You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
@@ -151,7 +151,7 @@ Output ONLY the specific action command that should be executed next - No preamb
  * Selects the appropriate tool for the current sub-goal
  */
 export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async ({ input }) => {
-  const { subGoal, availableTools, conduitClient, magiName, context: workingMemory, userMessage } = input;
+  const { subGoal, availableTools, conduitClient, magiName, context: workingMemory, message } = input;
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
@@ -160,7 +160,7 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
   const userPrompt = `Action to Perform:\n${subGoal}\n
-User Message:\n${userMessage}\n${workingMemory.trim() !== userMessage ? `\nInput for Next Action:\n${workingMemory}\n` : ''}
+User Message:\n${message}\n${workingMemory.trim() !== message ? `\nInput for Next Action:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
 Pick the tool that will allow you to '${subGoal}.'
@@ -220,9 +220,9 @@ Has the tool task been completed? Respond only with JSON:
 /**
  * Helper function to generate prompt for cleaning web page content
  */
-function getRelevantContentFromRawText(userMessage: string, rawToolResponse: string): string {
+function getRelevantContentFromRawText(message: string, rawToolResponse: string): string {
   return `USER'S MESSAGE:
-  "${userMessage}"
+  "${message}"
 
   INSTRUCTIONS:
   - Identify and Isolate: Read the entire text to identify the main body of the content (e.g., the article, the blog post, the initial forum post).
@@ -251,7 +251,7 @@ function getRelevantContentFromRawText(userMessage: string, rawToolResponse: str
  * Depending on the tool, we might want to process the output differently
  */
 export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ input }) => {
-  const { tool, toolOutput, currentSubGoal, userMessage, conduitClient, magiName } = input;
+  const { tool, toolOutput, currentSubGoal, message, conduitClient, magiName } = input;
   const { model } = PERSONAS_CONFIG[magiName];
   let processedOutput;
   
@@ -270,7 +270,7 @@ export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ in
     case 'read-page': {
         logger.debug(`Proccessing read page results with page length: ${toolOutput.length}`);
         // Web pages can have a lot of noise that throw off the magi, so lets clean it
-        const relevantContentPrompt = getRelevantContentFromRawText(userMessage ?? '', toolOutput);
+        const relevantContentPrompt = getRelevantContentFromRawText(message ?? '', toolOutput);
         processedOutput = await conduitClient.contact(
           relevantContentPrompt, 
           "You are an expert text-processing AI. Your sole task is to analyze the provided raw text and extract only the primary content.",

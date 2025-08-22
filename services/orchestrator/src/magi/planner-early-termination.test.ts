@@ -24,7 +24,7 @@ describe('Planner Early Termination', () => {
 
     const plannerActor = createActor(plannerMachine, {
       input: {
-        userMessage: 'What is 2+2?',
+        message: 'What is 2+2?',
         magiName: 'Caspar' as MagiName,
         conduitClient: mockConduitClient,
         toolUser: mockToolUser,

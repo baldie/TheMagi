@@ -1,13 +1,13 @@
-import type { MagiName } from '../types/magi-types';
+import type { MagiName, MessageParticipant } from '../types/magi-types';
 
 // Minimal interface to avoid tight coupling
 interface MemoryMagiLike {
   name: MagiName;
-  contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
+  contactSimple(message: string, systemPrompt?: string): Promise<string>;
 }
 
 export interface Memory {
-  speaker: MagiName | 'user';
+  speaker: MessageParticipant;
   message: string;
 }
 
@@ -23,7 +23,7 @@ export class ShortTermMemory {
   }
 
   public remember(
-    speaker: MagiName | 'user',
+    speaker: MessageParticipant,
     message: string
   ): void {
     const memory: Memory = {
@@ -52,7 +52,7 @@ export class ShortTermMemory {
     this.lastSummaryHash = '';
   }
 
-  public async determineTopic(userMessage: string): Promise<string | null> {
+  public async determineTopic(speaker: MessageParticipant, message: string): Promise<string | null> {
     if (process.env.MAGI_TEST_MODE === 'true') {
       return 'Test Topic';
     }
@@ -60,7 +60,7 @@ export class ShortTermMemory {
       return null;
     }
 
-    if (userMessage.trim() === '')
+    if (message.trim() === '')
       return null;
 
     const memoryText = `Conversation History:` +
@@ -70,18 +70,18 @@ Message: ${memory.message}
 `
     ).join('\n');
 
-    const systemPrompt = `PERSONA\nYou are an expert at analyzing conversational flow. Your task is to identify the precise subject of the user's latest message in the context of the preceding discussion.`;
+    const systemPrompt = `PERSONA\nYou are an expert at analyzing conversational flow. Your task is to identify the precise subject of the speaker's latest message in the context of the preceding discussion.`;
     const topicDetectionPrompt = `${memoryText}
-Speaker: User
-Message: ${userMessage}
+Speaker: ${speaker}
+Message: ${message}
 
 INSTRUCTIONS:
-Your goal is to identify the subject of the user's last message.
+Your goal is to identify the subject of the speaker's last message.
 
 1. First, analyze the last message on its own. If it contains a new and specific subject, prioritize it.
 2. If the message lacks a specific subject and seems to be a follow-up, use the conversation history to determine the subject.
 
-What is the primary subject of the user's last message? Be specific and complete in your answer. Format as "The [aspect] of [subject]".
+What is the primary subject of the speaker's last message? Be specific and complete in your answer. Format as "The [aspect] of [subject]".
 `.trim();
 
     try {
@@ -116,7 +116,7 @@ ${memoryText}
     
 INSTRUCTIONS:
 First, create a concise extractive summary of the conversation so far.
-Then, from ${this.magi.name}'s perspective (using "I"), briefly describe what the user said and what you did and said in reply.`;
+Then, from ${this.magi.name}'s perspective (using "I"), briefly describe what the speaker said and what you did and said in reply.`;
 
     try {
       const summary = await this.magi.contactSimple(summarizationPrompt, systemPrompt);

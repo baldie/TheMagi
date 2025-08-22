@@ -39,7 +39,7 @@ export const agentMachine = createMachine({
     context: {} as AgentContext,
     events: {} as AgentEvent,
     input: {} as {
-      userMessage: string;
+      message: string;
       strategicGoal: string;
       magiName: MagiName;
       conduitClient: ConduitClient;
@@ -60,7 +60,7 @@ export const agentMachine = createMachine({
   },
   initial: 'validateContext',
   context: ({ input }) => ({
-    userMessage: input.userMessage,
+    message: input.message,
     strategicGoal: input.strategicGoal,
     currentSubGoal: '',
     workingMemory: input.workingMemory ?? '',
@@ -115,7 +115,7 @@ export const agentMachine = createMachine({
       invoke: {
         src: gatherContext,
         input: ({ context }) => ({
-          userMessage: context.userMessage,
+          message: context.message,
           strategicGoal: context.strategicGoal,
           workingMemory: context.workingMemory,
           completedSubGoals: context.completedSubGoals,
@@ -153,7 +153,7 @@ export const agentMachine = createMachine({
           completedSubGoals: context.completedSubGoals,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
-          userMessage: context.userMessage,
+          message: context.message,
         }),
         onDone: {
           target: 'selectingTool',
@@ -188,7 +188,7 @@ export const agentMachine = createMachine({
           availableTools: context.availableTools,
           conduitClient: context.conduitClient,
           context: context.workingMemory,
-          userMessage: context.userMessage,
+          message: context.message,
           magiName: context.magiName,
         }),
         onDone: {
@@ -275,7 +275,7 @@ export const agentMachine = createMachine({
           tool: context.selectedTool,
           toolOutput: context.toolOutput,
           currentSubGoal: context.currentSubGoal,
-          userMessage: context.userMessage,
+          message: context.message,
           conduitClient: context.conduitClient,
           magiName: context.magiName,
         }),

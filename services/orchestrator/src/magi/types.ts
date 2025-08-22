@@ -17,7 +17,7 @@ export const TIMEOUT_MS = 30000; // 30 seconds
  * Context for the high-level Planner machine
  */
 export interface PlannerContext {
-  userMessage: string;
+  message: string;
   strategicPlan: string[];
   currentStepIndex: number;
   currentGoal: string;
@@ -41,7 +41,7 @@ export interface PlannerContext {
  */
 export interface AgentContext {
   // User input and goal
-  userMessage: string;
+  message: string;
   strategicGoal: string;
   currentSubGoal: string;
   
@@ -189,8 +189,8 @@ export const TypeValidators = {
   validatePlannerContext: (context: Partial<PlannerContext>): ValidationResult => {
     const errors: string[] = [];
     
-    if (!TypeValidators.isNonEmptyString(context.userMessage)) {
-      errors.push('userMessage must be a non-empty string');
+    if (!TypeValidators.isNonEmptyString(context.message)) {
+      errors.push('message must be a non-empty string');
     }
     
     if (!context.magiName || !TypeValidators.isNonEmptyString(context.magiName)) {

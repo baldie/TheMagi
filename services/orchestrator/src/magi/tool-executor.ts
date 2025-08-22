@@ -5,7 +5,7 @@ import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
 import { testHooks } from '../testing/test-hooks';
 import type { ConduitClient } from './conduit-client';
-import { PERSONAS_CONFIG } from './magi_old';
+import { PERSONAS_CONFIG } from './magi2';
 
 /**
  * Service class for tool execution with timeout and error handling

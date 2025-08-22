@@ -1,7 +1,9 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { logger } from './logger';
-import { testHooks } from './testing/test-hooks';
+import { initializeMessageQueue, type Subscription } from './message-queue';
+import { MessageParticipant } from './types/magi-types';
+import { enqueueMessage } from './loading';
 
 console.log('[DEBUG] websocket.ts file loaded at:', new Date().toISOString());
 import { logStream } from './log-stream';
@@ -9,10 +11,9 @@ import { logStream } from './log-stream';
 // Store connected clients for audio streaming
 const connectedClients = new Set<WebSocket>();
 
-export function createWebSocketServer(server: Server, startCallback: (userMessage?: string) => Promise<string>) {
+export function createWebSocketServer(server: Server) {
   console.log('[DEBUG] createWebSocketServer called at:', new Date().toISOString());
   console.log('[DEBUG] HTTP server object:', !!server);
-  console.log('[DEBUG] Starting callback:', !!startCallback);
   
   const wss = new WebSocketServer({ server });
   console.log('[DEBUG] WebSocketServer created successfully');
@@ -22,7 +23,7 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
     logger.error('[WebSocket] Server error:', error);
   });
 
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', async (ws: WebSocket) => {
     console.log('🚀🚀🚀 WEBSOCKET CLIENT CONNECTED! 🚀🚀🚀');
     logger.info('[DEBUG] WebSocket client connected at: ' + new Date().toISOString());
     connectedClients.add(ws);
@@ -36,6 +37,38 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
       logger.info('[DEBUG] Sent initial connection ACK');
     } catch (error) {
       logger.error('[DEBUG] Failed to send initial ACK:', error);
+    }
+    
+    // Subscribe to message queue for User participant
+    let messageQueueSubscription: Subscription | null = null;
+    try {
+      const messageQueue = await initializeMessageQueue();
+      messageQueueSubscription = messageQueue.subscribe(MessageParticipant.User, async (message) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            const messagePayload = {
+              type: 'deliberation-complete',
+              data: {
+                response: message.content,
+                sender: message.sender,
+                source: 'message-queue'
+              }
+            };
+            ws.send(JSON.stringify(messagePayload));
+            logger.debug(`[WebSocket] Sent message queue response to client from ${message.sender}`);
+            
+            // Acknowledge the message as processed
+            await messageQueue.acknowledge(message.id);
+          } catch (error) {
+            logger.error('[WebSocket] Failed to send message queue response to client', error);
+          }
+        } else {
+          logger.warn('[WebSocket] Client not open - cannot send message queue response');
+        }
+      });
+      logger.info('[WebSocket] Client subscribed to User message queue');
+    } catch (error) {
+      logger.error('[WebSocket] Failed to set up message queue subscription for client', error);
     }
     
     const logListener = (message: string) => {
@@ -52,88 +85,63 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
 
     logStream.subscribe(logListener);
 
+    // Handle incoming messages from clients
+    ws.on('message', async (data: Buffer) => {
+      try {
+        const messageStr = data.toString();
+        const messageObj = JSON.parse(messageStr);
+        
+        if (messageObj.type === 'contact-magi') {
+          const { message } = messageObj.data || messageObj;
+
+          let recipient: MessageParticipant = MessageParticipant.Magi;
+          if (message.trim().toLowerCase().startsWith('b:')) {
+            recipient = MessageParticipant.Balthazar;
+          } else if (message.trim().toLowerCase().startsWith('m:')) {
+            recipient = MessageParticipant.Melchior;
+          } else if (message.trim().toLowerCase().startsWith('c:')) {
+            recipient = MessageParticipant.Caspar;
+          }
+
+          await enqueueMessage(MessageParticipant.User, recipient, message);
+          
+          const payload = {
+            type: 'ack',
+            data: 'WORKING',
+            source: 'websocket-handler'
+          };
+          
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(payload));
+          }
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`[WebSocket] Message handling failed: ${errorMessage}`);
+        
+        if (ws.readyState === WebSocket.OPEN) {
+          const errorPayload = {
+            type: 'deliberation-error',
+            data: { error: errorMessage }
+          };
+          ws.send(JSON.stringify(errorPayload));
+        }
+      }
+    });
+
     // In test mode, emit a lightweight heartbeat so clients receive activity even if
     // regular logs are suppressed from the log stream.
     let heartbeatTimer: NodeJS.Timeout | null = null;
 
-    ws.on('message', async (rawMessage: Buffer) => {
-      
-      try {
-        const message = rawMessage.toString();
-        logger.info(`[DEBUG] Message string: ${message}`);
-        const parsedMessage = JSON.parse(message);
-        logger.info(`[DEBUG] Parsed message type: ${parsedMessage.type}`);
-        
-        if (parsedMessage.type === 'contact-magi') {
-          
-          // Send initial ACK
-          const ackResponse = { type: 'ack', data: 'WORKING', source: 'message-handler' };
-          ws.send(JSON.stringify(ackResponse));
-          
-          // Extract user message and call the routing callback
-          const userMessage = parsedMessage.data?.userMessage || '';
-          const testName: string | undefined = parsedMessage.data?.testName;
-          const magi: string | undefined = parsedMessage.data?.magi;
-          try {
-            // Initialize test recorder when running integration tests over WS
-            testHooks.beginRun({ testName, magi });
-          } catch (err) {
-            logger.debug('[WebSocket] testHooks.beginRun failed (non-fatal)', err);
-          }
-          console.log(`[WS] Invoking startCallback at ${new Date().toISOString()}`);
-
-          // Start heartbeat only in test mode so integration tests consider the server live
-          try {
-            if (testHooks.isEnabled() && !heartbeatTimer) {
-              heartbeatTimer = setInterval(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  try {
-                    ws.send(JSON.stringify({ type: 'log', data: '[heartbeat] server is working' }));
-                  } catch {
-                    // Ignore heartbeat send errors
-                  }
-                }
-              }, 5000);
-            }
-          } catch {
-            // Ignore heartbeat setup errors
-          }
-          
-          try {
-            const response = await startCallback(userMessage);
-            logger.info(`[DEBUG] Got response from startCallback: ${response.length} chars`);
-            console.log(`[WS] startCallback resolved at ${new Date().toISOString()} with length=${response.length}`);
-            
-            // Send the final response
-            let testMeta: any = undefined;
-            try {
-              testMeta = testHooks.endRunAndSummarize(response);
-            } catch (err) {
-              logger.debug('[WebSocket] testHooks.endRunAndSummarize failed (non-fatal)', err);
-            }
-            const finalResponse = { type: 'deliberation-complete', data: { response, ...(testMeta ? { testMeta } : {}) } };
-            ws.send(JSON.stringify(finalResponse));
-            logger.info(`[DEBUG] Sent deliberation-complete response`);
-            if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-          } catch (error) {
-            logger.error(`[DEBUG] Error calling startCallback: ${String(error)}`);
-            const errorResponse = { type: 'deliberation-error', data: { error: String(error) } };
-            ws.send(JSON.stringify(errorResponse));
-            if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
-          }
-        } else {
-          logger.info(`[DEBUG] Unhandled message type: ${parsedMessage.type}`);
-        }
-      } catch (error) {
-        logger.error(`[DEBUG] Message parsing error: ${String(error)}`);
-        logger.error(`[DEBUG] Raw message was: ${rawMessage.toString()}`);
-      }
-    });
 
     ws.on('close', () => {
       logger.info('[WebSocket] Client disconnected. Detaching from log stream.');
       connectedClients.delete(ws);
       logStream.unsubscribe(logListener);
+      if (messageQueueSubscription) {
+        messageQueueSubscription.unsubscribe();
+        logger.info('[WebSocket] Client unsubscribed from User message queue');
+      }
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     });
 
@@ -141,6 +149,10 @@ export function createWebSocketServer(server: Server, startCallback: (userMessag
       logger.error(`[WebSocket] Client error: ${error.message}`);
       connectedClients.delete(ws);
       logStream.unsubscribe(logListener);
+      if (messageQueueSubscription) {
+        messageQueueSubscription.unsubscribe();
+        logger.info('[WebSocket] Client unsubscribed from User message queue');
+      }
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     });
   });

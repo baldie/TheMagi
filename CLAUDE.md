@@ -21,13 +21,12 @@ The system follows a microservices architecture:
     - UI backend service
 
 ## Key Components
+Communication between participants take place on via a message broker system backed by a vector database
 
 ### Magi Personas
 - **Caspar** (Gemma): primary voice for responses
 - **Melchior** (Qwen2.5): creative/intuitive perspective  
 - **Balthazar** (Llama3.2): logical/analytical perspective
-
-Each persona has its own personality file in `services/orchestrator/src/magi/personalities/`
 
 ### Communication Flow
 1. UI sends WebSocket message to Orchestrator (port 8080)
@@ -56,6 +55,7 @@ Each persona has its own personality file in `services/orchestrator/src/magi/per
 
 - There are Github actions configured to run tests on all pushes
 - All tests can be run by running the `run-all-tests.sh` script
+- When modifying tests, skip the unit tests by running `./run-all-tests -skip-integration`
 
 ## Coding guidance
 1. First think through the problem, read the codebase for relevant files, and write a plan to tasks/todo.md.
