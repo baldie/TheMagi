@@ -214,7 +214,7 @@ const isPlanValid = ({ context }: { context: PlannerContext }): boolean => {
  * Checks if the last executed tool should trigger early termination
  */
 export const shouldTerminateEarly = ({ context }: { context: PlannerContext }): boolean => {
-  return context.lastExecutedTool !== null && context.lastExecutedTool === 'respond-to-user';
+  return context.lastExecutedTool !== null && context.lastExecutedTool === 'communicate';
 };
 
 

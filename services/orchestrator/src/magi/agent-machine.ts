@@ -26,7 +26,7 @@ import { isContextValid, canRetry, isToolValid, shouldStopForStagnation } from '
  */
 const shouldAgentTerminateEarly = ({ context }: { context: AgentContext; event: any }): boolean => {
   // Check if last tool was a response
-  return context.selectedTool !== null && context.selectedTool.name === 'respond-to-user';
+  return context.selectedTool !== null && context.selectedTool.name === 'communicate';
 };
 
 // ============================================================================

@@ -34,7 +34,7 @@ async function runSealedEnvelopePhase(message: string, memoryService: MemoryServ
   const basePrompt = `Regarding "${message}", what are your thoughts? Be concise and on topic.`;
 
   // During the sealed envelope phase, the magi cannot ask the user any questions
-  const prohibitedTools = ['respond-to-user'];
+  const prohibitedTools = ['communicate'];
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');

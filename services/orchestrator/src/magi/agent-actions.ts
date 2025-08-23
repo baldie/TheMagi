@@ -261,8 +261,8 @@ export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ in
   
   // Process output based on tool type
   switch (tool.name) {
-    case 'respond-to-user': {
-      // For user-directed questions, use the tool output verbatim
+    case 'communicate': {
+      // For communication, use the tool output verbatim
       processedOutput = toolOutput;
       break;
     }

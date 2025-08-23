@@ -159,11 +159,12 @@ describe('ToolRegistry', () => {
     });
 
     it('should pass validation for valid parameters', () => {
-      const result = ToolRegistry.validateParameters('respond-to-user', {
-        response: 'How are you?'
+      const result = ToolRegistry.validateParameters('communicate', {
+        message: 'How are you?'
       });
       expect(result.isValid).toBe(true);
       expect(result.errors).toHaveLength(0);
+      expect(result.validated.recipient).toBe('User'); // Should default to User
     });
 
     it('should handle unknown tools', () => {

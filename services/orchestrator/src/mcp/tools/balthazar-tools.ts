@@ -5,7 +5,7 @@ import type { McpServerConfig } from '../index';
 /**
  * Balthazar's analytical tools - focused on data gathering, analysis, and fact-checking
  * 
- * Tools assigned: search-web, read-page, respond-to-user
+ * Tools assigned: search-web, read-page, communicate
  * - Web search for current information and fact-checking
  * - Content extraction from URLs for detailed analysis
  * - Core agentic tools for user interaction
@@ -15,7 +15,7 @@ import type { McpServerConfig } from '../index';
  * Get Balthazar's tool assignments
  */
 export function getBalthazarToolAssignments(): string[] {
-  return ['search-web', 'read-page', 'respond-to-user', 'process-info'];
+  return ['search-web', 'read-page', 'communicate', 'process-info'];
 }
 
 /**

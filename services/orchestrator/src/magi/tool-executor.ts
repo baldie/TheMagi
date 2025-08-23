@@ -64,26 +64,36 @@ export class ToolExecutor {
    */
   private async executeToolInternal(tool: AgenticTool, conduitClient?: ConduitClient): Promise<string> {
     // Handle special tool cases
-    if (tool.name === 'respond-to-user') {
-      const responseText = (tool.parameters.response as string) || 'No response provided';
-      try { testHooks.recordToolCall('respond-to-user', { response: responseText }); } catch { /* no-op in non-test mode */ }
+    if (tool.name === 'communicate') {
+      const messageText = (tool.parameters.message as string) || 'No message provided';
+      const recipientParam = (tool.parameters.recipient as string) || 'User';
       
-      // Publish the response to the User message queue instead of returning it
+      // Validate recipient parameter against MessageParticipant enum
+      const validRecipients = ['User', 'System', 'Magi', 'Caspar', 'Melchior', 'Balthazar'];
+      if (!validRecipients.includes(recipientParam)) {
+        throw new Error(`Invalid recipient: ${recipientParam}. Must be one of: ${validRecipients.join(', ')}`);
+      }
+      
+      const recipient = recipientParam as MessageParticipant;
+      
+      try { testHooks.recordToolCall('communicate', { message: messageText, recipient: recipient }); } catch { /* no-op in non-test mode */ }
+      
+      // Publish the message to the specified recipient's message queue
       try {
         const messageQueue = await initializeMessageQueue();
         await messageQueue.publish(
           this.magiName as MessageParticipant,
-          MessageParticipant.User,
-          responseText,
+          recipient,
+          messageText,
           MessageType.RESPONSE,
         );
-        logger.debug(`${this.magiName} published response to User message queue: ${responseText}`);
+        logger.debug(`${this.magiName} published message to ${recipient} message queue: ${messageText}`);
       } catch (error) {
-        logger.error(`${this.magiName} failed to publish response to message queue`, error);
+        logger.error(`${this.magiName} failed to publish message to message queue`, error);
         throw error;
       }
       
-      return 'Response sent to User message queue';
+      return `Message sent to ${recipient} message queue`;
     }
 
     if (tool.name === 'process-info') {

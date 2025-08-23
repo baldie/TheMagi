@@ -159,7 +159,7 @@ describe('McpClientManager', () => {
       expect(mcpTools).toHaveLength(2);
       
       // Check that default agentic tools are present
-      const agenticTools = tools.filter(tool => ['respond-to-user', 'process-info'].includes(tool.name));
+      const agenticTools = tools.filter(tool => ['communicate', 'process-info'].includes(tool.name));
       expect(agenticTools).toHaveLength(2);
       
       // Verify the structure of the search-web tool
@@ -179,13 +179,13 @@ describe('McpClientManager', () => {
     it('should return only default agentic tools for Magi without MCP client', async () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Caspar);
       
-      // Caspar should get 3 tools: smart-home-devices, respond-to-user, process-info
+      // Caspar should get 3 tools: smart-home-devices, communicate, process-info
       // But since smart-home-devices requires an MCP server that's not configured in tests,
       // only the 2 default agentic tools should be returned
       expect(tools).toHaveLength(2);
       
       const toolNames = tools.map(tool => tool.name);
-      expect(toolNames).toEqual(expect.arrayContaining(['respond-to-user', 'process-info']));
+      expect(toolNames).toEqual(expect.arrayContaining(['communicate', 'process-info']));
     });
 
     it('should handle listTools errors gracefully', async () => {
@@ -197,7 +197,7 @@ describe('McpClientManager', () => {
       // Should still return the default agentic tools even if MCP server fails
       expect(tools).toHaveLength(2);
       const toolNames = tools.map(tool => tool.name);
-      expect(toolNames).toEqual(expect.arrayContaining(['respond-to-user', 'process-info']));
+      expect(toolNames).toEqual(expect.arrayContaining(['communicate', 'process-info']));
     });
   });
 

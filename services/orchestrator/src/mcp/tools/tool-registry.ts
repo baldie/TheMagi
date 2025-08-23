@@ -208,17 +208,23 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   },
 
   // Default agentic tools
-  'respond-to-user': {
-    name: 'respond-to-user',
-    description: 'This tool allows you to ask questions of the user or provide answers to the user',
+  'communicate': {
+    name: 'communicate',
+    description: 'This tool allows you to communicate with the user or other Magi participants',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
-    defaults: {},
+    defaults: { recipient: 'User' },
     responseType: 'TextResponse',
     parameters: {
-      response: {
+      message: {
         type: 'string',
-        description: 'The response to provide to the user. This can be a question, answer, or any other communication. Use conversational tone.',
+        description: 'The message to send. This can be a question, answer, or any other communication. Use conversational tone.',
         required: true
+      },
+      recipient: {
+        type: 'string',
+        description: 'Caspar has access to the user\'s smart home devices, Melchior has access to personal data, Balthazar can access the internet on your behalf.',
+        enum: ['User', 'System', 'Magi', 'Caspar', 'Melchior', 'Balthazar'],
+        default: 'User'
       }
     },
   },
