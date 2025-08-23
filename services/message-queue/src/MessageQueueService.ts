@@ -162,7 +162,7 @@ export class MessageQueueService {
       const allItems = await this.vectorIndex.listItems();
       
       // First, load all messages fully (handling metadata files)
-      const allMessagesPromises = allItems.map(async item => {
+      const allMessagesPromises = allItems.map(async (item: any) => {
         const metadata = item.metadata as any;
         
         let message: QueueMessage;
@@ -196,14 +196,14 @@ export class MessageQueueService {
       
       // Now filter with the complete message data
       const pendingMessages = allMessages
-        .filter(message => {
+        .filter((message: QueueMessage) => {
           return message.recipient === recipient && 
                  !message.processed && 
                  !this.isExpired(message);
         });
       
       // Sort by priority (higher first), then by timestamp (older first)
-      return pendingMessages.sort((a, b) => {
+      return pendingMessages.sort((a: QueueMessage, b: QueueMessage) => {
         const priorityDiff = (b.priority ?? 0) - (a.priority ?? 0);
         if (priorityDiff !== 0) return priorityDiff;
         
@@ -224,7 +224,7 @@ export class MessageQueueService {
 
     try {
       const allItems = await this.vectorIndex.listItems();
-      const messageItem = allItems.find(item => item.id === messageId);
+      const messageItem = allItems.find((item: any) => item.id === messageId);
 
       if (!messageItem) {
         logger.warn(`Message not found for acknowledgment: ${messageId}`);
@@ -279,7 +279,7 @@ export class MessageQueueService {
       const allItems = await this.vectorIndex.listItems();
       
       // Load all messages, handling potential metadata files
-      const messagesPromises = allItems.map(async item => {
+      const messagesPromises = allItems.map(async (item: any) => {
         const metadata = item.metadata as any;
         
         let message: QueueMessage;
@@ -319,8 +319,8 @@ export class MessageQueueService {
       // Count messages by participant
       for (const message of messages) {
         if (!this.isExpired(message)) {
-          stats.messagesByParticipant[message.recipient] = 
-            (stats.messagesByParticipant[message.recipient] ?? 0) + 1;
+          stats.messagesByParticipant[message.recipient as MessageParticipant] = 
+            (stats.messagesByParticipant[message.recipient as MessageParticipant] ?? 0) + 1;
         }
       }
 
@@ -340,11 +340,11 @@ export class MessageQueueService {
 
     try {
       const allItems = await this.vectorIndex.listItems();
-      const messages = allItems.map(item => ({ ...item, metadata: item.metadata as QueueMessage }));
+      const messages = allItems.map((item: any) => ({ ...item, metadata: item.metadata as QueueMessage }));
 
       // Find messages to remove
-      const processedMessages = messages.filter(m => m.metadata.processed);
-      const expiredMessages = messages.filter(m => this.isExpired(m.metadata));
+      const processedMessages = messages.filter((m: any) => m.metadata.processed);
+      const expiredMessages = messages.filter((m: any) => this.isExpired(m.metadata));
       
       // Keep only the most recent processed messages
       const sortedProcessed = [...processedMessages].sort((a, b) => 
