@@ -1,13 +1,12 @@
 import { fromPromise } from 'xstate';
 import { logger } from '../logger';
-import { PERSONAS_CONFIG, allMagi } from './magi2';
+import { PERSONAS_CONFIG } from './magi2';
 import type { ConduitClient } from './conduit-client';
 import type { MagiName } from '../types/magi-types';
 import type { GoalCompletionResult, AgentContext } from './types';
 import type { AgenticTool } from './magi2';
 import { ToolExecutor } from './tool-executor';
 import { TIMEOUT_MS } from './types';
-import { speakWithMagiVoice } from '../tts';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -347,12 +346,7 @@ export const executeTool = fromPromise<string, ExecuteToolInput>(async ({ input 
 
   toolOutput = result.output;
 
-  if (selectedTool.name === 'respond-to-user') {
-    const magi = allMagi[magiName];
-    const ttsReady = await magi.makeTTSReady(toolOutput);
-    logger.debug(`\n🤖🔊\n${ttsReady}`);
-    void speakWithMagiVoice(ttsReady, magiName);
-  }
+  // TTS is now handled by the message queue consumer in message-subscriptions.ts
 
   return toolOutput;
 });

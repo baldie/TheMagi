@@ -1,7 +1,7 @@
 import { getMessageQueue, shutdownMessageQueue } from './index';
 import { MessageType } from './types';
-import { MessageParticipant } from '../types/magi-types';
-import { logger } from '../logger';
+import { MessageParticipant } from './types/magi-types';
+import { logger } from './logger';
 
 /**
  * Integration helpers for the message queue service

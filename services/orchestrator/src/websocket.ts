@@ -1,9 +1,9 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { logger } from './logger';
-import { initializeMessageQueue, type Subscription } from './message-queue';
 import { MessageParticipant } from './types/magi-types';
 import { enqueueMessage } from './loading';
+import { messageSubscriptionManager } from './magi/message-subscriptions';
 
 console.log('[DEBUG] websocket.ts file loaded at:', new Date().toISOString());
 import { logStream } from './log-stream';
@@ -39,37 +39,8 @@ export function createWebSocketServer(server: Server) {
       logger.error('[DEBUG] Failed to send initial ACK:', error);
     }
     
-    // Subscribe to message queue for User participant
-    let messageQueueSubscription: Subscription | null = null;
-    try {
-      const messageQueue = await initializeMessageQueue();
-      messageQueueSubscription = messageQueue.subscribe(MessageParticipant.User, async (message) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          try {
-            const messagePayload = {
-              type: 'deliberation-complete',
-              data: {
-                response: message.content,
-                sender: message.sender,
-                source: 'message-queue'
-              }
-            };
-            ws.send(JSON.stringify(messagePayload));
-            logger.debug(`[WebSocket] Sent message queue response to client from ${message.sender}`);
-            
-            // Acknowledge the message as processed
-            await messageQueue.acknowledge(message.id);
-          } catch (error) {
-            logger.error('[WebSocket] Failed to send message queue response to client', error);
-          }
-        } else {
-          logger.warn('[WebSocket] Client not open - cannot send message queue response');
-        }
-      });
-      logger.info('[WebSocket] Client subscribed to User message queue');
-    } catch (error) {
-      logger.error('[WebSocket] Failed to set up message queue subscription for client', error);
-    }
+    // Subscribe to message queue for User participant using the subscription manager
+    const messageQueueSubscription = await messageSubscriptionManager.setupUserSubscription(ws);
     
     const logListener = (message: string) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -139,8 +110,7 @@ export function createWebSocketServer(server: Server) {
       connectedClients.delete(ws);
       logStream.unsubscribe(logListener);
       if (messageQueueSubscription) {
-        messageQueueSubscription.unsubscribe();
-        logger.info('[WebSocket] Client unsubscribed from User message queue');
+        messageSubscriptionManager.removeUserSubscription(messageQueueSubscription);
       }
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     });
@@ -150,8 +120,7 @@ export function createWebSocketServer(server: Server) {
       connectedClients.delete(ws);
       logStream.unsubscribe(logListener);
       if (messageQueueSubscription) {
-        messageQueueSubscription.unsubscribe();
-        logger.info('[WebSocket] Client unsubscribed from User message queue');
+        messageSubscriptionManager.removeUserSubscription(messageQueueSubscription);
       }
       if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
     });

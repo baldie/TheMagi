@@ -480,13 +480,13 @@ export class McpClientManager {
       : '';
 
     // Parse the response based on tool type
-    if (this.isWebSearchTool(toolName)) {
+    if (ToolRegistry.isWebSearchTool(toolName)) {
       return {
         data: this.parseWebSearchResponse(textContent),
         isError: Boolean(result.isError),
         _meta: result._meta
       } as any;
-    } else if (this.isWebExtractTool(toolName)) {
+    } else if (ToolRegistry.isWebExtractTool(toolName)) {
       return {
         data: this.parseWebExtractResponse(textContent),
         isError: Boolean(result.isError),
@@ -500,20 +500,6 @@ export class McpClientManager {
         _meta: result._meta
       } as any;
     }
-  }
-
-  /**
-   * Check if tool is a web search tool
-   */
-  private isWebSearchTool(toolName: string): boolean {
-    return ToolRegistry.isWebSearchTool(toolName);
-  }
-
-  /**
-   * Check if tool is a web extract tool
-   */
-  private isWebExtractTool(toolName: string): boolean {
-    return ToolRegistry.isWebExtractTool(toolName);
   }
 
   /**

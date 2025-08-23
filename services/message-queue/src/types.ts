@@ -1,5 +1,5 @@
 import type { MetadataTypes } from 'vectra';
-import type { MessageParticipant } from '../types/magi-types';
+import type { MessageParticipant } from './types/magi-types';
 
 /**
  * Message types for inter-service communication

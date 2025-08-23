@@ -8,6 +8,18 @@ jest.mock('@modelcontextprotocol/sdk/client/index.js');
 jest.mock('@modelcontextprotocol/sdk/client/stdio.js');
 jest.mock('@modelcontextprotocol/sdk/types.js');
 
+// Mock the message queue service to prevent vectra initialization issues
+jest.mock('../../../message-queue/src', () => ({
+  initializeMessageQueue: jest.fn().mockResolvedValue({
+    publish: jest.fn(),
+    subscribe: jest.fn(),
+    acknowledge: jest.fn()
+  }),
+  MessageType: {
+    RESPONSE: 'RESPONSE'
+  }
+}));
+
 // Mock logger to avoid path issues
 jest.mock('../logger', () => ({
   logger: {

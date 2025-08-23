@@ -2,7 +2,7 @@ import { LocalIndex } from 'vectra';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomBytes } from 'crypto';
-import { logger } from '../logger';
+import { logger } from './logger';
 import type { 
   QueueMessage, 
   MessageCallback, 
@@ -12,7 +12,7 @@ import type {
   PublishOptions,
   MessageType
 } from './types';
-import type { MessageParticipant } from '../types/magi-types';
+import type { MessageParticipant } from './types/magi-types';
 
 /**
  * Message Queue Service using Vectra for persistent storage

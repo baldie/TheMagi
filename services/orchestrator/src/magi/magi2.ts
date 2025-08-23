@@ -162,7 +162,7 @@ message: "Play my favorite playlist"
 interface MagiCompatible {
   name: MagiName;
   withPersonality(systemPrompt: string): string;
-  contact(speaker: MessageParticipant, message: string): Promise<string>;
+  contactWithMemory(speaker: MessageParticipant, message: string): Promise<string>;
   contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
   forget(): void;
   ensureInitialized(): Promise<void>;
@@ -227,7 +227,7 @@ export class Magi2 implements MagiCompatible {
     return this.status;
   }
 
-  async contact(speaker: MessageParticipant, message: string): Promise<string> {
+  async contactWithMemory(speaker: MessageParticipant, message: string): Promise<string> {
     await this.ensureInitialized();
     const currentTopic = await this.shortTermMemory.determineTopic(speaker, message);
     const workingMemory = await this.shortTermMemory.summarize(currentTopic);
@@ -252,6 +252,9 @@ export class Magi2 implements MagiCompatible {
     return response;
   }
 
+  /**
+    * Simple contact method without memory context
+  */
   async contactSimple(userPrompt: string, systemPrompt?: string): Promise<string> {
     await this.ensureInitialized();
     return this.executeWithStatusManagement(async () => 

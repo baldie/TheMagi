@@ -110,7 +110,7 @@ describe('ShortTermMemory', () => {
       const callArgs = mockMagi.contactSimple.mock.calls[0];
       const prompt = callArgs[0];
       
-      expect(prompt).toContain('Speaker: user');
+      expect(prompt).toContain('Speaker: User');
       expect(prompt).toContain('Message: user message');
       expect(prompt).toContain('Speaker: Melchior');
       expect(prompt).toContain('Message: magi message');

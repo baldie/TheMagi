@@ -1,11 +1,13 @@
 import { logger } from '../logger';
 import type { ToolUser } from './tool-user';
 import type { MagiName } from '../types/magi-types';
+import { MessageParticipant } from '../types/magi-types';
 import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
 import { testHooks } from '../testing/test-hooks';
 import type { ConduitClient } from './conduit-client';
 import { PERSONAS_CONFIG } from './magi2';
+import { initializeMessageQueue, MessageType } from '../../../message-queue/src';
 
 /**
  * Service class for tool execution with timeout and error handling
@@ -65,7 +67,23 @@ export class ToolExecutor {
     if (tool.name === 'respond-to-user') {
       const responseText = (tool.parameters.response as string) || 'No response provided';
       try { testHooks.recordToolCall('respond-to-user', { response: responseText }); } catch { /* no-op in non-test mode */ }
-      return responseText;
+      
+      // Publish the response to the User message queue instead of returning it
+      try {
+        const messageQueue = await initializeMessageQueue();
+        await messageQueue.publish(
+          this.magiName as MessageParticipant,
+          MessageParticipant.User,
+          responseText,
+          MessageType.RESPONSE,
+        );
+        logger.debug(`${this.magiName} published response to User message queue: ${responseText}`);
+      } catch (error) {
+        logger.error(`${this.magiName} failed to publish response to message queue`, error);
+        throw error;
+      }
+      
+      return 'Response sent to User message queue';
     }
 
     if (tool.name === 'process-info') {

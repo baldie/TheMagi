@@ -1,6 +1,6 @@
 import { MessageQueueService } from './MessageQueueService';
 import { MessageType } from './types';
-import { MessageParticipant } from '../types/magi-types';
+import { MessageParticipant } from './types/magi-types';
 import path from 'path';
 import fs from 'fs/promises';
 
