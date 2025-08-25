@@ -50,10 +50,11 @@
     },
     "toolUsage": {
       "mustCall": [
-        "search-web"
+        "search-web",
+        "communicate"
       ],
       "mustNotCall": [
-        "communicate"
+        "process-info"
       ],
       "expectedOrder": [
         {
@@ -66,7 +67,7 @@
     "behavior": {
       "shouldComplete": true,
       "maxDuration": 45000,
-      "shouldSpeak": true
+      "shouldSpeak": false
     },
     "planning": {
       "goalCount": {

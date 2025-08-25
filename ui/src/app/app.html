@@ -64,7 +64,7 @@
             <div class="input-row">
                 <label for="question">question:</label>
                 <input id="question" type="text" [(ngModel)]="userInquiry" (keyup.enter)="submitQuestion()" placeholder="Ask The Magi a question...">
-                <button *ngIf="userInquiry" class="submit-question-btn" (click)="submitQuestion()" [disabled]="orchestratorStatus !== 'available' || isMagiStarting">
+                <button *ngIf="userInquiry" class="submit-question-btn" (click)="submitQuestion()" [disabled]="orchestratorStatus !== 'available' || areMagiBusy">
                   Submit
                 </button>
             </div>

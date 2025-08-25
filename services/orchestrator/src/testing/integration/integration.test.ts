@@ -380,14 +380,14 @@ describe('Integration (single Magi) specs', () => {
         };
         
         ws.on('open', () => {
-          console.log('[integration] WS open, sending start-magi');
+          console.log('[integration] WS open, sending contact-magi');
           resetInactivityTimer();
           const message = {
-            type: 'start-magi',
+            type: 'contact-magi',
             data: {
+              message: spec.input.userMessage,
               testName: name,
-              magi: spec.test.magi,
-              userMessage: spec.input.userMessage
+              magi: spec.test.magi
             }
           };
           console.log(`[integration] Sending message: ${JSON.stringify(message)}`);

@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "enabled": true
+  },
+  "test": {
+    "name": "turn_on_fan_when_cold",
+    "description": "User says it is stuffy in the bedroom, Caspar should turn on the fan",
+    "magi": "Caspar",
+    "baselineDate": "2025-08-24",
+    "timeout": 30000
+  },
+  "input": {
+    "userMessage": "c: It is stuffy in the bedroom Caspar, please turn on the fan or any device that can help with ventilation."
+  },
+  "toolStubs": {
+    "smart-home-devices": {
+      "responses": [
+        {
+          "when": {
+            "action": "control",
+            "device_type": "window",
+            "entity_id": "bedroom_window",
+            "command": "open"
+          },
+          "response": "Error: No bedroom window found. However, I found a fan (zhimi.fan.za5) in the bedroom that can help with ventilation."
+        },
+        {
+          "when": {
+            "action": "list_devices"
+          },
+          "response": "{\"success\": true, \"result\": \"Live Context: An overview of the areas and the devices in this smart home:\n- names: Chromecast\n  domain: media_player\n  state: 'off'\n- names: Google Home\n  domain: media_player\n  state: 'off'\n  attributes:\n    device_class: speaker\n- names: Samsung The Frame 65 (QN65LS03AAFXZA)\n  domain: media_player\n  state: 'on'\n  areas: Living Room\n  attributes:\n    volume_level: 0.2\n    device_class: tv\n- names: Shopping List\n  domain: todo\n  state: '0'\n- names: zhimi.fan.za5\n  domain: fan\n  state: 'off'\n  areas: Bedroom\n  attributes:\n    percentage:\n- names: zhimi.fan.za5 Humidity\n  domain: sensor\n  state: '58'\n  areas: Bedroom\n  attributes:\n    unit_of_measurement: '%'\n    device_class: humidity\n- names: zhimi.fan.za5 Temperature\n  domain: sensor\n  state: '74.48'\n  areas: Bedroom\n  attributes:\n    unit_of_measurement: \u00b0F\n    device_class: temperature\n\"}"
+        },
+        {
+          "when": {
+            "action": "control",
+            "command": "turn_on",
+            "device_type": "fan",
+            "entity_id": "zhimi.fan.za5"
+          },
+          "response": "{\"speech\": {}, \"response_type\": \"action_done\", \"data\": {\"targets\": [], \"success\": [{\"name\": \"zhimi.fan.za5\", \"type\": \"entity\", \"id\": \"fan.zhimi_fan_za5\"}], \"failed\": []}}"
+        }
+      ]
+    },
+    "communicate": {
+      "response": "I found the bedroom fan (zhimi.fan.za5) and turned it on. The fan is now running at 22% speed to help with the stuffiness. The bedroom temperature is 74.48°F and humidity is 58%, so the fan should help circulate the air. There are also 7 other smart devices available if you need them.",
+      "ignoreParameters": true
+    }
+  },
+  "expectations": {
+    "finalResponse": {
+      "mustContain": [
+        "Ventilation",
+        "turned on",
+        "bedroom"
+      ],
+      "mustNotContain": [
+        "I don't know",
+        "error",
+        "failed",
+        "cannot"
+      ],
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "toolUsage": {
+      "mustCall": [
+        "smart-home-devices",
+        "communicate"
+      ],
+      "mustNotCall": [
+        "process-info"
+      ],
+      "expectedOrder": [
+        {
+          "tool": "smart-home-devices",
+          "before": "communicate"
+        }
+      ],
+      "maxToolCalls": 15
+    },
+    "behavior": {
+      "shouldComplete": true,
+      "maxDuration": 45000,
+      "shouldSpeak": true
+    },
+    "planning": {
+      "goalCount": {
+        "min": 3,
+        "max": 3
+      },
+      "shouldPlanFor": [
+        "Search for smart home devices in the bedroom",
+        "Check if there is a fan or air purifier available",
+        "Send command to turn on the fan or air purifier",
+        "Respond with confirmation that the fan or air purifier is on"
+      ]
+    }
+  }
+}

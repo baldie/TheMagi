@@ -63,7 +63,18 @@ export function createWebSocketServer(server: Server) {
         const messageObj = JSON.parse(messageStr);
         
         if (messageObj.type === 'contact-magi') {
-          const { message } = messageObj.data || messageObj;
+          const { message, testName, magi } = messageObj.data || messageObj;
+
+          // Initialize test recorder if this is a test run
+          if (testName && magi) {
+            logger.info(`[WebSocket] Received contact-magi test message: ${JSON.stringify(messageObj.data)}`);
+            const testHooks = await import('./testing/test-hooks');
+            if (testHooks.testHooks.isEnabled()) {
+              const TestRecorder = (await import('./testing/test-recorder')).TestRecorder;
+              TestRecorder.beginRun({ testName, magi });
+              logger.info(`[WebSocket] Test recorder initialized for test: ${testName}`);
+            }
+          }
 
           let recipient: MessageParticipant = MessageParticipant.Magi;
           if (message.trim().toLowerCase().startsWith('b:')) {
@@ -74,12 +85,52 @@ export function createWebSocketServer(server: Server) {
             recipient = MessageParticipant.Caspar;
           }
 
+          if (testName) {
+            logger.info(`[WebSocket] Test ${testName}: routing message to ${recipient}`);
+          }
+          
           await enqueueMessage(MessageParticipant.User, recipient, message);
           
           const payload = {
             type: 'ack',
-            data: 'WORKING',
-            source: 'websocket-handler'
+            data: testName ? 'TEST_WORKING' : 'WORKING',
+            source: testName ? 'websocket-test-handler' : 'websocket-handler'
+          };
+          
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(payload));
+          }
+        } else if (messageObj.type === 'start-magi') {
+          // Handle integration test messages
+          logger.info(`[WebSocket] Received start-magi test message: ${JSON.stringify(messageObj.data)}`);
+          
+          const { testName, magi, userMessage } = messageObj.data;
+          
+          // Initialize test recorder for this test run
+          const testHooks = await import('./testing/test-hooks');
+          if (testHooks.testHooks.isEnabled()) {
+            const TestRecorder = (await import('./testing/test-recorder')).TestRecorder;
+            TestRecorder.beginRun({ testName, magi });
+            logger.info(`[WebSocket] Test recorder initialized for test: ${testName}`);
+          }
+          
+          // Determine recipient based on magi parameter
+          let recipient: MessageParticipant = MessageParticipant.Magi;
+          if (magi === 'Balthazar') {
+            recipient = MessageParticipant.Balthazar;
+          } else if (magi === 'Melchior') {
+            recipient = MessageParticipant.Melchior;
+          } else if (magi === 'Caspar') {
+            recipient = MessageParticipant.Caspar;
+          }
+
+          logger.info(`[WebSocket] Test ${testName}: routing message to ${recipient}`);
+          await enqueueMessage(MessageParticipant.User, recipient, userMessage);
+          
+          const payload = {
+            type: 'ack',
+            data: 'TEST_WORKING',
+            source: 'websocket-test-handler'
           };
           
           if (ws.readyState === WebSocket.OPEN) {

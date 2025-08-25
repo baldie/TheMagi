@@ -14,7 +14,6 @@ export interface AudioMessage {
   sequenceNumber: number;
 }
 
-
 @Injectable({
   providedIn: 'root'
 })
@@ -52,7 +51,7 @@ export class WebsocketService implements OnDestroy {
     if (this.socket$ && !this.socket$.closed) {
       this.logSubject.next('[CLIENT] WebSocket already connected');
       if (shouldStartMagi) {
-        this.startMagi(message);
+        this.contactMagi(message);
       }
       return;
     }
@@ -68,7 +67,7 @@ export class WebsocketService implements OnDestroy {
           this.connectionStatusSubject.next(true);
           this.logSubject.next('[CLIENT] WebSocket connected');
           if (shouldStartMagi) {
-            this.startMagi(message);
+            this.contactMagi(message);
           }
         }
       },
@@ -141,7 +140,7 @@ export class WebsocketService implements OnDestroy {
     }
   }
 
-  public startMagi(message?: string): void {
+  public contactMagi(message?: string): void {
     try {
       if (!this.socket$ || this.socket$.closed) {
         this.logSubject.next('[CLIENT] WebSocket not connected - cannot contact Magi');

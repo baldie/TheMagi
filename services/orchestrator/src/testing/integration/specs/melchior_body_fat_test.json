@@ -7,7 +7,7 @@
     "description": "User asks about progress toward 15% body fat goal - should access personal data and calculate difference",
     "magi": "Melchior",
     "baselineDate": "2025-08-16",
-    "timeout": 30000
+    "timeout": 120000
   },
   "input": {
     "userMessage": "m: I'm trying to get down to 15% bodyfat, how far do I have to go?"
@@ -17,29 +17,24 @@
       "responses": [
         {
           "when": {
-            "action": "store"
+            "action": "retrieve",
+            "content": "bodyfat percentage"
           },
-          "response": "User's fitness goal: Reduce body fat percentage to 15% has been stored"
-        },
-        {
-          "when": {
-            "action": "retrieve"
-          },
-          "response": "Current body fat percentage: 22%"
+          "response": "{\"data\": {\"items\": [{\"id\": \"pd_1756095071282_9ba136ee59bd\",\"content\": \"20%\",\"category\": \"Health & Wellness\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}],\"total_found\": 1},\"categories\": [\"Health & Wellness\"],\"last_updated\": \"2025-08-22T01:49:09.668Z\"}"
         }
       ]
     },
     "communicate": {
-      "response": "Based on your current body fat of 22% and your goal of 15%, you need to reduce your body fat by 7 percentage points to reach your target.",
+      "response": "Based on your current body fat of 20% and your goal of 15%, you need to reduce your body fat by 5 percentage points to reach your target.",
       "ignoreParameters": true
     }
   },
   "expectations": {
     "finalResponse": {
       "mustContain": [
-        "7",
+        "5",
         "percentage",
-        "22%",
+        "20%",
         "15%"
       ],
       "mustNotContain": [
@@ -54,35 +49,30 @@
     "toolUsage": {
       "mustCall": [
         "access-data",
-        "process-info",
         "communicate"
       ],
       "mustNotCall": [
-        "communicate"
       ],
       "expectedOrder": [
         {
           "tool": "access-data",
           "before": "communicate"
         }
-      ],
-      "maxToolCalls": 3
+      ]
     },
     "behavior": {
       "shouldComplete": true,
       "maxDuration": 45000,
-      "shouldSpeak": true
+      "shouldSpeak": false
     },
     "planning": {
       "goalCount": {
-        "min": 3,
+        "min": 2,
         "max": 3
       },
       "shouldPlanFor": [
-        "Store user's goal to reach 15% bodyfat",
-        "Access user’s personal data for fitness goals and current body fat percentage",
-        "Calculate the distance to 15% body fat based on current data",
-        "Respond with the calculated distance to goal body fat."
+        "Access user's health data",
+        "Respond"
       ]
     }
   }

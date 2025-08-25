@@ -219,7 +219,7 @@ export class McpClientManager {
 
   private logConnectionAttempt(magiName: MagiName, config: McpServerConfig): void {
     logger.info(`Connecting to ${config.name} MCP server for ${magiName} via ${config.transport}...`);
-    logger.debug(`MCP server config:`, { 
+    logger.debug(`MCP server config: ${JSON.stringify({ 
       name: config.name,
       transport: config.transport,
       ...(config.transport === 'stdio' ? {
@@ -230,7 +230,7 @@ export class McpClientManager {
         url: config.url,
         headers: config.headers
       })
-    });
+    })}`);
   }
 
   private logServerCredentials(config: McpServerConfig): void {
@@ -293,7 +293,7 @@ export class McpClientManager {
       
       this.logServerSpecificTools(config, response.tools);
     } catch (toolError) {
-      logger.warn(`${magiName}:${config.name} MCP server connected but failed to list tools:`, toolError);
+      logger.warn(`${magiName}:${config.name} MCP server connected but failed to list tools: ${toolError}`);
     }
   }
 
@@ -307,7 +307,7 @@ export class McpClientManager {
   }
 
   private handleConnectionError(magiName: MagiName, config: McpServerConfig, error: unknown): void {
-    logger.error(`Failed to connect to ${config.name} MCP server for ${magiName}:`, error);
+    logger.error(`Failed to connect to ${config.name} MCP server for ${magiName}: ${error}`);
     
     if (config.name === 'home-assistant') {
       this.logHomeAssistantTokenStatus(config);
@@ -406,7 +406,7 @@ export class McpClientManager {
           allTools.push(...tools);
         }
       } catch (error) {
-        logger.error(`Failed to list tools for ${magiName}:${config.name}:`, error);
+        logger.error(`Failed to list tools for ${magiName}:${config.name}: ${error}`);
       }
     }
     
@@ -548,17 +548,17 @@ export class McpClientManager {
     availableTools: string[]
   ): Promise<GetToolResponse<string> | null> {
     if ((toolName === 'smart-home-devices' || toolName === 'home-assistant') && config.name === 'home-assistant') {
-      logger.debug(`🏠 Processing smart-home-devices call with arguments:`, toolArguments);
+      logger.debug(`🏠 Processing smart-home-devices call with arguments: ${JSON.stringify(toolArguments)}`);
       
       const homeAssistantTool = this.selectHomeAssistantTool(toolArguments, availableTools);
       if (homeAssistantTool) {
         const transformedArgs = this.transformArgumentsForHomeAssistant(toolArguments);
         
         logger.debug(`🔄 Routing to Home Assistant tool: ${homeAssistantTool}`);
-        logger.debug(`📤 Calling ${homeAssistantTool} with args:`, transformedArgs);
+        logger.debug(`📤 Calling ${homeAssistantTool} with args: ${JSON.stringify(transformedArgs)}`);
         
         const result = await client.callTool({ 
-          name: homeAssistantTool, 
+          name: homeAssistantTool,
           arguments: transformedArgs
         });
         
@@ -709,7 +709,7 @@ export class McpClientManager {
    * Execute a default agentic tool that doesn't require an MCP server
    */
   private executeDefaultAgenticTool(toolName: string, toolArguments: Record<string, any>): GetToolResponse<string> {
-    logger.debug(`Executing default agentic tool: ${toolName} with arguments:`, toolArguments);
+    logger.debug(`Executing default agentic tool: ${toolName} with arguments: ${JSON.stringify(toolArguments)}`);
     
     // Default agentic tools are essentially pass-through operations
     // They're designed to be processed by the Magi's agentic logic
@@ -878,7 +878,7 @@ export class McpClientManager {
         await transport.close();
         logger.debug(`Closed MCP transport for ${serverKey}`);
       } catch (error) {
-        logger.warn(`Failed to close MCP transport for ${serverKey}:`, error);
+        logger.warn(`Failed to close MCP transport for ${serverKey}: ${error}`);
       }
     }
     

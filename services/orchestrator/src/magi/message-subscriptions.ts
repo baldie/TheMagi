@@ -93,43 +93,7 @@ export class MessageSubscriptionManager {
     try {
       const messageQueue = await initializeMessageQueue();
       const subscription = messageQueue.subscribe(MessageParticipant.User, async (message) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          try {
-            const messagePayload = {
-              type: 'deliberation-complete',
-              data: {
-                response: message.content,
-                sender: message.sender,
-                source: 'message-queue'
-              }
-            };
-            ws.send(JSON.stringify(messagePayload));
-            logger.debug(`[WebSocket] Sent message queue response to client from ${message.sender}`);
-            
-            // Trigger TTS for the response using the appropriate Magi voice
-            if (message.sender && message.sender !== MessageParticipant.User && message.sender !== MessageParticipant.System) {
-              try {
-                // Parse the response to make it TTS-ready if needed
-                const magiName = message.sender as MagiName;
-                const magi = this.getMagiInstance(magiName);
-                if (magi) {
-                  const ttsReady = await magi.makeTTSReady(message.content);
-                  logger.debug(`\n🤖🔊\n${ttsReady}`);
-                  void speakWithMagiVoice(ttsReady, magiName);
-                }
-              } catch (ttsError) {
-                logger.warn('Failed to trigger TTS for message', ttsError);
-              }
-            }
-            
-            // Acknowledge the message as processed
-            await messageQueue.acknowledge(message.id);
-          } catch (error) {
-            logger.error('[WebSocket] Failed to send message queue response to client', error);
-          }
-        } else {
-          logger.warn('[WebSocket] Client not open - cannot send message queue response');
-        }
+        await this.handleUserMessage(ws, messageQueue, message);
       });
       
       this.userSubscriptions.add(subscription);
@@ -138,6 +102,86 @@ export class MessageSubscriptionManager {
     } catch (error) {
       logger.error('[WebSocket] Failed to set up message queue subscription for client', error);
       return null;
+    }
+  }
+
+  /**
+   * Handle a user message from the message queue
+   */
+  private async handleUserMessage(ws: WebSocket, messageQueue: any, message: any): Promise<void> {
+    if (ws.readyState !== WebSocket.OPEN) {
+      logger.warn('[WebSocket] Client not open - cannot send message queue response');
+      return;
+    }
+
+    try {
+      const testMeta = await this.getTestMetadata(message.content);
+      await this.sendMessageToClient(ws, message, testMeta);
+      await this.handleTTSForMessage(message);
+      await messageQueue.acknowledge(message.id);
+    } catch (error) {
+      logger.error('[WebSocket] Failed to send message queue response to client', error);
+    }
+  }
+
+  /**
+   * Get test metadata if in test mode
+   */
+  private async getTestMetadata(content: string): Promise<any> {
+    try {
+      const testHooks = await import('../testing/test-hooks');
+      if (testHooks.testHooks.isEnabled()) {
+        try {
+          const testMeta = testHooks.testHooks.endRunAndSummarize(content);
+          logger.info(`[WebSocket] Test completed with metadata: ${JSON.stringify(testMeta)}`);
+          return testMeta;
+        } catch (error) {
+          logger.warn(`[WebSocket] Failed to get test metadata: ${error}`);
+        }
+      }
+    } catch (error) {
+      logger.debug(`[WebSocket] Test hooks not available: ${error}`);
+    }
+    return undefined;
+  }
+
+  /**
+   * Send message to WebSocket client
+   */
+  private async sendMessageToClient(ws: WebSocket, message: any, testMeta?: any): Promise<void> {
+    const messagePayload = {
+      type: 'deliberation-complete',
+      data: {
+        response: message.content,
+        sender: message.sender,
+        source: 'message-queue',
+        ...(testMeta && { testMeta })
+      }
+    };
+    ws.send(JSON.stringify(messagePayload));
+    logger.debug(`[WebSocket] Sent message queue response to client from ${message.sender}`);
+  }
+
+  /**
+   * Handle TTS for a message if sender is a Magi
+   */
+  private async handleTTSForMessage(message: any): Promise<void> {
+    const shouldTriggerTTS = message.sender && 
+      message.sender !== MessageParticipant.User && 
+      message.sender !== MessageParticipant.System;
+      
+    if (!shouldTriggerTTS) return;
+
+    try {
+      const magiName = message.sender as MagiName;
+      const magi = this.getMagiInstance(magiName);
+      if (magi) {
+        const ttsReady = await magi.makeTTSReady(message.content);
+        logger.debug(`\n🤖🔊\n${ttsReady}`);
+        void speakWithMagiVoice(ttsReady, magiName);
+      }
+    } catch (ttsError) {
+      logger.warn('Failed to trigger TTS for message', ttsError);
     }
   }
 

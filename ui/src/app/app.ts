@@ -28,7 +28,7 @@ export class AppComponent implements OnInit, OnDestroy {
   casperStatus: MagiStatus = 'offline';
   melchiorStatus: MagiStatus = 'offline';
   displayLogs = false;
-  isMagiStarting = false;
+  areMagiBusy = false;
   serverLogs: LogEntry[] = [];
   selectedLogEntry: LogEntry | null = null;
   showLogDetail = false;
@@ -45,7 +45,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     // Subscribe to all WebSocket service observables
-    this.subscriptions.add(this.websocketService.isProcessRunning$.subscribe(isRunning => this.isMagiStarting = isRunning));
+    this.subscriptions.add(this.websocketService.isProcessRunning$.subscribe(isRunning => this.areMagiBusy = isRunning));
     this.subscriptions.add(this.websocketService.logs$.subscribe(log => this.serverLogs.push(this.createLogEntry(log))));
     this.subscriptions.add(this.websocketService.audio$.subscribe(audioMessage => this.audioService.playAudioMessage(audioMessage)));
     this.subscriptions.add(timer(0, 5000).subscribe(() => this.performHealthCheck()));
@@ -68,7 +68,7 @@ export class AppComponent implements OnInit, OnDestroy {
     // Stop showing "starting" when all Magi are available
     const allMagiAvailable = [balthazar.status, caspar.status, melchior.status].every(status => status === 'available');
     if (this.isOrchestratorAvailable && allMagiAvailable) {
-      this.isMagiStarting = false;
+      this.areMagiBusy = false;
     }
   }
 
@@ -108,14 +108,14 @@ export class AppComponent implements OnInit, OnDestroy {
     this.websocketService.disconnect();
   }
 
-  async startMagi(): Promise<void> {
+  async contactMagi(): Promise<void> {
     // Check if orchestrator is available
     if (!this.isOrchestratorAvailable) {
       this.serverLogs.push(this.createLogEntry('[CLIENT] Cannot start Magi: Orchestrator is not available'));
       return;
     }
     
-    if (this.isMagiStarting) {
+    if (this.areMagiBusy) {
       return;
     }
     
@@ -125,8 +125,8 @@ export class AppComponent implements OnInit, OnDestroy {
     // Reset audio queue for new deliberation
     this.audioService.resetAudioQueue();
     
-    this.isMagiStarting = true;
-    this.serverLogs.push(this.createLogEntry(`[CLIENT] Starting Magi with inquiry: ${this.userInquiry || 'none'}`));
+    this.areMagiBusy = true;
+    this.serverLogs.push(this.createLogEntry(`[CLIENT] Contacting Magi with message: ${this.userInquiry || 'none'}`));
     this.websocketService.startConnecting(true, this.userInquiry);
     this.userInquiry = ''; // Clear the input field
     
@@ -135,7 +135,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   submitQuestion(): void {
-    this.startMagi(); 
+    this.contactMagi(); 
   }
 
   toggleDisplayLogs() {
