@@ -75,7 +75,7 @@ export class ConduitClient {
             
             if (attempt < maxRetries) {
               const delayMs = Math.pow(2, attempt - 1) * 1000; // Exponential backoff: 1s, 2s, 4s
-              logger.info(`${this.magiName} retrying in ${delayMs}ms...`);
+              logger.info(`${this.magiName} retrying ${userPrompt} in ${delayMs}ms...`);
               await new Promise(resolve => setTimeout(resolve, delayMs));
             }
           }

@@ -100,7 +100,8 @@
       "Bash(ng build:*)",
       "WebSearch",
       "Bash(./run-all-tests.sh:*)",
-      "WebFetch(domain:event-driven.io)"
+      "WebFetch(domain:event-driven.io)",
+      "Read(//tmp/**)",
     ],
     "deny": [],
     "defaultMode": "acceptEdits"

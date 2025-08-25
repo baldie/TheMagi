@@ -21,14 +21,17 @@ export function getMelchiorToolAssignments(): string[] {
 /**
  * Get MCP server configurations needed for Melchior's tools
  */
-export function getMelchiorTools(): McpServerConfig[] {
+export function getMelchiorToolServers(): McpServerConfig[] {
   return ToolRegistry.getServersForMagi(MagiName.Melchior).map(server => ({
     name: server.name,
+    transport: server.transport,
     command: server.command,
     args: server.args,
-    env: {
+    env: server.env ? {
       ...process.env,
       ...server.env
-    } as Record<string, string>
+    } as Record<string, string> : undefined,
+    url: server.url,
+    headers: server.headers
   }));
 }

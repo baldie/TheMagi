@@ -25,9 +25,11 @@ describe('ToolRegistry', () => {
       expect(servers[0].provides).toContain('tavily-extract');
     });
 
-    it('should return empty array for Caspar (no tools configured)', () => {
+    it('should return home-assistant server for Caspar', () => {
       const servers = ToolRegistry.getServersForMagi(MagiName.Caspar);
-      expect(servers).toHaveLength(0);
+      expect(servers).toHaveLength(1);
+      expect(servers[0].name).toBe('home-assistant');
+      expect(servers[0].provides).toContain('home-assistant');
     });
 
     it('should return access-data server for Melchior', () => {

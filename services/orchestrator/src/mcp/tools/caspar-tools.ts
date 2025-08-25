@@ -3,12 +3,9 @@ import { ToolRegistry } from './tool-registry';
 import type { McpServerConfig } from '../index';
 
 /**
- * Caspar's practical tools - focused on smart home devices, system status, and integration data
+ * Caspar's practical tools - focused on smart home devices
  * 
- * Tools assigned: smart-home-devices, communicate
- * - Query and control smart home devices
- * - System status and environmental monitoring
- * - Core agentic tools for user interaction
+ * Tools assigned: smart-home-devices, communicate, process-info
  */
 
 /**
@@ -21,14 +18,17 @@ export function getCasparToolAssignments(): string[] {
 /**
  * Get MCP server configurations needed for Caspar's tools
  */
-export function getCasparTools(): McpServerConfig[] {
+export function getCasparToolServers(): McpServerConfig[] {
   return ToolRegistry.getServersForMagi(MagiName.Caspar).map(server => ({
     name: server.name,
+    transport: server.transport,
     command: server.command,
     args: server.args,
-    env: {
+    env: server.env ? {
       ...process.env,
       ...server.env
-    } as Record<string, string>
+    } as Record<string, string> : undefined,
+    url: server.url,
+    headers: server.headers
   }));
 }

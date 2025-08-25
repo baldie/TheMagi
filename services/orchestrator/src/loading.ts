@@ -3,7 +3,7 @@ import { logger } from './logger';
 import type { Magi2 } from './magi/magi2';
 import { balthazar, caspar, melchior, MagiName, PERSONAS_CONFIG } from './magi/magi2';
 import { initializeMessageQueue, MessageType } from '../../message-queue/src';
-import { MessageParticipant } from './types/magi-types';
+import type { MessageParticipant } from './types/magi-types';
 import { messageSubscriptionManager } from './magi/message-subscriptions';
 
 export const enqueueMessage = async (sender: MessageParticipant, recipient: MessageParticipant, content: string): Promise<void> => {
@@ -18,15 +18,11 @@ async function checkPersonaReadiness(magi: Magi2): Promise<void> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     logger.info(`Pinging ${magi.name} to confirm readiness... (Attempt ${attempt}/${maxRetries})`);
     try {
-      const response = await magi.contactWithMemory(MessageParticipant.System, "Confirm you are ready by responding with only the word 'Ready'.");
+      const response = await magi.contactSimple("Confirm you are ready by responding with only the word 'Ready'.");
       if (!response.trim().toLowerCase().includes('ready')) {
         throw new Error(`Received unexpected response from ${magi.name}: ${response}`);
       }
       logger.info(`... ${magi.name} is loaded and ready.`);
-      
-      // Clear any memories from the readiness check
-      magi.forget();
-      logger.debug(`... ${magi.name}'s memory has been cleared after readiness check.`);
       
       return; // Success, exit the function
     } catch (error) {

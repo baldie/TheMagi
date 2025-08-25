@@ -80,7 +80,7 @@ describe('McpClientManager', () => {
       mockClient.connect.mockResolvedValue(undefined);
 
       await expect(mcpClientManager.initialize()).resolves.not.toThrow();
-      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers (Balthazar + Melchior)
+      expect(mockClient.connect).toHaveBeenCalledTimes(3); // Updated to reflect three servers (Balthazar + Melchior + Caspar)
     });
 
     it('should not initialize twice', async () => {
@@ -89,14 +89,14 @@ describe('McpClientManager', () => {
       await mcpClientManager.initialize();
       await mcpClientManager.initialize(); // Second call
 
-      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers (Balthazar + Melchior)
+      expect(mockClient.connect).toHaveBeenCalledTimes(3); // Updated to reflect three servers (Balthazar + Melchior + Caspar)
     });
 
     it('should handle connection failures gracefully', async () => {
       mockClient.connect.mockRejectedValue(new Error('Connection failed'));
 
       await expect(mcpClientManager.initialize()).resolves.not.toThrow();
-      expect(mockClient.connect).toHaveBeenCalledTimes(2); // Updated to reflect two servers (Balthazar + Melchior)
+      expect(mockClient.connect).toHaveBeenCalledTimes(3); // Updated to reflect three servers (Balthazar + Melchior + Caspar)
     });
 
     it('should configure Client with correct parameters', async () => {
@@ -176,16 +176,15 @@ describe('McpClientManager', () => {
       });
     });
 
-    it('should return only default agentic tools for Magi without MCP client', async () => {
+    it('should return all assigned tools for Caspar including smart-home-devices', async () => {
       const tools = await mcpClientManager.getMCPToolInfoForMagi(MagiName.Caspar);
       
       // Caspar should get 3 tools: smart-home-devices, communicate, process-info
-      // But since smart-home-devices requires an MCP server that's not configured in tests,
-      // only the 2 default agentic tools should be returned
-      expect(tools).toHaveLength(2);
+      // smart-home-devices comes from mocked Home Assistant server, others are default agentic tools
+      expect(tools).toHaveLength(3);
       
       const toolNames = tools.map(tool => tool.name);
-      expect(toolNames).toEqual(expect.arrayContaining(['communicate', 'process-info']));
+      expect(toolNames).toEqual(expect.arrayContaining(['smart-home-devices', 'communicate', 'process-info']));
     });
 
     it('should handle listTools errors gracefully', async () => {

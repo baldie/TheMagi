@@ -1,12 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { MagiName } from '../magi/magi2';
 import { logger } from '../logger';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
 import { getBalthazarToolAssignments, getBalthazarToolServers } from './tools/balthazar-tools';
-import { getCasparToolAssignments,getCasparTools } from './tools/caspar-tools';
-import { getMelchiorToolAssignments, getMelchiorTools } from './tools/melchior-tools';
+import { getCasparToolAssignments,getCasparToolServers } from './tools/caspar-tools';
+import { getMelchiorToolAssignments, getMelchiorToolServers } from './tools/melchior-tools';
 import { EXCLUDED_TOOL_PARAMS, MCP_TOOL_MAPPING, TOOL_REGISTRY, ToolRegistry } from './tools/tool-registry';
 
 /**
@@ -24,10 +25,15 @@ export interface McpToolInfo {
  */
 export interface McpServerConfig {
   name: string; // Unique identifier for this server
-  command: string;
+  transport: 'stdio' | 'sse'; // Transport type
+  // For stdio transport
+  command?: string;
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
+  // For SSE transport
+  url?: string;
+  headers?: Record<string, string>;
 }
 
 export class MagiTool implements McpToolInfo {
@@ -101,15 +107,15 @@ function getToolAssigmentsForAllMagi(): Record<MagiName, string[]> {
 export class McpClientManager {
   private initialized = false;
   private readonly clients = new Map<string, Client>(); // Key format: "MagiName:ServerName"
-  private readonly transports = new Map<string, StdioClientTransport>(); // Key format: "MagiName:ServerName"
+  private readonly transports = new Map<string, StdioClientTransport | SSEClientTransport>(); // Key format: "MagiName:ServerName"
   private serverConfigs?: Record<MagiName, McpServerConfig[]>;
   
   // MCP server configurations for each Magi - lazily initialized
   private getServerConfigs(): Record<MagiName, McpServerConfig[]> {
     this.serverConfigs ??= {
       [MagiName.Balthazar]: getBalthazarToolServers(),
-      [MagiName.Caspar]: getCasparTools(),
-      [MagiName.Melchior]: getMelchiorTools()
+      [MagiName.Caspar]: getCasparToolServers(),
+      [MagiName.Melchior]: getMelchiorToolServers()
     };
     return this.serverConfigs;
   }
@@ -190,41 +196,13 @@ export class McpClientManager {
     const serverKey = `${magiName}:${config.name}`;
     
     try {
-      logger.info(`Connecting to ${config.name} MCP server for ${magiName}...`);
-      logger.debug(`MCP server config:`, { 
-        name: config.name,
-        command: config.command, 
-        args: config.args, 
-        cwd: config.cwd 
-      });
+      this.logConnectionAttempt(magiName, config);
+      this.logServerCredentials(config);
       
-      // Special logging for Tavily to debug API key issues
-      if (config.name === 'tavily') {
-        const apiKey = config.env?.TAVILY_API_KEY;
-        const keyStatus = apiKey ? `Present (${apiKey.substring(0, 8)}...)` : 'Missing';
-        logger.debug(`Tavily API key status: ${keyStatus}`);
-      }
+      const transport = this.createTransport(config);
+      const client = this.createClient(magiName, config);
       
-      const transport = new StdioClientTransport({
-        command: config.command,
-        args: config.args,
-        env: config.env,
-        cwd: config.cwd
-      });
-      
-      const client = new Client(
-        {
-          name: `the-magi-${magiName.toLowerCase()}-${config.name}`,
-          version: '1.0.0'
-        },
-        {
-          capabilities: {
-            tools: {}
-          }
-        }
-      );
-      
-      logger.debug(`Attempting to connect client to transport for ${magiName}:${config.name}...`);
+      logger.debug(`Attempting to connect client to ${config.transport} transport for ${magiName}:${config.name}...`);
       await client.connect(transport);
       
       this.clients.set(serverKey, client);
@@ -232,32 +210,121 @@ export class McpClientManager {
       
       logger.info(`Successfully connected to ${config.name} MCP server for ${magiName}`);
       
-      // Test the connection by listing tools
-      try {
-        const response = await client.listTools();
-        logger.info(`${magiName}:${config.name} MCP server has ${response.tools.length} tools available`);
-        
-        // Log each tool for debugging
-        response.tools.forEach((tool: Tool) => {
-          logger.debug(`  Tool available: ${tool.name} - ${tool.description ?? 'No description'}`);
-        });
-        
-        // Special logging for Tavily to help debug the web_search mapping issue
-        if (config.name === 'tavily') {
-          const toolNames = response.tools.map((tool: Tool) => tool.name);
-          logger.info(`Tavily MCP server tools: [${toolNames.join(', ')}]`);
-        }
-      } catch (toolError) {
-        logger.warn(`${magiName}:${config.name} MCP server connected but failed to list tools:`, toolError);
-      }
+      await this.testConnection(magiName, config, client);
       
     } catch (error) {
-      logger.error(`Failed to connect to ${config.name} MCP server for ${magiName}:`, error);
-      // Log more details about the error
-      if (error instanceof Error) {
-        logger.error(`Error details: ${error.message}`);
-        logger.error(`Error stack: ${error.stack}`);
+      this.handleConnectionError(magiName, config, error);
+    }
+  }
+
+  private logConnectionAttempt(magiName: MagiName, config: McpServerConfig): void {
+    logger.info(`Connecting to ${config.name} MCP server for ${magiName} via ${config.transport}...`);
+    logger.debug(`MCP server config:`, { 
+      name: config.name,
+      transport: config.transport,
+      ...(config.transport === 'stdio' ? {
+        command: config.command, 
+        args: config.args, 
+        cwd: config.cwd 
+      } : {
+        url: config.url,
+        headers: config.headers
+      })
+    });
+  }
+
+  private logServerCredentials(config: McpServerConfig): void {
+    if (config.name === 'tavily') {
+      const apiKey = config.env?.TAVILY_API_KEY;
+      const keyStatus = apiKey ? `Present (${apiKey.substring(0, 8)}...)` : 'Missing';
+      logger.debug(`Tavily API key status: ${keyStatus}`);
+    } else if (config.name === 'home-assistant') {
+      const token = config.headers?.Authorization;
+      const tokenStatus = token ? `Present (Bearer ${token.split(' ')[1]?.substring(0, 20)}...)` : 'Missing';
+      logger.debug(`Home Assistant token status: ${tokenStatus}`);
+    }
+  }
+
+  private createTransport(config: McpServerConfig): StdioClientTransport | SSEClientTransport {
+    if (config.transport === 'sse') {
+      if (!config.url) {
+        throw new Error(`SSE transport requires a URL for server ${config.name}`);
       }
+      return new SSEClientTransport(new URL(config.url), {
+        requestInit: {
+          headers: config.headers || {}
+        }
+      });
+    } else {
+      if (!config.command) {
+        throw new Error(`Stdio transport requires a command for server ${config.name}`);
+      }
+      return new StdioClientTransport({
+        command: config.command,
+        args: config.args,
+        env: config.env,
+        cwd: config.cwd
+      });
+    }
+  }
+
+  private createClient(magiName: MagiName, config: McpServerConfig): Client {
+    return new Client(
+      {
+        name: `the-magi-${magiName.toLowerCase()}-${config.name}`,
+        version: '1.0.0'
+      },
+      {
+        capabilities: {
+          tools: {}
+        }
+      }
+    );
+  }
+
+  private async testConnection(magiName: MagiName, config: McpServerConfig, client: Client): Promise<void> {
+    try {
+      const response = await client.listTools();
+      logger.info(`${magiName}:${config.name} MCP server has ${response.tools.length} tools available`);
+      
+      response.tools.forEach((tool: Tool) => {
+        logger.debug(`  Tool available: ${tool.name} - ${tool.description ?? 'No description'}`);
+      });
+      
+      this.logServerSpecificTools(config, response.tools);
+    } catch (toolError) {
+      logger.warn(`${magiName}:${config.name} MCP server connected but failed to list tools:`, toolError);
+    }
+  }
+
+  private logServerSpecificTools(config: McpServerConfig, tools: Tool[]): void {
+    const toolNames = tools.map((tool: Tool) => tool.name);
+    if (config.name === 'tavily') {
+      logger.info(`Tavily MCP server tools: [${toolNames.join(', ')}]`);
+    } else if (config.name === 'home-assistant') {
+      logger.info(`Home Assistant MCP server tools: [${toolNames.join(', ')}]`);
+    }
+  }
+
+  private handleConnectionError(magiName: MagiName, config: McpServerConfig, error: unknown): void {
+    logger.error(`Failed to connect to ${config.name} MCP server for ${magiName}:`, error);
+    
+    if (config.name === 'home-assistant') {
+      this.logHomeAssistantTokenStatus(config);
+    }
+    
+    if (error instanceof Error) {
+      logger.error(`Error details: ${error.message}`);
+      logger.error(`Error stack: ${error.stack}`);
+    }
+  }
+
+  private logHomeAssistantTokenStatus(config: McpServerConfig): void {
+    const token = config.headers?.Authorization;
+    if (!token || token === 'Bearer ' || token === 'Bearer undefined') {
+      logger.error('❌ CASPAR_ACCESS_TOKEN is missing or empty - this is likely the cause');
+    } else {
+      logger.error(`✓ CASPAR_ACCESS_TOKEN is present (Bearer ${token.split(' ')[1]?.substring(0, 20)}...)`);
     }
   }
 
@@ -297,11 +364,25 @@ export class McpClientManager {
         
         const tools = response.tools
         .filter((tool: Tool) => {
+          // Special handling for Home Assistant server - all tools map to 'smart-home-devices'
+          if (config.name === 'home-assistant' && myTools.includes('smart-home-devices')) {
+            return true;
+          }
+          
           // Check if this MCP tool has a friendly name that's assigned to this Magi
           const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
           return myTools.includes(friendlyName);
         })
         .map((tool: Tool) => {
+          // Special handling for Home Assistant server - all tools become 'smart-home-devices'
+          if (config.name === 'home-assistant') {
+            return new MagiTool({
+              name: 'smart-home-devices',
+              description: 'Query and control smart home devices through Home Assistant',
+              inputSchema: tool.inputSchema,
+            });
+          }
+          
           // Use the friendly name instead of the MCP name
           const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
           return new MagiTool({
@@ -310,7 +391,20 @@ export class McpClientManager {
             inputSchema: tool.inputSchema,
           });
         });
-        allTools.push(...tools);
+        
+        // For Home Assistant, deduplicate tools since they all map to 'smart-home-devices'
+        if (config.name === 'home-assistant' && tools.length > 0) {
+          // Use our defined schema from the tool registry instead of HA's schema
+          const toolDef = TOOL_REGISTRY['smart-home-devices'];
+          const smartHomeTool = new MagiTool({
+            name: 'smart-home-devices',
+            description: toolDef?.description || 'Query and control smart home devices through Home Assistant',
+            inputSchema: toolDef ? this.createInputSchemaForDefaultTool(toolDef) : undefined,
+          });
+          allTools.push(smartHomeTool);
+        } else {
+          allTools.push(...tools);
+        }
       } catch (error) {
         logger.error(`Failed to list tools for ${magiName}:${config.name}:`, error);
       }
@@ -379,12 +473,35 @@ export class McpClientManager {
       throw new Error('MCP client manager not initialized');
     }
 
-    // Find which server provides this tool
     const serverConfigs = this.getServerConfigs();
     const configs = serverConfigs[magiName] || [];
-    
     logger.debug(`Checking ${configs.length} MCP servers for ${magiName}`);
     
+    // Try to execute the tool on available MCP servers
+    const mcpResult = await this.tryExecuteOnMcpServers(magiName, toolName, toolArguments, configs);
+    if (mcpResult) {
+      return mcpResult;
+    }
+
+    // Check if this is a default agentic tool
+    const toolDef = TOOL_REGISTRY[toolName];
+    if (toolDef?.category === 'default_agentic_tool') {
+      logger.debug(`Executing default agentic tool ${toolName} for ${magiName}`);
+      return this.executeDefaultAgenticTool(toolName, toolArguments) as GetToolResponse<T>;
+    }
+
+    // Tool not found in any server
+    const mcpToolName = MCP_TOOL_MAPPING[toolName] || toolName;
+    logger.warn(`Tool ${toolName} (mapped to ${mcpToolName}) not found in any MCP server for ${magiName}`);
+    return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;
+  }
+
+  private async tryExecuteOnMcpServers<T extends string>(
+    magiName: MagiName,
+    toolName: T,
+    toolArguments: Record<string, any>,
+    configs: McpServerConfig[]
+  ): Promise<GetToolResponse<T> | null> {
     for (const config of configs) {
       const serverKey = `${magiName}:${config.name}`;
       const client = this.clients.get(serverKey);
@@ -394,51 +511,198 @@ export class McpClientManager {
       }
 
       try {
-        // Check if this server provides the requested tool
         const response = await client.listTools();
         const availableTools = response.tools.map((tool: Tool) => tool.name);
         logger.debug(`${config.name} server has tools: [${availableTools.join(', ')}], looking for: ${toolName}`);
         
-        // Create mapping from friendly names to MCP tool names for server lookup
-        const friendlyToMcpMap: Record<string, string> = { ...MCP_TOOL_MAPPING };
-        // Add direct mappings for tools that don't need name conversion
-        friendlyToMcpMap['access-data'] = 'access-data';
+        // Try home assistant tool execution
+        const homeAssistantResult = await this.tryHomeAssistantExecution(
+          magiName, toolName, toolArguments, config, client, availableTools
+        );
+        if (homeAssistantResult) {
+          return homeAssistantResult as GetToolResponse<T>;
+        }
         
-        // Map friendly tool name to MCP tool name for lookup
-        const mcpToolName = friendlyToMcpMap[toolName] || toolName;
-        const hasTool = response.tools.some((tool: Tool) => tool.name === mcpToolName);
-        
-        if (hasTool) {
-          logger.debug(`Executing tool ${toolName} (mapped to ${mcpToolName}) for ${magiName} via ${config.name} server`);
-          
-          const result = await client.callTool({ name: mcpToolName, arguments: toolArguments });
-          
-          logger.debug(`Tool ${toolName} completed for ${magiName} via ${config.name} server`);
-          
-          return this.transformMcpResultToTypedResponse(toolName, result) as GetToolResponse<T>;
+        // Try regular MCP tool execution
+        const regularResult = await this.tryRegularMcpExecution(
+          magiName, toolName, toolArguments, config, client, response.tools
+        );
+        if (regularResult) {
+          return regularResult as GetToolResponse<T>;
         }
       } catch (error) {
-        logger.error(`Failed to check tools or execute ${toolName} on ${config.name} server for ${magiName}:`);
-        logger.error(`Error details: ${error}`);
-        if (error instanceof Error) {
-          logger.error(`Error message: ${error.message}`, error.message);
-        }
+        this.logToolExecutionError(toolName, config.name, magiName, error);
         continue;
       }
     }
-
-    // Check if this is a DEFAULT_AGENTIC_TOOL that doesn't require an MCP server
-    const toolDef = TOOL_REGISTRY[toolName];
-    if (toolDef?.category === 'default_agentic_tool') {
-      logger.debug(`Executing default agentic tool ${toolName} for ${magiName}`);
-      return this.executeDefaultAgenticTool(toolName, toolArguments) as GetToolResponse<T>;
-    }
-
-    // Create mapping for error logging
-    const mcpToolName = MCP_TOOL_MAPPING[toolName] || toolName;
     
-    logger.warn(`Tool ${toolName} (mapped to ${mcpToolName}) not found in any MCP server for ${magiName}`);
-    return this.createErrorResponse(`Tool '${toolName}' not found in any connected MCP server for ${magiName}`) as GetToolResponse<T>;
+    return null;
+  }
+
+  private async tryHomeAssistantExecution(
+    magiName: MagiName,
+    toolName: string,
+    toolArguments: Record<string, any>,
+    config: McpServerConfig,
+    client: Client,
+    availableTools: string[]
+  ): Promise<GetToolResponse<string> | null> {
+    if ((toolName === 'smart-home-devices' || toolName === 'home-assistant') && config.name === 'home-assistant') {
+      logger.debug(`🏠 Processing smart-home-devices call with arguments:`, toolArguments);
+      
+      const homeAssistantTool = this.selectHomeAssistantTool(toolArguments, availableTools);
+      if (homeAssistantTool) {
+        const transformedArgs = this.transformArgumentsForHomeAssistant(toolArguments);
+        
+        logger.debug(`🔄 Routing to Home Assistant tool: ${homeAssistantTool}`);
+        logger.debug(`📤 Calling ${homeAssistantTool} with args:`, transformedArgs);
+        
+        const result = await client.callTool({ 
+          name: homeAssistantTool, 
+          arguments: transformedArgs
+        });
+        
+        logger.debug(`✅ Smart-home-devices (${homeAssistantTool}) completed for ${magiName}`);
+        return this.transformMcpResultToTypedResponse(toolName, result);
+      } else {
+        logger.error(`❌ No suitable Home Assistant tool found for smart-home-devices call`);
+        logger.error(`Available tools: [${availableTools.join(', ')}]`);
+        return this.createErrorResponse(`No suitable Home Assistant tool found for action: ${toolArguments.action}`);
+      }
+    }
+    
+    return null;
+  }
+
+  private async tryRegularMcpExecution(
+    magiName: MagiName,
+    toolName: string,
+    toolArguments: Record<string, any>,
+    config: McpServerConfig,
+    client: Client,
+    tools: Tool[]
+  ): Promise<GetToolResponse<string> | null> {
+    const friendlyToMcpMap: Record<string, string> = { ...MCP_TOOL_MAPPING };
+    friendlyToMcpMap['access-data'] = 'access-data';
+    
+    const mcpToolName = friendlyToMcpMap[toolName] || toolName;
+    const hasTool = tools.some((tool: Tool) => tool.name === mcpToolName);
+    
+    if (hasTool) {
+      logger.debug(`Executing tool ${toolName} (mapped to ${mcpToolName}) for ${magiName} via ${config.name} server`);
+      
+      const result = await client.callTool({ name: mcpToolName, arguments: toolArguments });
+      
+      logger.debug(`Tool ${toolName} completed for ${magiName} via ${config.name} server`);
+      
+      return this.transformMcpResultToTypedResponse(toolName, result);
+    }
+    
+    return null;
+  }
+
+  private logToolExecutionError(toolName: string, serverName: string, magiName: MagiName, error: unknown): void {
+    logger.error(`Failed to check tools or execute ${toolName} on ${serverName} server for ${magiName}:`);
+    logger.error(`Error details: ${error}`);
+    if (error instanceof Error) {
+      logger.error(`Error message: ${error.message}`);
+    }
+  }
+
+  /**
+   * Select the appropriate Home Assistant tool based on the action and arguments
+   */
+  private selectHomeAssistantTool(toolArguments: Record<string, any>, availableTools: string[]): string | null {
+    const { action, command } = toolArguments;
+    
+    logger.debug(`Selecting Home Assistant tool for action: ${action}, command: ${command}`);
+    logger.debug(`Available Home Assistant tools: [${availableTools.join(', ')}]`);
+    
+    // Priority 1: Map specific commands to tools
+    if (command) {
+      switch (command) {
+        case 'turn_on':
+          return availableTools.find(tool => tool === 'HassTurnOn') || null;
+        case 'turn_off':
+          return availableTools.find(tool => tool === 'HassTurnOff') || null;
+        case 'toggle':
+          // Look for specific toggle tool, fallback to turn_on
+          return availableTools.find(tool => tool.includes('Toggle')) || 
+                 availableTools.find(tool => tool === 'HassTurnOn') || null;
+        case 'set_speed':
+        case 'set_brightness':
+          // These might use general control tools
+          return availableTools.find(tool => tool === 'HassTurnOn') || null;
+      }
+    }
+    
+    // Priority 2: Map actions to tools
+    if (action) {
+      switch (action) {
+        case 'control':
+          // Default control action - use turn_on if no specific command
+          return availableTools.find(tool => tool === 'HassTurnOn') || null;
+        case 'get_state':
+        case 'query':
+        case 'list_devices':
+          return availableTools.find(tool => tool === 'GetLiveContext') || null;
+      }
+    }
+    
+    // Priority 3: Fallback based on available tools
+    // If we have GetLiveContext, it's probably a query operation
+    if (availableTools.includes('GetLiveContext')) {
+      logger.debug('Defaulting to GetLiveContext for unknown action');
+      return 'GetLiveContext';
+    }
+    
+    // Last resort: use first available tool
+    logger.debug(`No specific tool found, using first available: ${availableTools[0]}`);
+    return availableTools[0] || null;
+  }
+  
+  /**
+   * Transform smart-home-devices arguments to Home Assistant tool arguments
+   */
+  private transformArgumentsForHomeAssistant(toolArguments: Record<string, any>): Record<string, any> {
+    const transformed: Record<string, any> = {};
+    const { action, entity_id, device_type, command, attributes } = toolArguments;
+    
+    // For all tools, entity_id maps to name
+    if (entity_id) {
+      transformed.name = entity_id;
+    }
+    
+    // For state/query operations (GetLiveContext)
+    if (action === 'get_state' || action === 'query' || action === 'list_devices') {
+      if (device_type) {
+        transformed.domain = [device_type];
+      }
+      // If no entity_id provided for list_devices, remove name to get all devices of type
+      if (action === 'list_devices' && !entity_id) {
+        delete transformed.name;
+      }
+    }
+    
+    // For control operations (HassTurnOn, HassTurnOff, etc.)
+    if (action === 'control' || command) {
+      // Pass through additional attributes for control commands
+      if (attributes && typeof attributes === 'object') {
+        Object.assign(transformed, attributes);
+      }
+      
+      // Some Home Assistant tools might need additional domain info
+      if (device_type) {
+        transformed.domain = device_type;
+      }
+    }
+    
+    logger.debug(`Transformed smart-home-devices args: ${JSON.stringify({ 
+      original: toolArguments, 
+      transformed 
+    })}`);
+    
+    return transformed;
   }
 
   /**

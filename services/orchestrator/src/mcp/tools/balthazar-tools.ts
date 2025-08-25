@@ -24,11 +24,14 @@ export function getBalthazarToolAssignments(): string[] {
 export function getBalthazarToolServers(): McpServerConfig[] {
   return ToolRegistry.getServersForMagi(MagiName.Balthazar).map(server => ({
     name: server.name,
+    transport: server.transport,
     command: server.command,
     args: server.args,
-    env: {
+    env: server.env ? {
       ...process.env,
       ...server.env
-    } as Record<string, string>
+    } as Record<string, string> : undefined,
+    url: server.url,
+    headers: server.headers
   }));
 }

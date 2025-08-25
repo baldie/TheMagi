@@ -1,3 +1,4 @@
+import { logger } from '../../logger';
 import { MagiName } from '../../types/magi-types';
 import { getBalthazarToolAssignments } from './balthazar-tools';
 import { getCasparToolAssignments } from './caspar-tools';
@@ -21,7 +22,8 @@ export const MCP_TOOL_MAPPING: Record<string, string> = {
   'store-info': 'access-data',
   'store-data': 'access-data',
   'remember-data': 'access-data',
-  'retrieve-data': 'access-data'
+  'retrieve-data': 'access-data',
+  'smart-home-devices': 'home-assistant',
 };
 
 /**
@@ -68,12 +70,18 @@ export interface ToolDefinition {
 export interface ToolServerConfig {
   /** Server identifier */
   name: string;
-  /** Command to run the server */
-  command: string;
-  /** Command arguments */
-  args: string[];
-  /** Environment variables */
-  env: Record<string, string>;
+  /** Transport type */
+  transport: 'stdio' | 'sse';
+  /** Command to run the server (stdio only) */
+  command?: string;
+  /** Command arguments (stdio only) */
+  args?: string[];
+  /** Environment variables (stdio only) */
+  env?: Record<string, string>;
+  /** Server URL (SSE only) */
+  url?: string;
+  /** HTTP headers (SSE only) */
+  headers?: Record<string, string>;
   /** Tools this server provides */
   provides: string[];
 }
@@ -154,18 +162,41 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
   'smart-home-devices': {
     name: 'smart-home-devices', 
-    description: 'Query and control smart home devices',
+    description: 'Query and control smart home devices through Home Assistant.',
     category: ToolCategory.SMART_HOME,
-    defaults: {},
+    defaults: {
+      action: 'query'
+    },
     responseType: 'SmartHomeResponse',
     parameters: {
-      device_types: {
-        type: 'array',
-        description: 'Array of device types to query'
-      },
-      query_purpose: {
+      action: {
         type: 'string',
-        description: 'Purpose of the query for context'
+        description: 'Action to perform on smart home devices',
+        enum: ['query', 'control', 'list_devices', 'get_state'],
+        required: true,
+        default: 'query'
+      },
+      device_type: {
+        type: 'string',
+        description: 'Type of device to interact with (e.g., "fan", "light", "switch")',
+        enum: ['fan', 'light', 'switch', 'sensor'],
+        required: false
+      },
+      entity_id: {
+        type: 'string',
+        description: 'Specific Home Assistant entity ID (e.g., "zhimi.fan.za5")',
+        required: false
+      },
+      command: {
+        type: 'string',
+        description: 'Command to send to the device (e.g., "turn_on", "turn_off", "set_speed")',
+        enum: ['turn_on', 'turn_off', 'toggle', 'set_speed', 'set_brightness'],
+        required: false
+      },
+      attributes: {
+        type: 'object',
+        description: 'Additional attributes for the command (e.g., {"speed": "high"})',
+        required: false
       }
     },
   },
@@ -254,9 +285,19 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
  * Note: Environment variables are resolved at runtime to ensure proper loading
  */
 export function getToolServers(): Record<string, ToolServerConfig> {
+  // Validate Home Assistant access token
+  const casparAccessToken = process.env.CASPAR_ACCESS_TOKEN;
+  if (!casparAccessToken || casparAccessToken.trim() === '') {
+    logger.error('CASPAR_ACCESS_TOKEN environment variable is not set or empty');
+    logger.error('This will prevent Caspar from accessing Home Assistant smart home devices');
+    logger.error('Please set CASPAR_ACCESS_TOKEN to a valid Home Assistant Long-Lived Access Token');
+    logger.error('You can create one in Home Assistant: Profile > Long-Lived Access Tokens > CREATE TOKEN');
+  }
+
   return {
     'tavily': {
       name: 'tavily',
+      transport: 'stdio',
       command: 'npx',
       args: ['-y', 'tavily-mcp@latest'],
       env: {
@@ -266,10 +307,21 @@ export function getToolServers(): Record<string, ToolServerConfig> {
     },
     'access-data': {
       name: 'access-data',
+      transport: 'stdio',
       command: 'ts-node',
       args: [path.join(__dirname, '..', 'servers', 'personal-data-server.ts')],
       env: {},
       provides: ['access-data']
+    },
+    'home-assistant': {
+      name: 'home-assistant',
+      transport: 'sse',
+      // eslint-disable-next-line
+      url: 'http://homeassistant.local:8123/mcp_server/sse',
+      headers: {
+        'Authorization': `Bearer ${casparAccessToken ?? ''}`
+      },
+      provides: ['home-assistant']
     }
   };
 }
@@ -294,6 +346,9 @@ export class ToolRegistry {
    * Map friendly tool names back to MCP tool names for server lookup
    */
   private static mapToMcpToolName(friendlyName: string): string {
+    if (!MCP_TOOL_MAPPING[friendlyName]){
+      logger.warn(`No MCP mapping found for tool: ${friendlyName}`);
+    }
     return MCP_TOOL_MAPPING[friendlyName] || friendlyName;
   }
 
@@ -385,28 +440,26 @@ export class ToolRegistry {
     const errors: string[] = [];
     const validated = { ...parameters };
 
-    // First pass: Apply defaults for missing parameters
     for (const [paramName, paramDef] of Object.entries(definition.parameters)) {
+      // Apply default if parameter is missing
       if (validated[paramName] === undefined && paramDef.default !== undefined) {
         validated[paramName] = paramDef.default;
       }
-    }
-    
-    // Second pass: Check required parameters and validate types
-    for (const [paramName, paramDef] of Object.entries(definition.parameters)) {
-      if (paramDef.required && (validated[paramName] === undefined || validated[paramName] === null)) {
+
+      const value = validated[paramName];
+
+      // Check required parameters
+      if (paramDef.required && (value === undefined || value === null)) {
         errors.push(`Missing required parameter: ${paramName}`);
+        continue;
       }
 
-      // Type validation
-      if (validated[paramName] === undefined)
-        continue;
-      
-      const value = validated[paramName];
-      const expectedType = paramDef.type;
+      // Skip further validation for undefined values
+      if (value === undefined) continue;
 
-      if (!this.isValidType(value, expectedType)) {
-        errors.push(`Parameter '${paramName}' expected ${expectedType}, got ${typeof value}`);
+      // Type validation
+      if (!this.isValidType(value, paramDef.type)) {
+        errors.push(`Parameter '${paramName}' expected ${paramDef.type}, got ${typeof value}`);
       }
 
       // Enum validation

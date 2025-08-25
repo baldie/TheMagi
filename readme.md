@@ -49,7 +49,21 @@ The Magi uses Tavily for web search functionality. To enable this feature:
      ```
    - Save the file
 
-The `.env` file is automatically excluded from version control to keep your API key secure.
+The Magi uses Home Assistant to control smart home devices. To enable this feature:
+
+1. **Get a long lived access token:**
+   - Visit [https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token](https://developers.home-assistant.io/docs/auth_api/#long-lived-access-token)
+   - Install a local VM and ensure it runs on http://homeassistant.local:8123
+
+2. **Configure the API Key:**
+   - Edit `.env` and add your Tavily API key:
+     ```
+     CASPAR_ACCESS_TOKEN=long-lived-homeassistant-token-here
+     ```
+   - Save the file
+
+
+The `.env` file is automatically excluded from version control to keep keys secure.
 
 ## Installation and Running
 

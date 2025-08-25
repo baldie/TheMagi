@@ -55,7 +55,7 @@ Communication between participants take place on via a message broker system bac
 
 - There are Github actions configured to run tests on all pushes
 - All tests can be run by running the `run-all-tests.sh` script
-- When modifying tests, skip the unit tests by running `./run-all-tests -skip-integration`
+- When fixing tests, always skip the integration tests by using the flag `skip-integration`, it should look like this: `./run-all-tests.sh -skip-integration`
 
 ## Coding guidance
 1. First think through the problem, read the codebase for relevant files, and write a plan to tasks/todo.md.
