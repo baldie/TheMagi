@@ -281,6 +281,23 @@ if [ $? -ne 0 ]; then
 fi
 popd > /dev/null
 echo "    [OK] Conduit dependencies installed and built."
+
+echo "  - Installing Message Queue dependencies..."
+pushd services/message-queue > /dev/null
+npm install
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to install Message Queue dependencies. Check logs for details."
+    popd > /dev/null
+    exit 1
+fi
+npm run build
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Failed to build Message Queue service. Check logs for details."
+    popd > /dev/null
+    exit 1
+fi
+popd > /dev/null
+echo "    [OK] Message Queue dependencies installed and built."
 echo "[Magi Installer] All Node.js dependencies installed successfully."
 echo
 
@@ -680,6 +697,15 @@ if [ $? -eq 0 ]; then
     echo "    [OK] Conduit builds successfully."
 else
     echo "[WARNING] Conduit build failed. Check TypeScript errors."
+fi
+popd > /dev/null
+
+pushd services/message-queue > /dev/null
+npm run build > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "    [OK] Message Queue builds successfully."
+else
+    echo "[WARNING] Message Queue build failed. Check TypeScript errors."
 fi
 popd > /dev/null
 
