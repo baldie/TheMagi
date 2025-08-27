@@ -123,7 +123,7 @@ export const determineNextTacticalGoal = fromPromise<string, DetermineNextTactic
   const noContextYet = workingMemory === message;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
-  const systemPrompt = `You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
+  const systemPrompt = `Your name is ${magiName}. You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
 
   const userPrompt = `Their Strategic Goal:\n${strategicGoal}\n
 Context:\n${workingMemory.trim()}\n
@@ -154,7 +154,7 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
-  const systemPrompt = `Persona:\nYou are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data.`;
+  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data.`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
@@ -305,7 +305,7 @@ export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ in
       try {
         // General processing for other tools
         const defaultSystemPrompt = `You are an output processor. Clean and organize tool output to be clear and actionable.`;
-        const defaultUserPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nProcess this output to be clear, concise, and directly relevant to the sub-goal. Remove unnecessary details but preserve important information.`;
+        const defaultUserPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nProcess this output to be clear, concise, and directly relevant to the sub-goal. Remove unnecessary details but preserve important information as it relates to the sub-goal.`;
 
         const { model } = PERSONAS_CONFIG[magiName];
         processedOutput = await conduitClient.contact(defaultUserPrompt, defaultSystemPrompt, model, { temperature: 0.1 });

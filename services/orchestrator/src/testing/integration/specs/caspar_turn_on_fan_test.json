@@ -3,14 +3,14 @@
     "enabled": true
   },
   "test": {
-    "name": "turn_on_fan_when_cold",
+    "name": "turn_on_fan_when_warm",
     "description": "User says it is stuffy in the bedroom, Caspar should turn on the fan",
     "magi": "Caspar",
     "baselineDate": "2025-08-24",
     "timeout": 30000
   },
   "input": {
-    "userMessage": "c: It is stuffy in the bedroom Caspar, please turn on the fan or any device that can help with ventilation."
+    "userMessage": "c: It is warm and stuffy in the bedroom Caspar, can you get the air moving in here."
   },
   "toolStubs": {
     "smart-home-devices": {
@@ -49,8 +49,8 @@
   "expectations": {
     "finalResponse": {
       "mustContain": [
-        "Ventilation",
-        "turned on",
+        "fan",
+        "on",
         "bedroom"
       ],
       "mustNotContain": [

@@ -432,8 +432,12 @@ describe('Integration (single Magi) specs', () => {
             if (msg.type === 'deliberation-complete') {
               console.log('[integration] Received deliberation-complete, resolving...');
               clearTimeout(inactivityTimer);
-              resolve({ response: msg.data.response, meta: msg.data.testMeta });
-              ws.close();
+              
+              // In test mode, delay closing the WebSocket to allow TTS processing to complete
+              setTimeout(() => {
+                resolve({ response: msg.data.response, meta: msg.data.testMeta });
+                ws.close();
+              }, 3000); // 3 second delay to allow TTS message processing
             } else if (msg.type === 'deliberation-error') {
               console.log('[integration] Received deliberation-error, rejecting...');
               clearTimeout(inactivityTimer);

@@ -3,6 +3,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { MagiName } from '../magi/magi2';
 import { logger } from '../logger';
+import { testHooks } from '../testing/test-hooks';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { GetToolResponse, WebSearchResponse, WebExtractResponse } from './tool-response-types';
 import { getBalthazarToolAssignments, getBalthazarToolServers } from './tools/balthazar-tools';
@@ -346,7 +347,22 @@ export class McpClientManager {
       const client = this.clients.get(serverKey);
       
       if (!client) {
-        logger.warn(`No MCP client available for ${magiName}:${config.name}`);
+        // In test mode, provide smart-home-devices tool for Caspar even if MCP server isn't connected
+        if (testHooks.isEnabled() && config.name === 'home-assistant' && magiName === MagiName.Caspar) {
+          const myTools = getToolAssigmentsForAllMagi()[magiName];
+          if (myTools.includes('smart-home-devices')) {
+            logger.debug(`Test mode: Adding smart-home-devices tool for ${magiName} without MCP connection`);
+            const toolDef = TOOL_REGISTRY['smart-home-devices'];
+            const smartHomeTool = new MagiTool({
+              name: 'smart-home-devices',
+              description: toolDef?.description || 'Query and control smart home devices through Home Assistant',
+              inputSchema: toolDef ? this.createInputSchemaForDefaultTool(toolDef) : undefined,
+            });
+            allTools.push(smartHomeTool);
+          }
+        } else {
+          logger.warn(`No MCP client available for ${magiName}:${config.name}`);
+        }
         continue;
       }
 

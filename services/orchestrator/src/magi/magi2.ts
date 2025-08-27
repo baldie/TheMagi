@@ -144,15 +144,15 @@ message: "My favorite color is blue."
     strategicPersonaInstructions: ``,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Turn off the lights in the living room."
-{"plan": ["Search smart home devices for light controls", "Send command to turn off living room lights", "Respond with confirmation that lights are off"]}
+{"plan": ["Search smart home devices for light controls in living room", "Send command to turn off living room lights if found", "Respond with confirmation of task success or failure"]}
 
 EXAMPLE 4:
-message: "Where is Lucky?"
-{"plan": ["Search memory for image of Lucky", "Search smart home devices for webcams", "Check each webcam for Lucky and if found note location", "Respond to user with Lucky's location if found, otherwise inform user that Lucky could not be located"]}
+message: "Are my car windows down?"
+{"plan": ["Search smart home devices for webcams", "Check each webcam for images of cars", "If cars found, respond with window status otherwise respond that no cars were found"]}
 
 EXAMPLE 5:
 message: "Play my favorite playlist"
-{"plan": ["Search smart home devices for smart speakers", "Confirm device is available and powered on", "Send command to play favorite songs playlist", "Respond with confirmation that playlist is playing"]}`,
+{"plan": ["Search smart home devices for smart speakers", "Send command to play favorite songs playlist", "Respond with confirmation that playlist is playing"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Caspar`,
     options: { temperature: 0.5 },
   },
