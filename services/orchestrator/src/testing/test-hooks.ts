@@ -10,7 +10,7 @@ export const testHooks = {
     return process.env.MAGI_TEST_MODE === 'true';
   },
 
-  initialize(): Promise<void> {
+  async initialize(): Promise<void> {
     if (!this.isEnabled()) return Promise.resolve();
     return TestRecorder.initialize();
   },

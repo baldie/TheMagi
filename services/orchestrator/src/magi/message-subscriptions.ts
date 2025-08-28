@@ -42,7 +42,8 @@ export class MessageSubscriptionManager {
       const personalSubscription = messageQueue.subscribe(magi.name, async (message) => {
         logger.debug(`${magi.name} received message from ${message.sender}: ${message.content}`);
         
-        // Use contactAsAgent which now returns void and handles publishing internally
+        // Use contactAsAgent which handles the full agent flow
+        // The agent will use communicate tool to respond if needed
         await magi.contactAsAgent(message.content, message.sender);
         
         // Acknowledge the message as processed

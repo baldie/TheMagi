@@ -154,7 +154,7 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
   
   logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
   
-  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data.`;
+  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
@@ -285,7 +285,7 @@ export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ in
     case 'access-data': {
         // Summarize the data we stored or retrieved in human readable form
         logger.debug(`Raw access-data: ${toolOutput}`);
-        const summarize = `In an attempt to ${currentSubGoal}, you have just ${tool.parameters.action} data, which resulted in:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language.  When referring to ${magiName}, speak in the first person and only provide the summary (no preamble).`;
+        const summarize = `In an attempt to ${currentSubGoal.toLowerCase()}, you have just ${tool.parameters.action}d data, which resulted in:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language.  When referring to ${magiName}, speak in the first person and only provide the summary (no preamble).`;
         logger.debug(`Summary prompt:\n${summarize}`);
         processedOutput = await conduitClient.contact(
           summarize,

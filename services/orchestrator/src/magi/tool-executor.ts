@@ -1,7 +1,7 @@
 import { logger } from '../logger';
 import type { ToolUser } from './tool-user';
 import type { MagiName } from '../types/magi-types';
-import { MessageParticipant } from '../types/magi-types';
+import type { MessageParticipant } from '../types/magi-types';
 import type { AgenticTool } from './magi2';
 import type { ToolExecutionResult } from './types';
 import { testHooks } from '../testing/test-hooks';
@@ -77,6 +77,11 @@ export class ToolExecutor {
       const recipient = recipientParam as MessageParticipant;
       
       try { testHooks.recordToolCall('communicate', { message: messageText, recipient: recipient }); } catch { /* no-op in non-test mode */ }
+      
+      // Record TTS invocation for User messages in test mode
+      if (recipient === 'User') {
+        try { testHooks.recordTtsInvocation(messageText, this.magiName); } catch { /* no-op in non-test mode */ }
+      }
       
       // Publish the message to the specified recipient's message queue
       try {

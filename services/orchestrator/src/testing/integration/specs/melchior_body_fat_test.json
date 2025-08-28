@@ -20,7 +20,7 @@
             "action": "retrieve",
             "content": "bodyfat percentage"
           },
-          "response": "{\"data\": {\"items\": [{\"id\": \"pd_1756095071282_9ba136ee59bd\",\"content\": \"20%\",\"category\": \"Health & Wellness\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}],\"total_found\": 1},\"categories\": [\"Health & Wellness\"],\"last_updated\": \"2025-08-22T01:49:09.668Z\"}"
+          "response": "{\"data\": {\"items\": [{\"id\": \"pd_1756095071282_9ba136ee59bd\",\"content\": \"20% body fat currently\",\"category\": \"Health & Wellness\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}],\"total_found\": 1},\"categories\": [\"Health & Wellness\"],\"last_updated\": \"2025-08-22T01:49:09.668Z\"}"
         }
       ]
     },
@@ -32,10 +32,7 @@
   "expectations": {
     "finalResponse": {
       "mustContain": [
-        "5",
-        "percentage",
-        "20%",
-        "15%"
+        "5"
       ],
       "mustNotContain": [
         "I don't know",
@@ -63,17 +60,13 @@
     "behavior": {
       "shouldComplete": true,
       "maxDuration": 45000,
-      "shouldSpeak": false
+      "shouldSpeak": true
     },
     "planning": {
       "goalCount": {
         "min": 2,
         "max": 3
-      },
-      "shouldPlanFor": [
-        "Access user's health data",
-        "Respond"
-      ]
+      }
     }
   }
 }

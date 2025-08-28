@@ -241,7 +241,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   // Default agentic tools
   'communicate': {
     name: 'communicate',
-    description: 'This tool allows you to communicate with the user or other Magi participants',
+    description: 'This tool allows you to communicate with the user or other Magi participants. Choose this if you need to respond with anything.',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: { recipient: 'User' },
     responseType: 'TextResponse',

@@ -77,7 +77,7 @@ const createMockTools = (): MagiTool[] => ([
 ]);
 
 // Helper functions to reduce nesting
-const createCompletionPromise = (actor: any, timeout: number = 8000) => {
+const createCompletionPromise = async (actor: any, timeout: number = 8000) => {
   return new Promise((resolve, reject) => {
     const subscription = actor.subscribe((state: any) => {
       if (state.status === 'done') {
@@ -94,7 +94,7 @@ const createCompletionPromise = (actor: any, timeout: number = 8000) => {
   });
 };
 
-const createSimpleCompletionPromise = (actor: any) => {
+const createSimpleCompletionPromise = async (actor: any) => {
   return new Promise((resolve) => {
     const subscription = actor.subscribe((state: any) => {
       if (state.status === 'done') {

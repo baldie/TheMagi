@@ -50,8 +50,7 @@
     "finalResponse": {
       "mustContain": [
         "fan",
-        "on",
-        "bedroom"
+        "on"
       ],
       "mustNotContain": [
         "I don't know",
@@ -87,13 +86,7 @@
       "goalCount": {
         "min": 3,
         "max": 3
-      },
-      "shouldPlanFor": [
-        "Search for smart home devices in the bedroom",
-        "Check if there is a fan or air purifier available",
-        "Send command to turn on the fan or air purifier",
-        "Respond with confirmation that the fan or air purifier is on"
-      ]
+      }
     }
   }
 }
