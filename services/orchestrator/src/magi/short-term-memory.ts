@@ -93,7 +93,7 @@ What is the primary subject of the speaker's last message? Be specific and compl
     }
   }
 
-  public async summarize(_forTopic: string | null): Promise<string> {
+  public async summarize(forTopic: string | null): Promise<string> {
     if (process.env.MAGI_TEST_MODE === 'true') {
       return '';
     }
@@ -115,7 +115,7 @@ What is the primary subject of the speaker's last message? Be specific and compl
 ${memoryText}
     
 INSTRUCTIONS:
-First, create a concise extractive summary of the conversation so far.
+First, create a concise extractive summary of the conversation so far only as it relates to ${forTopic ? `"${forTopic}"` : 'the main topics discussed'}.
 Then, from ${this.magi.name}'s perspective (using "I"), briefly describe what the speaker said and what you did and said in reply.`;
 
     try {

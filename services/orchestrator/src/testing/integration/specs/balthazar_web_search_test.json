@@ -28,16 +28,20 @@
           "response": "Michael Jeffrey Jordan (born February 17, 1963) is an American former professional basketball player and businessman. At 6 feet 6 inches (1.98 m) tall and weighing 218 pounds (99 kg), he played shooting guard and small forward. Jordan is widely considered to be the greatest basketball player of all time. He played 15 seasons in the NBA, winning six championships with the Chicago Bulls."
         }
       ]
-    },
-    "communicate": {
-      "response": "Michael Jordan is 6 feet 6 inches (1.98 meters) tall.",
-      "ignoreParameters": true
     }
   },
   "expectations": {
     "finalResponse": {
-      "mustContain": [
-        "6 feet 6 inches"
+      "mustContainAtLeastOneOf": [
+        "6 feet 6 inches",
+        "6'6\"",
+        "6ft 6in",
+        "1.98",
+        "1.98m",
+        "6-6",
+        "6 foot 6",
+        "six feet six",
+        "six six"
       ],
       "mustNotContain": [
         "I don't know",

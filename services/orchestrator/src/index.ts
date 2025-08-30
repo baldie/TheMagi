@@ -3,7 +3,7 @@ import { logger } from './logger';
 import { loadMagi } from './loading';
 import { createWebSocketServer } from './websocket';
 import { runDiagnostics, runBackgroundMcpVerification } from './diagnostics';
-import { balthazar, caspar, melchior } from './magi/magi2';
+import { allMagi, type Magi2, MagiName } from './magi/magi2';
 import { mcpClientManager } from './mcp';
 import express from 'express';
 import http from 'http';
@@ -143,23 +143,25 @@ function startHttpOrchestratorService(): void {
   });
 
   app.get('/health', (_req, res) => {
+    const caspar = allMagi[MagiName.Caspar] as Magi2 | null;
+    const melchior = allMagi[MagiName.Melchior] as Magi2 | null;
+    const balthazar = allMagi[MagiName.Balthazar] as Magi2 | null;
     res.status(200).json(
       {
         status: isInitialized ? 'available' : 'busy',
         magi: {
-          caspar: {
-            status: caspar.getStatus()
+          "caspar": {
+            status: caspar ? caspar.getStatus() : 'unavailable'
           },
-          melchior: {
-            status: melchior.getStatus()
+          "melchior": {
+            status: melchior ? melchior.getStatus() : 'unavailable'
           },
-          balthazar: {
-            status: balthazar.getStatus()
+          "balthazar": {
+            status: balthazar ? balthazar.getStatus() : 'unavailable'
           },
         }
       });
   });
-
 
   createWebSocketServer(server);
 

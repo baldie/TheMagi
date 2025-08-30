@@ -1,6 +1,6 @@
 ## Project Overview
 
-The Magi is a personal AI system featuring three distinct AI personas (Caspar, Melchior, Balthazar) that deliberate together to provide intelligent guidance to the user.
+The Magi is a personal AI system featuring three distinct AI personas (Caspar, Melchior, Balthazar) that deliberate together to provide intelligent guidance to the user. Each can be contacted individually as well.
 
 More detail on the project can be found in the [project-context.md](project-context.md) file in the root directory
 
@@ -12,6 +12,7 @@ The system follows a microservices architecture:
 2. **Conduit** (`services/conduit/`): Wrapper service around Ollama API for AI model communication
 3. **UI** (`ui/`): Angular 20 frontend that communicates via WebSocket to the orchestrator and displays status of the system visually to the user
 4. **TTS Service** (`services/tts/`): Python-based text-to-speech service
+5. **Message-Queue** (`services/message-queue`): vecra database backed message broker service to pass messages between magis & the user
 
 ### Startup process
 1. start-magi script launches the orchestrator service
@@ -30,7 +31,7 @@ Communication between participants take place on via a message broker system bac
 
 ### Communication Flow
 1. UI sends WebSocket message to Orchestrator (port 8080)
-2. Orchestrator triggers deliberation process
+2. Orchestrator triggers deliberation process if it is a message for all 3 magi
 3. Each Magi persona contacted via Conduit service
 4. Final response spoken via TTS service
 5. Response sent back to UI via WebSocket
@@ -44,7 +45,6 @@ Communication between participants take place on via a message broker system bac
 ## Development Notes
 
 - All services use TypeScript with similar tsconfig setups
-- Orchestrator uses Winston for logging
 - UI uses Angular 20 with RxJS for reactive programming
 - CORS configured to allow UI dev server (localhost:4200)
 - System initialization includes diagnostics and Magi loading phases
@@ -58,6 +58,7 @@ Communication between participants take place on via a message broker system bac
 - When fixing tests, always skip the integration tests by using the flag `skip-integration`, it should look like this: `./run-all-tests.sh -skip-integration`
 
 ## Coding guidance
+
 1. First think through the problem, read the codebase for relevant files, and write a plan to tasks/todo.md.
 2. The plan should have a list of todo items that you can check off as you complete them
 3. Then, begin working on the todo items, marking them as complete as you go.

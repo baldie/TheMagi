@@ -23,16 +23,16 @@
           "response": "{\"data\": {\"items\": [{\"id\": \"pd_1756095071282_9ba136ee59bd\",\"content\": \"20% body fat currently\",\"category\": \"Health & Wellness\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}],\"total_found\": 1},\"categories\": [\"Health & Wellness\"],\"last_updated\": \"2025-08-22T01:49:09.668Z\"}"
         }
       ]
-    },
-    "communicate": {
-      "response": "Based on your current body fat of 20% and your goal of 15%, you need to reduce your body fat by 5 percentage points to reach your target.",
-      "ignoreParameters": true
     }
   },
   "expectations": {
     "finalResponse": {
-      "mustContain": [
-        "5"
+      "mustContainAtLeastOneOf": [
+        "5",
+        "five",
+        "5%",
+        "5 percent",
+        "5 percentage points"
       ],
       "mustNotContain": [
         "I don't know",

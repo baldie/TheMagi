@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "enabled": true
+  },
+  "test": {
+    "name": "quick_snack_options",
+    "description": "User asks magi to recommend a snack. Each of them provide input into the final answer using their tools.",
+    "magi": "All",
+    "baselineDate": "2025-08-28",
+    "timeout": 30000
+  },
+  "input": {
+    "userMessage": "I want a snack, what do you recommend?"
+  },
+  "toolStubs": {
+    "search-web": {
+      "response": "Search Results:\n1. Best breakfast options\nhttp://www.bestbreakfast.com\n2. Best snack options\nhttps://www.bestsnacks.com\n3. Best dinner options\nhttps://www.bestdinner.com\n",
+      "ignoreParameters": true
+    },
+    "read-page": {
+      "responses": [
+        {
+          "when": {
+            "urls": [
+              "https://www.bestsnacks.com"
+            ]
+          },
+          "response": "Top Recommended Snacks:\n1. Shrimp Cocktail\n2. Avocado Toast\n3. Trail Mix\n\nAll Rights Reserved. Privacy Policy. Terms of Service. Contact Us."
+        }
+      ]
+    },
+    "access-data": {
+      "responses": [
+        {
+          "when": {
+            "action": "retrieve",
+            "content": "Food Preferences"
+          },
+          "response": "{\"data\": {\"items\": [{\"id\": \"pd_1756095071282_9ba136ee59ba\",\"content\": \"allergic to peanuts\",\"category\": \"Health & Wellness\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}, {\"id\": \"pd_1756095071282_9ba136ee59bd\",\"content\": \"Dislikes spicy food\",\"category\": \"Food Preferences\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}, {\"id\": \"pd_1756095071282_9ba136ee59bc\",\"content\": \"Likes shrimp\",\"category\": \"Food Preferences\",\"timestamp\": \"2025-08-25T04:11:11.301Z\",\"user_context\": \"\"}],\"total_found\": 1},\"categories\": [\"Health & Wellness\"],\"last_updated\": \"2025-08-22T01:49:09.668Z\"}"
+        }
+      ]
+    },
+    "smart-home-devices": {
+      "responses": [
+        {
+          "when": {
+            "action": "list_devices"
+          },
+          "response": "{\"success\": true, \"result\": \"Live Context: An overview of the areas and the devices in this smart home:\n- names: Pantry\n  entity_id:zhimi.pantry.za5\n  domain: storage\n  state: 'available'\n  commands: catalog\n  areas: Kitchen\n  attributes:\n    description: 'Provides information on available food'\n- names: Dishwasher\n  commands: turn_on, turn_off\n  domain: household\n  state: 'off'\n  areas: Kitchen\n\"}"
+        },
+        {
+          "when": {
+            "action": "control",
+            "device_type": "storage",
+            "entity_id": "zhimi.pantry.za5",
+            "command": "catalog"
+          },
+          "response": "The pantry currently contains the following items:\n- Avocados\n- Bread\n- Trail Mix\n- Popcorn"
+        }
+      ]
+    }
+  },
+  "expectations": {
+    "finalResponse": {
+      "mustContainAtLeastOneOf": [
+        "Avocado",
+        "Toast"
+      ],
+      "mustNotContain": [
+        "Trail Mix",
+        "Shrimp"
+      ],
+      "minLength": 10,
+      "maxLength": 500
+    },
+    "toolUsage": {
+      "mustCall": [
+        "search-web",
+        "read-page",
+        "access-data",
+        "smart-home-devices",
+        "communicate"
+      ],
+      "mustNotCall": [
+        "process-info"
+      ],
+      "maxToolCalls": 10
+    },
+    "behavior": {
+      "shouldComplete": true,
+      "maxDuration": 45000,
+      "shouldSpeak": true
+    },
+    "planning": {
+      "goalCount": {
+        "min": 1,
+        "max": 5
+      }
+    }
+  }
+}

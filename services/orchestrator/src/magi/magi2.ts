@@ -4,6 +4,7 @@ import { plannerMachine, type PlannerMachine } from './planner-machine';
 import { ConduitClient } from './conduit-client';
 import { ToolUser } from './tool-user';
 import { ShortTermMemory } from './short-term-memory';
+import { LongTermMemory } from './long-term-memory';
 import { MagiName } from '../types/magi-types';
 import type { MagiTool } from '../mcp';
 import type {
@@ -16,7 +17,6 @@ import path from 'path';
 import type { ModelType } from '../config';
 import { Model } from '../config';
 import { logger } from '../logger';
-import fs from 'fs/promises';
 import { MagiErrorHandler } from './error-handler';
 import type { MessageParticipant } from '../types/magi-types';
 export { MagiName };
@@ -28,32 +28,6 @@ export function createConfiguredPlannerMachine(_magiName: MagiName, _userMessage
   return plannerMachine.provide({
     actors: {
       agentMachine: agentMachine
-    },
-    guards: {
-      // Add any magi-specific guards here if needed
-    },
-    actions: {
-      // Add any magi-specific actions here if needed
-    },
-    delays: {
-      // Add any magi-specific delays here if needed
-    }
-  });
-}
-
-/**
- * Creates a configured agent machine with proper context injection
- */
-export function createConfiguredAgentMachine(
-  _strategicGoal: string,
-  _magiName: MagiName,
-  _conduitClient: ConduitClient,
-  _toolUser: ToolUser,
-  _availableTools: MagiTool[]
-) {
-  return agentMachine.provide({
-    actors: {
-      // Add any magi-specific actors here if needed
     },
     guards: {
       // Add any magi-specific guards here if needed
@@ -165,7 +139,6 @@ interface MagiCompatible {
   contactWithMemory(speaker: MessageParticipant, message: string): Promise<string>;
   contactSimple(userPrompt: string, systemPrompt?: string): Promise<string>;
   forget(): void;
-  ensureInitialized(): Promise<void>;
 }
 
 /**
@@ -179,26 +152,15 @@ export class Magi2 implements MagiCompatible {
   private toolsList: MagiTool[] = [];
   private readonly conduit: ConduitClient;
   private readonly shortTermMemory: ShortTermMemory;
-  
-  constructor(public name: MagiName, private readonly config: MagiConfig) {
+  private readonly longTermMemory: LongTermMemory;
+  private readonly config: MagiConfig;
+
+  constructor(public name: MagiName) {
+    this.config = PERSONAS_CONFIG[name]
     this.conduit = new ConduitClient(name);
     this.toolUser = new ToolUser(this);
     this.shortTermMemory = new ShortTermMemory(this);
-  }
-
-  public async ensureInitialized(): Promise<void> {
-    // If already initialized (prompt + tools), do nothing
-    if (this.personalityPrompt && this.toolsList.length > 0) {
-      return;
-    }
-    try {
-      const src = PERSONAS_CONFIG[this.name].personalitySource;
-      const prompt = await fs.readFile(src, 'utf-8');
-      await this.initialize(prompt);
-      logger.info(`${this.name} lazily initialized.`);
-    } catch (err) {
-      logger.warn(`${this.name} lazy initialization failed`, err);
-    }
+    this.longTermMemory = new LongTermMemory(this);
   }
 
   /**
@@ -206,6 +168,7 @@ export class Magi2 implements MagiCompatible {
    */
   async initialize(prompt: string): Promise<void> {
     this.personalityPrompt = prompt;
+    await this.longTermMemory.initialize();
     this.toolsList = await this.toolUser.getAvailableTools();
     logger.info(`${this.name} initialized with the following tools: ${this.toolsList.map(tool => tool.name).join(', ')}.`);
   }
@@ -214,7 +177,7 @@ export class Magi2 implements MagiCompatible {
    * Retrieves the cached personality prompt.
    * @throws If the prompt has not been loaded yet.
    */
-  withPersonality(systemInstructionsPrompt: string): string {
+  withPersonality(systemInstructionsPrompt: string = ''): string {
     if (!this.personalityPrompt) {
       const err = new Error(`Attempted to access personality for ${this.name}, but it has not been cached.`);
       logger.error('Prompt retrieval error', err);
@@ -228,12 +191,13 @@ export class Magi2 implements MagiCompatible {
   }
 
   async contactWithMemory(speaker: MessageParticipant, message: string): Promise<string> {
-    await this.ensureInitialized();
     const currentTopic = await this.shortTermMemory.determineTopic(speaker, message);
     const workingMemory = await this.shortTermMemory.summarize(currentTopic);
-    const promptWithContext = workingMemory + '\n' + message;
+    const relevantLongTermMemory = await this.longTermMemory.getRelevantContext(currentTopic || 'general');
+    const promptWithContext = `${relevantLongTermMemory}\n\n${workingMemory}\n\n${message}`;
+    const { model, options } = this.config;
     const response = await this.executeWithStatusManagement(async () => 
-      this.conduit.contact(promptWithContext, this.withPersonality(''), this.config.model, this.config.options)
+      this.conduit.contact(promptWithContext, this.withPersonality(), model, options)
     );
     
     // Store the interaction in short-term memory
@@ -246,7 +210,6 @@ export class Magi2 implements MagiCompatible {
       if (memoryError instanceof Error && memoryError.message.includes('critical')) {
         throw new Error(`Memory storage failed: ${memoryError.message}`);
       }
-      // Continue execution for non-critical memory failures
     }
     
     return response;
@@ -256,12 +219,14 @@ export class Magi2 implements MagiCompatible {
     * Simple contact method without memory context
   */
   async contactSimple(userPrompt: string, systemPrompt?: string): Promise<string> {
-    await this.ensureInitialized();
     return this.executeWithStatusManagement(async () => 
       this.conduit.contact(userPrompt, systemPrompt ?? '', this.config.model, this.config.options)
     );
   }
 
+  /**
+   * Forget all short-term memory
+   */
   public forget(): void {
     this.shortTermMemory.forget();
   }
@@ -290,8 +255,6 @@ export class Magi2 implements MagiCompatible {
 
   public async contactAsAgent(message: string, sender: MessageParticipant, _prohibitedTools: string[] = []): Promise<string> {
     try {
-      await this.ensureInitialized();
-      
       // Validate initialization completed successfully
       if (!this.personalityPrompt || this.toolsList.length === 0) {
         throw new Error(`${this.name} initialization incomplete - missing personality or tools`);
@@ -305,6 +268,7 @@ export class Magi2 implements MagiCompatible {
         // Initialize memory context
         const currentTopic = await this.shortTermMemory.determineTopic(sender, message);
         const workingMemory = await this.shortTermMemory.summarize(currentTopic);
+        const relevantLongTermMemory = await this.longTermMemory.getRelevantContext(currentTopic || 'general');
 
         // Create and start the planner actor
         const plannerActor = createActor(plannerMachine, {
@@ -314,7 +278,7 @@ export class Magi2 implements MagiCompatible {
             conduitClient: this.conduit,
             toolUser: this.toolUser,
             availableTools: this.toolsList.filter(tool => !_prohibitedTools.includes(tool.name)),
-            workingMemory
+            workingMemory: `${relevantLongTermMemory}\n\n${workingMemory}`
           }
         });
 
@@ -354,7 +318,6 @@ export class Magi2 implements MagiCompatible {
   }
 
   async makeTTSReady(text: string): Promise<string> {
-    await this.ensureInitialized();
     const systemPrompt = `ROLE & GOAL
 You are a direct transcription and vocalization engine. Your sole function is to take a TEXT PASSAGE and convert it verbatim into a SPOKEN SCRIPT for a Text-to-Speech (TTS) engine. Your output must preserve the original text's structure and intent, simply making it readable for a voice synthesizer.
 `;
@@ -401,14 +364,27 @@ SPOKEN SCRIPT:\n`
   }
 }
 
-// Create and export the three Magi instances
-export const balthazar = new Magi2(MagiName.Balthazar, PERSONAS_CONFIG[MagiName.Balthazar]);
-export const melchior = new Magi2(MagiName.Melchior, PERSONAS_CONFIG[MagiName.Melchior]);
-export const caspar = new Magi2(MagiName.Caspar, PERSONAS_CONFIG[MagiName.Caspar]);
+// Singleton instances - will be initialized when memoryService is set
+let balthazarInstance: Magi2 | null = null;
+let melchiorInstance: Magi2 | null = null;
+let casparInstance: Magi2 | null = null;
+
+// Initialize Magi instances and return them
+export function initializeMagiInstances() {
+  balthazarInstance = new Magi2(MagiName.Balthazar);
+  melchiorInstance = new Magi2(MagiName.Melchior);
+  casparInstance = new Magi2(MagiName.Caspar);
+  
+  allMagi[MagiName.Balthazar] = balthazarInstance;
+  allMagi[MagiName.Melchior] = melchiorInstance;
+  allMagi[MagiName.Caspar] = casparInstance;
+
+  return allMagi;
+}
 
 // Export all Magi instances in a single object for easy iteration
-export const allMagi = {
-  [MagiName.Balthazar]: balthazar,
-  [MagiName.Melchior]: melchior,
-  [MagiName.Caspar]: caspar,
+export const allMagi: Record<MagiName, Magi2 | null> = {
+  [MagiName.Balthazar]: balthazarInstance,
+  [MagiName.Melchior]: melchiorInstance,  
+  [MagiName.Caspar]: casparInstance,
 };

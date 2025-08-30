@@ -3,7 +3,6 @@ import type { ToolUser } from './tool-user';
 import type { MagiName } from '../types/magi-types';
 import type { MagiTool } from '../mcp';
 import type { AgenticTool } from './magi2';
-import type { MemoryService } from '../memory';
 
 // Constants
 export const MAX_RETRIES = 3;
@@ -28,7 +27,6 @@ export interface PlannerContext {
   toolUser: ToolUser;
   availableTools: MagiTool[];
   workingMemory: string;
-  memoryService?: MemoryService;
   planRevisions: Array<{ reason: string; originalPlan: string[]; newPlan: string[] }>;
   // Accumulated results from completed steps
   accumulatedResults: Array<{ goal: string; result: string }>;

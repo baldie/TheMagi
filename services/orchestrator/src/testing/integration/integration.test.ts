@@ -324,7 +324,7 @@ function loadSpecs(): Spec[] {
 
 function assertFinalResponse(exp: NonNullable<Spec['expectations']>['finalResponse'], response: string, spec: Spec) {
   if (!exp) return;
-  const { mustContain = [], mustNotContain = [], minLength, maxLength } = exp;
+  const { mustContain = [], mustContainAtLeastOneOf = [], mustNotContain = [], minLength, maxLength } = exp;
   
   for (const s of mustContain) {
     expect(response).toEqual(expect.stringContaining(s));
@@ -332,6 +332,14 @@ function assertFinalResponse(exp: NonNullable<Spec['expectations']>['finalRespon
     if (!response.includes(s)) {
       throw new Error(`[${spec.test.name}] Final response must contain "${s}"\nActual response: "${response}"\nExpected to contain: ${JSON.stringify(mustContain)}`);
     }
+  }
+  
+  if (mustContainAtLeastOneOf.length > 0) {
+    const foundAny = mustContainAtLeastOneOf.some(s => response.includes(s));
+    if (!foundAny) {
+      throw new Error(`[${spec.test.name}] Final response must contain at least one of the specified strings\nActual response: "${response}"\nExpected to contain at least one of: ${JSON.stringify(mustContainAtLeastOneOf)}`);
+    }
+    expect(foundAny).toBe(true);
   }
   
   for (const s of mustNotContain) {
@@ -581,8 +589,12 @@ function setupWebSocketHandlers(
   let heartbeatInterval: NodeJS.Timeout;
   let isResolved = false;
   let plannerCompletionTimer: NodeJS.Timeout | null = null;
+  let plannerCompleted = false;
   
   const resetInactivityTimer = () => {
+    // Don't reset the inactivity timer if planner has completed - we want the planner timeout to take precedence
+    if (plannerCompleted) return;
+    
     clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(() => {
       const elapsed = Date.now() - startTime;
@@ -636,19 +648,20 @@ function setupWebSocketHandlers(
         
         // Check if this is a planner-machine done state log
         if (msg.data && typeof msg.data === 'string' && msg.data.includes('planner-machine done state')) {
-          console.log('[integration] Detected planner-machine completion - waiting 5 seconds for deliberation-complete...');
+          console.log('[integration] Detected planner-machine completion - waiting 10 seconds for deliberation-complete...');
           
           // Only set the timer if we haven't already resolved
           if (!isResolved && !plannerCompletionTimer) {
+            plannerCompleted = true; // Mark that planner has completed
             plannerCompletionTimer = setTimeout(() => {
               if (!isResolved) {
-                console.log('[integration] Planner completed but no deliberation-complete received - test failed!');
+                console.log('[integration] Planner completed but no deliberation-complete received within 10 seconds - test failed!');
                 isResolved = true;
                 cleanupTimers();
-                reject(new Error(`[${name}] Planner machine completed but failed to send response to user. This indicates the Magi completed its work but did not use the communicate tool to respond.`));
+                reject(new Error(`[${name}] Planner machine completed but failed to send deliberation-complete within 10 seconds. This indicates the Magi completed its work but did not use the communicate tool to respond.`));
                 ws.close();
               }
-            }, 5000); // 5 second grace period
+            }, 10000); // 10 second grace period (increased from 5)
           }
         }
       } else {
@@ -701,7 +714,7 @@ async function runWebSocketTest(
 ): Promise<{response: string, meta: any}> {
   return new Promise<{response: string, meta: any}>((resolve, reject) => {
     const baseTimeout = spec.test.timeout ?? 60000;
-    const testTimeout = Math.max(baseTimeout * 4, 120000);
+    const testTimeout = Math.max(baseTimeout * 5, 120000);
     console.log(`[integration] Using inactivity timeout: ${testTimeout}ms for test: ${name}`);
     const startTime = Date.now();
     

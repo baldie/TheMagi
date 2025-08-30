@@ -4,7 +4,6 @@ import type { ConduitClient } from './conduit-client';
 import { agentMachine } from './agent-machine';
 import { MagiName } from '../types/magi-types';
 import type { PlannerContext, PlannerEvent } from './types';
-import type { MemoryService } from '../memory';
 
 // Constants
 const EXECUTION_INIT_DELAY = 100; // Small delay to allow state stabilization
@@ -24,7 +23,6 @@ interface PlannerInput {
   toolUser: ToolUser;
   availableTools: MagiTool[];
   workingMemory: string;
-  memoryService?: MemoryService;
 }
 
 interface CreatePlanInput {
@@ -33,12 +31,6 @@ interface CreatePlanInput {
   magiName: MagiName;
 }
 
-interface CheckMemoryInput {
-  message: string;
-  conduitClient: ConduitClient;
-  magiName: MagiName;
-  memoryService?: MemoryService;
-}
 
 interface FinalizePlanInput {
   strategicPlan: string[];
@@ -101,55 +93,6 @@ YOUR FORMAT:
   }
 });
 
-/**
- * Checks if user message contains memorable information and stores it in memory
- */
-const checkAndStoreMemory = fromPromise<void, CheckMemoryInput>(async ({ input }) => {
-  const { conduitClient, magiName, message, memoryService } = input;
-  
-  if (magiName !== MagiName.Melchior || !memoryService) {
-    return; // Only Melchior handles memory, and only if service is available
-  }
-
-  const { model } = PERSONAS_CONFIG[magiName];
-
-  const systemPrompt = `You are a very observant AI.`;
-  const userPrompt = `INSTRUCTIONS:
-Check if the user's message reveals a goal, preference, or other personal information worth storing.
-Return JSON with "shouldStore" (boolean) and "fact" (string) and "reasoning" (string) properties.
-
-If there is something that should be stored, set shouldStore to true and fact to the information.
-Otherwise set shouldStore to false.
-
-Example 1:
-{"shouldStore": true, "fact": "user purchased a Pixel 10 on today's date", "reasoning": "User explicitly shared they made a purchase, which is a personal fact worth storing."}
-
-Example 2:
-{"shouldStore": false, "fact": "", "reasoning": "This is a question seeking information, not revealing personal information about the user."}
-
-Example 3:
-{"shouldStore": true, "fact": "user does not like horror movies", "reasoning": "User explicitly stated a preference that will be useful for future recommendations."}
-
-User Message: ${message}`;
-  
-  try {
-    const jsonResponse = await conduitClient.contactForJSON(
-      userPrompt,
-      systemPrompt,
-      model,
-      { temperature: 0.3 }
-    );
-
-    if (jsonResponse.shouldStore && jsonResponse.fact) {
-      await memoryService.storeFact(jsonResponse.fact);
-      logger.debug(`${magiName} stored fact: ${jsonResponse.fact} (reasoning: ${jsonResponse.reasoning})`);
-    } else {
-      logger.debug(`${magiName} found no memorable information (reasoning: ${jsonResponse.reasoning})`);
-    }
-  } catch (error) {
-    logger.warn(`${magiName} failed to check/store memory:`, error);
-  }
-});
 
 /**
  * Finalizes the plan without memory concerns
@@ -230,7 +173,6 @@ export const plannerMachine = setup({
   },
   actors: {
     createStrategicPlan,
-    checkAndStoreMemory,
     finalizePlan,
     agentMachine,
   },
@@ -249,7 +191,6 @@ export const plannerMachine = setup({
     toolUser: input.toolUser,
     availableTools: input.availableTools,
     workingMemory: input.workingMemory,
-    memoryService: input.memoryService,
     planRevisions: [],
     accumulatedResults: [],
     lastExecutedTool: null,
@@ -279,7 +220,7 @@ export const plannerMachine = setup({
           magiName: context.magiName,
         }),
         onDone: {
-          target: 'checkingMemory',
+          target: 'finalizingPlan',
           actions: [
             assign({
               strategicPlan: ({ event }) => event.output,
@@ -298,28 +239,6 @@ export const plannerMachine = setup({
       },
     },
 
-    checkingMemory: {
-      invoke: {
-        src: 'checkAndStoreMemory',
-        input: ({ context }) => ({
-          message: context.message,
-          conduitClient: context.conduitClient,
-          magiName: context.magiName,
-          memoryService: context.memoryService,
-        }),
-        onDone: {
-          target: 'finalizingPlan',
-        },
-        onError: {
-          target: 'finalizingPlan',
-          actions: [
-            ({ context }) => {
-              logger.warn(`${context.magiName} memory check failed, continuing with plan`);
-            }
-          ],
-        },
-      },
-    },
 
     finalizingPlan: {
       invoke: {

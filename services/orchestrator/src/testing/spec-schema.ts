@@ -29,6 +29,7 @@ export const SpecSchema = z.object({
   expectations: z.object({
     finalResponse: z.object({
       mustContain: z.array(z.string()).optional(),
+      mustContainAtLeastOneOf: z.array(z.string()).optional(),
       mustNotContain: z.array(z.string()).optional(),
       minLength: z.number().optional(),
       maxLength: z.number().optional(),

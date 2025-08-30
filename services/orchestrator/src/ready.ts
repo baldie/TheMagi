@@ -1,6 +1,5 @@
-import { balthazar, caspar, melchior, MagiName } from './magi/magi2';
+import { allMagi, type Magi2, MagiName } from './magi/magi2';
 import { logger } from './logger';
-import { MemoryService } from './memory';
 import { MessageParticipant } from './types/magi-types';
 
 /**
@@ -22,29 +21,21 @@ async function retry<T>(
   }
 }
 
-async function runSealedEnvelopePhase(message: string, memoryService: MemoryService): Promise<string> {
+async function runSealedEnvelopePhase(message: string, balthazar: any, melchior: any, caspar: any): Promise<string> {
   logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
-
-  // Load user memory and inject context
-  const userMemory = await memoryService.loadUserMemory();
-  const balthazarMemoryContext = memoryService.generateMemoryContext(userMemory, 'balthazar');
-  const melchiorMemoryContext = memoryService.generateMemoryContext(userMemory, 'melchior');
-  const casparMemoryContext = memoryService.generateMemoryContext(userMemory, 'caspar');
-
-  const basePrompt = `Regarding "${message}", what are your thoughts? Be concise and on topic.`;
 
   // During the sealed envelope phase, the magi cannot ask the user any questions
   const prohibitedTools = ['communicate'];
 
   // Process models sequentially to avoid network errors
   logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(`${balthazarMemoryContext}\n\n${basePrompt}`, MessageParticipant.System, prohibitedTools));
+  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(message, MessageParticipant.System, prohibitedTools));
   
   logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(async () => melchior.contactAsAgent(`${melchiorMemoryContext}\n\n${basePrompt}`, MessageParticipant.System, prohibitedTools));
+  const melchiorResponse = await retry(async () => melchior.contactAsAgent(message, MessageParticipant.System, prohibitedTools));
   
   logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(async () => caspar.contactAsAgent(`${casparMemoryContext}\n\n${basePrompt}`, MessageParticipant.System, prohibitedTools));
+  const casparResponse = await retry(async () => caspar.contactAsAgent(message, MessageParticipant.System, prohibitedTools));
 
   const sealedEnvelope = `
     
@@ -66,7 +57,7 @@ ${casparResponse}
   return sealedEnvelope;
 }
 
-async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> {
+async function beginDeliberationsPhase(sealedEnvelope: string, balthazar: any, melchior: any, caspar: any): Promise<string> {
   let debateTranscript = sealedEnvelope;
   const MAX_ROUNDS = 3;
   let previousRoundResponses = '';
@@ -166,7 +157,13 @@ async function beginDeliberationsPhase(sealedEnvelope: string): Promise<string> 
  * @returns The final synthesized response or a summary of the impasse.
  */
 export async function beginDeliberation(message?: string): Promise<string> {
-  const memoryService = new MemoryService(logger);
+  const balthazar = allMagi[MagiName.Balthazar] as Magi2 | null;
+  const melchior = allMagi[MagiName.Melchior] as Magi2 | null;
+  const caspar = allMagi[MagiName.Caspar] as Magi2 | null;
+
+  if (!balthazar || !melchior || !caspar) {
+    throw new Error('One or more Magi instances are not properly initialized.');
+  }
 
   try {
     logger.info('--- MAGI DELIBERATION INITIATED ---');
@@ -175,8 +172,8 @@ export async function beginDeliberation(message?: string): Promise<string> {
     // V0 placeholders from PRD
     logger.info('... [V0] Caspar providing sanitized history to other Magi (placeholder).');
 
-    const sealedEnvelope = await runSealedEnvelopePhase(message ?? '', memoryService);
-    const finalResponse = await beginDeliberationsPhase(sealedEnvelope);
+    const sealedEnvelope = await runSealedEnvelopePhase(message ?? '', balthazar, melchior, caspar);
+    const finalResponse = await beginDeliberationsPhase(sealedEnvelope, balthazar, melchior, caspar);
 
     logger.info('--- Deliberation Complete ---');
     logger.debug('Final synthesized response', { finalResponse });

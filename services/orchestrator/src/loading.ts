@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import { logger } from './logger';
 import type { Magi2 } from './magi/magi2';
-import { balthazar, caspar, melchior, MagiName, PERSONAS_CONFIG } from './magi/magi2';
+import { initializeMagiInstances, allMagi, MagiName, PERSONAS_CONFIG } from './magi/magi2';
 import { initializeMessageQueue, MessageType } from '../../message-queue/src';
 import type { MessageParticipant } from './types/magi-types';
 import { messageSubscriptionManager } from './magi/message-subscriptions';
@@ -42,30 +42,21 @@ export async function loadMagi(): Promise<void> {
   logger.info('--- Loading Magi Personas ---');
 
   // Step 1: Initialize all Magi in parallel
-  const initPromises = [caspar, melchior, balthazar].map(async (magi) => {
-    logger.info(`Loading ${magi.name}...`);
+  initializeMagiInstances();
+  const initPromises = [MagiName.Caspar, MagiName.Melchior, MagiName.Balthazar].map(async (magiName: MagiName) => {
+    logger.info(`Loading ${magiName}...`);
     
     // 1. Load prompt from file using the absolute path from PERSONAS_CONFIG
-    const { personalitySource } = PERSONAS_CONFIG[magi.name];
+    const { personalitySource } = PERSONAS_CONFIG[magiName as MagiName];
     const personalityPrompt = await fs.readFile(personalitySource, 'utf-8');
     
     // 2. Store it in the manager and initialize tools
-    await magi.initialize(personalityPrompt);
-    logger.info(`... ${magi.name}'s personality has been loaded from file.`);
-
-    // Placeholders for data access checks
-    switch (magi.name) {
-      case MagiName.Caspar:
-        logger.info('... [V0] Checking for smart home access (placeholder).');
-        break;
-      case MagiName.Melchior:
-        logger.info('... [V0] Checking for access to personal data (placeholder).');
-        logger.info('... [V0] Verifying no internet access (by prompt design).');
-        break;
-      case MagiName.Balthazar:
-        logger.info('... [V0] Verifying internet access (by prompt design).');
-        break;
+    const magi = allMagi[magiName] as Magi2 | null;
+    if (!magi) {
+      throw new Error(`Magi instance for ${magiName} not found.`);
     }
+    await magi.initialize(personalityPrompt);
+    logger.info(`... ${magiName}'s personality has been loaded from file.`);
   });
 
   await Promise.all(initPromises);
@@ -76,6 +67,13 @@ export async function loadMagi(): Promise<void> {
 
   // Step 3: Check readiness of all Magi in parallel
   logger.info('--- Checking Magi Readiness ---');
+  const caspar = allMagi[MagiName.Caspar] as Magi2 | null;
+  const melchior = allMagi[MagiName.Melchior] as Magi2 | null;
+  const balthazar = allMagi[MagiName.Balthazar] as Magi2 | null;
+
+  if (!caspar || !melchior || !balthazar) {
+    throw new Error('One or more Magi instances are not properly initialized.');
+  }
   const readinessPromises = [caspar, melchior, balthazar].map(async magi => 
     checkPersonaReadiness(magi)
   );

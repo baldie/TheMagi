@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 import { logger } from '../logger';
 import { initializeMessageQueue, type Subscription, MessageType } from '../../../message-queue/src';
 import { MessageParticipant } from '../types/magi-types';
-import { balthazar, caspar, melchior, type MagiName } from './magi2';
+import { allMagi, type Magi2, MagiName } from './magi2';
 import { beginDeliberation } from '../ready';
 import { speakWithMagiVoice } from '../tts';
 
@@ -35,7 +35,14 @@ export class MessageSubscriptionManager {
     const messageQueue = await initializeMessageQueue();
     
     // Set up subscriptions for each individual Magi
-    const subscriptionPromises = [caspar, melchior, balthazar].map(async (magi) => {
+    const caspar = allMagi[MagiName.Caspar];
+    const melchior = allMagi[MagiName.Melchior];
+    const balthazar = allMagi[MagiName.Balthazar];
+    
+    if (!caspar || !melchior || !balthazar) {
+      throw new Error('One or more Magi instances are not properly initialized.');
+    }
+    const subscriptionPromises = [caspar, melchior, balthazar].map(async (magi: Magi2) => {
       const subscriptions: Subscription[] = [];
       
       // Subscribe to messages addressed to this specific Magi
@@ -175,12 +182,12 @@ export class MessageSubscriptionManager {
 
     try {
       const magiName = message.sender as MagiName;
-      const magi = this.getMagiInstance(magiName);
-      if (magi) {
-        const ttsReady = await magi.makeTTSReady(message.content);
-        logger.debug(`\n🤖🔊\n${ttsReady}`);
-        void speakWithMagiVoice(ttsReady, magiName);
-      }
+      const magi: Magi2 | null = allMagi[magiName];
+      if (!magi) return;
+
+      const ttsReady = await (magi as Magi2).makeTTSReady(message.content);
+      logger.debug(`\n🤖🔊\n${ttsReady}`);
+      void speakWithMagiVoice(ttsReady, magiName);
     } catch (ttsError) {
       logger.warn('Failed to trigger TTS for message', ttsError);
     }
@@ -193,22 +200,6 @@ export class MessageSubscriptionManager {
     subscription.unsubscribe();
     this.userSubscriptions.delete(subscription);
     logger.debug('[WebSocket] Removed user subscription');
-  }
-
-  /**
-   * Get Magi instance by name
-   */
-  private getMagiInstance(magiName: MagiName) {
-    switch (magiName) {
-      case MessageParticipant.Caspar:
-        return caspar;
-      case MessageParticipant.Melchior:
-        return melchior;
-      case MessageParticipant.Balthazar:
-        return balthazar;
-      default:
-        return null;
-    }
   }
 
   /**

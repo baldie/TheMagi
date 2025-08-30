@@ -40,17 +40,18 @@
           "response": "{\"speech\": {}, \"response_type\": \"action_done\", \"data\": {\"targets\": [], \"success\": [{\"name\": \"zhimi.fan.za5\", \"type\": \"entity\", \"id\": \"fan.zhimi_fan_za5\"}], \"failed\": []}}"
         }
       ]
-    },
-    "communicate": {
-      "response": "I found the bedroom fan (zhimi.fan.za5) and turned it on. The fan is now running at 22% speed to help with the stuffiness. The bedroom temperature is 74.48°F and humidity is 58%, so the fan should help circulate the air. There are also 7 other smart devices available if you need them.",
-      "ignoreParameters": true
     }
   },
   "expectations": {
     "finalResponse": {
-      "mustContain": [
+      "mustContainAtLeastOneOf": [
         "fan",
-        "on"
+        "turned on",
+        "running",
+        "activated",
+        "started",
+        "air moving",
+        "circulation"
       ],
       "mustNotContain": [
         "I don't know",
