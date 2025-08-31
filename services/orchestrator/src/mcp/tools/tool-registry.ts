@@ -86,7 +86,7 @@ export interface ToolServerConfig {
   provides: string[];
 }
 
-export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_image_descriptions', 'include_raw_content', 'include_favicon', 'exclude_domains', 'include_domains', 'topic']);
+export const EXCLUDED_TOOL_PARAMS = new Set(['format', 'extract_depth', 'country', 'search_depth', 'include_images', 'include_image_descriptions', 'include_raw_content', 'include_favicon', 'exclude_domains', 'include_domains', 'topic', 'time_range', 'start_date', 'end_date']);
 
 /**
  * Central registry of all available tools
@@ -128,7 +128,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
   'read-page': {
     name: 'read-page',
-    description: 'Gets the content from web pages. Use this tool if you have URLs from <SEARCH_RESULTS>.',
+    description: 'Gets the content from web pages. Use this tool if you need to extract content from search results.',
     category: ToolCategory.WEB_EXTRACT,
     defaults: {
       extract_depth: 'basic',
@@ -241,7 +241,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   // Default agentic tools
   'communicate': {
     name: 'communicate',
-    description: 'This tool allows you to communicate with the user or other Magi participants. Choose this if you need to respond with anything.',
+    description: 'Allows you to respond to Magi, Caspar, Balthazar, or Melchior. Choose this if you need to respond with anything.',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: { recipient: 'User' },
     responseType: 'TextResponse',
@@ -253,8 +253,8 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       },
       recipient: {
         type: 'string',
-        description: 'Caspar has access to the user\'s smart home devices, Melchior has access to personal data, Balthazar can access the internet on your behalf.',
-        enum: ['User', 'System', 'Magi', 'Caspar', 'Melchior', 'Balthazar'],
+        description: 'Caspar has access to smart home devices, Melchior has access to personal data, Balthazar can access the internet.',
+        enum: ['Magi', 'Caspar', 'Melchior', 'Balthazar', 'User', 'System'],
         default: 'User'
       }
     },

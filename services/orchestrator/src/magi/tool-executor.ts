@@ -63,63 +63,66 @@ export class ToolExecutor {
    * Internal tool execution logic
    */
   private async executeToolInternal(tool: AgenticTool, conduitClient?: ConduitClient): Promise<string> {
-    // Handle special tool cases
     if (tool.name === 'communicate') {
-      const messageText = (tool.parameters.message as string) || 'No message provided';
-      const recipientParam = (tool.parameters.recipient as string) || 'User';
-      
-      // Validate recipient parameter against MessageParticipant enum
-      const validRecipients = ['User', 'System', 'Magi', 'Caspar', 'Melchior', 'Balthazar'];
-      if (!validRecipients.includes(recipientParam)) {
-        throw new Error(`Invalid recipient: ${recipientParam}. Must be one of: ${validRecipients.join(', ')}`);
-      }
-      
-      const recipient = recipientParam as MessageParticipant;
-      
-      try { testHooks.recordToolCall('communicate', { message: messageText, recipient: recipient }); } catch { /* no-op in non-test mode */ }
-      
-      // Record TTS invocation for User messages in test mode
-      if (recipient === 'User') {
-        try { testHooks.recordTtsInvocation(messageText, this.magiName); } catch { /* no-op in non-test mode */ }
-      }
-      
-      // Publish the message to the specified recipient's message queue
-      try {
-        const messageQueue = await initializeMessageQueue();
-        await messageQueue.publish(
-          this.magiName as MessageParticipant,
-          recipient,
-          messageText,
-          MessageType.RESPONSE,
-        );
-        logger.debug(`${this.magiName} published message to ${recipient} message queue: ${messageText}`);
-      } catch (error) {
-        logger.error(`${this.magiName} failed to publish message to message queue`, error);
-        throw error;
-      }
-      
-      return `Message sent to ${recipient} message queue`;
+      return await this.executeCommunicateTool(tool);
     }
 
     if (tool.name === 'process-info') {
-      if (!conduitClient) {
-        throw new Error('Conduit client is required for process-info tool');
-      }
-      const rawInfo = (tool.parameters.raw_info as string) || 'No information provided';
-      try { testHooks.recordToolCall('process-info', { raw_info: rawInfo }); } catch { /* no-op in non-test mode */ }
-      const { model } = PERSONAS_CONFIG[this.magiName];
-      const processingInstructions = (tool.parameters.processing_instructions as string) || 'Process the data';
-      const processedInfo = await conduitClient.contact(
-        `Processing Instructions:\n${processingInstructions}\n(IMPORTANT: Be very concise and to the point.)\n\nData to process:\n${rawInfo}\nOnly provide the answer in a complete sentence.`,
-        "Persona:\nYou are an expert information processor.",
-        model,
-        { temperature: 0.3 }
-      );
-      return processedInfo;
+      return await this.executeProcessInfoTool(tool, conduitClient);
     }
     
-    // Execute regular tools through ToolUser
     return await this.toolUser.executeWithTool(tool.name, tool.parameters);
+  }
+
+  private async executeCommunicateTool(tool: AgenticTool): Promise<string> {
+    const messageText = (tool.parameters.message as string) || 'No message provided';
+    const recipientParam = (tool.parameters.recipient as string) || 'User';
+    
+    const validRecipients = ['User', 'System', 'Magi', 'Caspar', 'Melchior', 'Balthazar'];
+    if (!validRecipients.includes(recipientParam)) {
+      throw new Error(`Invalid recipient: ${recipientParam}. Must be one of: ${validRecipients.join(', ')}`);
+    }
+    
+    const recipient = recipientParam as MessageParticipant;
+    
+    try { testHooks.recordToolCall('communicate', { message: messageText, recipient: recipient }); } catch { /* no-op in non-test mode */ }
+    
+    if (recipient === 'User') {
+      try { testHooks.recordTtsInvocation(messageText, this.magiName); } catch { /* no-op in non-test mode */ }
+    }
+    
+    try {
+      const messageQueue = await initializeMessageQueue();
+      await messageQueue.publish(
+        this.magiName as MessageParticipant,
+        recipient,
+        messageText,
+        MessageType.RESPONSE,
+      );
+      logger.debug(`${this.magiName} published message to ${recipient} message queue: ${messageText}`);
+    } catch (error) {
+      logger.error(`${this.magiName} failed to publish message to message queue`, error);
+      throw error;
+    }
+    
+    return `Message sent to ${recipient} message queue`;
+  }
+
+  private async executeProcessInfoTool(tool: AgenticTool, conduitClient?: ConduitClient): Promise<string> {
+    if (!conduitClient) {
+      throw new Error('Conduit client is required for process-info tool');
+    }
+    const rawInfo = (tool.parameters.raw_info as string) || 'No information provided';
+    try { testHooks.recordToolCall('process-info', { raw_info: rawInfo }); } catch { /* no-op in non-test mode */ }
+    const { model } = PERSONAS_CONFIG[this.magiName];
+    const processingInstructions = (tool.parameters.processing_instructions as string) || 'Process the data';
+    const processedInfo = await conduitClient.contact(
+      `Processing Instructions:\n${processingInstructions}\n(IMPORTANT: Be very concise and to the point.)\n\nData to process:\n${rawInfo}\nOnly provide the answer in a complete sentence.`,
+      "Persona:\nYou are an expert information processor.",
+      model,
+      { temperature: 0.3 }
+    );
+    return processedInfo;
   }
 
   /**

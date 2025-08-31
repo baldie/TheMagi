@@ -1,6 +1,8 @@
 import { allMagi, type Magi2, MagiName } from './magi/magi2';
 import { logger } from './logger';
 import { MessageParticipant } from './types/magi-types';
+import { messageSubscriptionManager } from './magi/message-subscriptions';
+import { initializeMessageQueue, MessageType } from '../../message-queue/src';
 
 /**
  * Retry a function with exponential backoff.
@@ -21,35 +23,40 @@ async function retry<T>(
   }
 }
 
-async function runSealedEnvelopePhase(message: string, balthazar: any, melchior: any, caspar: any): Promise<string> {
+async function runSealedEnvelopePhase(message: string, _balthazar: any, _melchior: any, _caspar: any): Promise<string> {
   logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
-
-  // During the sealed envelope phase, the magi cannot ask the user any questions
-  const prohibitedTools = ['communicate'];
-
-  // Process models sequentially to avoid network errors
-  logger.info('Running Balthazar assessment...');
-  const balthazarResponse = await retry(async () => balthazar.contactAsAgent(message, MessageParticipant.System, prohibitedTools));
   
-  logger.info('Running Melchior assessment...');
-  const melchiorResponse = await retry(async () => melchior.contactAsAgent(message, MessageParticipant.System, prohibitedTools));
+  const messageQueue = await initializeMessageQueue();
+
+  // Publish the message to each Magi's queue sequentially for easier debugging
+  logger.info('Publishing message to Balthazar for sealed envelope assessment...');
+  await messageQueue.publish(MessageParticipant.System, MagiName.Balthazar, message, MessageType.REQUEST);
   
-  logger.info('Running Caspar assessment...');
-  const casparResponse = await retry(async () => caspar.contactAsAgent(message, MessageParticipant.System, prohibitedTools));
+  logger.info('Publishing message to Melchior for sealed envelope assessment...');
+  await messageQueue.publish(MessageParticipant.System, MagiName.Melchior, message, MessageType.REQUEST);
+  
+  logger.info('Publishing message to Caspar for sealed envelope assessment...');
+  await messageQueue.publish(MessageParticipant.System, MagiName.Caspar, message, MessageType.REQUEST);
+
+  // Collect responses from all 3 Magi
+  logger.info('Waiting for responses from all Magi...');
+  const responses = await retry(async () => 
+    messageSubscriptionManager.collectSealedEnvelopeResponses(30000)
+  );
 
   const sealedEnvelope = `
     
 --------------------------------------------------------------------------
 Balthazar's Independent assessment:
-${balthazarResponse}
+${responses.balthazar}
 
 --------------------------------------------------------------------------
 Melchior's Independent assessment:
-${melchiorResponse}
+${responses.melchior}
 
 --------------------------------------------------------------------------
 Caspar's Independent assessment:
-${casparResponse}
+${responses.caspar}
 --------------------------------------------------------------------------
 
   `;

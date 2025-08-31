@@ -53,9 +53,6 @@ export class ShortTermMemory {
   }
 
   public async determineTopic(speaker: MessageParticipant, message: string): Promise<string | null> {
-    if (process.env.MAGI_TEST_MODE === 'true') {
-      return 'Test Topic';
-    }
     if (this.memories.length === 0) {
       return null;
     }

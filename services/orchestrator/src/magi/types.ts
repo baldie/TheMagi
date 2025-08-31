@@ -17,6 +17,7 @@ export const TIMEOUT_MS = 30000; // 30 seconds
  */
 export interface PlannerContext {
   message: string;
+  sender: string;
   strategicPlan: string[];
   currentStepIndex: number;
   currentGoal: string;
@@ -40,6 +41,7 @@ export interface PlannerContext {
 export interface AgentContext {
   // User input and goal
   message: string;
+  sender: string;
   strategicGoal: string;
   currentSubGoal: string;
   

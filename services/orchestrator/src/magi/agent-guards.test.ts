@@ -29,6 +29,7 @@ jest.mock('./tool-executor', () => ({
 describe('Agent Guards', () => {
   const createMockContext = (overrides: Partial<AgentContext> = {}): AgentContext => ({
     message: 'test message',
+    sender: 'User',
     strategicGoal: 'test goal',
     currentSubGoal: '',
     workingMemory: '',

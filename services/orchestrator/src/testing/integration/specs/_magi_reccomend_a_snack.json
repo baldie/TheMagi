@@ -14,7 +14,7 @@
   },
   "toolStubs": {
     "search-web": {
-      "response": "Search Results:\n1. Best breakfast options\nhttp://www.bestbreakfast.com\n2. Best snack options\nhttps://www.bestsnacks.com\n3. Best dinner options\nhttps://www.bestdinner.com\n",
+      "response": "Search Results (5/5):\n1. Unhealthy snack recommendations\nhttp://www.unhealthy-snacks.com\n\n2. Best snack recommendations\nhttps://www.best-snacks.com\n\n3. Expensive snack recommendations\nhttps://www.expensive-snacks.com\n\n4. Normal snack recommendations\nhttps://www.normal-snacks.com\n\n5. Healthy snack recommendations\nhttps://www.healthy-snacks.com",
       "ignoreParameters": true
     },
     "read-page": {
@@ -22,10 +22,10 @@
         {
           "when": {
             "urls": [
-              "https://www.bestsnacks.com"
+              "https://www.healthy-snacks.com"
             ]
           },
-          "response": "Top Recommended Snacks:\n1. Shrimp Cocktail\n2. Avocado Toast\n3. Trail Mix\n\nAll Rights Reserved. Privacy Policy. Terms of Service. Contact Us."
+          "response": "All About Snacks:\n\nFueling your body between meals is a fantastic way to maintain steady energy levels and keep your focus sharp throughout the day. The right choices can curb those midday cravings with satisfying textures and natural sweetness, all while delivering essential vitamins and fiber. Opting for nutrient-dense options ensures you're not just quieting a rumbling stomach, but truly nourishing your body from the inside out and bridging the gap to your next meal effectively.\n\nTop Recommended Snacks:\n1. Shrimp Cocktail\n2. Avocado Toast\n3. Trail Mix\n\nAll Rights Reserved. Privacy Policy. Terms of Service. Contact Us."
         }
       ]
     },

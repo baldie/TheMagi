@@ -40,6 +40,7 @@ export const agentMachine = createMachine({
     events: {} as AgentEvent,
     input: {} as {
       message: string;
+      sender: string;
       strategicGoal: string;
       magiName: MagiName;
       conduitClient: ConduitClient;
@@ -61,6 +62,7 @@ export const agentMachine = createMachine({
   initial: 'validateContext',
   context: ({ input }) => ({
     message: input.message,
+    sender: input.sender,
     strategicGoal: input.strategicGoal,
     currentSubGoal: '',
     workingMemory: input.workingMemory ?? '',
@@ -190,6 +192,7 @@ export const agentMachine = createMachine({
           context: context.workingMemory,
           message: context.message,
           magiName: context.magiName,
+          sender: context.sender
         }),
         onDone: {
           target: 'validatingTool',

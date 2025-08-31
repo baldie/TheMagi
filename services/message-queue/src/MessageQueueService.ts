@@ -310,8 +310,8 @@ export class MessageQueueService {
 
       const stats: QueueStats = {
         totalMessages: messages.length,
-        pendingMessages: messages.filter(m => !m.processed && !this.isExpired(m)).length,
-        processedMessages: messages.filter(m => m.processed).length,
+        pendingMessages: messages.filter((m: QueueMessage) => !m.processed && !this.isExpired(m)).length,
+        processedMessages: messages.filter((m: QueueMessage) => m.processed).length,
         activeSubscriptions: this.subscriptions.size,
         messagesByParticipant: {} as Record<MessageParticipant, number>
       };

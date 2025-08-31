@@ -164,14 +164,13 @@ describe('McpClientManager', () => {
       
       // Verify the structure of the search-web tool
       const searchTool = tools.find(tool => tool.name === 'search-web');
-      expect(searchTool).toEqual({
-        name: 'search-web',
-        description: undefined,
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string' }
-          }
+      expect(searchTool).toBeDefined();
+      expect(searchTool?.name).toBe('search-web');
+      expect(searchTool?.description).toBe('When your goal is SEARCH, use this tool with a relevant search query to search the web.');
+      expect(searchTool?.inputSchema).toEqual({
+        type: 'object',
+        properties: {
+          query: { type: 'string' }
         }
       });
     });

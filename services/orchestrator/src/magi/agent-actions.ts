@@ -37,6 +37,7 @@ interface SelectToolInput {
   context: string;
   message: string;
   magiName: MagiName;
+  sender: string;
 }
 
 interface ExecuteToolInput {
@@ -85,9 +86,9 @@ export const gatherContext = fromPromise<string, GatherContextInput>(async ({ in
     return message;
   }
   
-  const systemPrompt = `You are a data extraction robot. Your only function is consider the USER MESSAGE and to extract data from the GIVEN TEXT that is relevant to the NEXT STRATEGIC GOAL. You do not analyze, interpret, or suggest actions.`;
+  const systemPrompt = `You are a data extraction robot. Your only function is consider the MESSAGE and to extract data from the GIVEN TEXT that is relevant to the NEXT STRATEGIC GOAL. You do not analyze, interpret, or suggest actions.`;
   
-  const userPrompt = `USER MESSAGE:\n"${message}"\n
+  const userPrompt = `MESSAGE:\n"${message}"\n
 
 GIVEN TEXT:
 ${workingMemory.trim() ? workingMemory.trim() : 'None'}\n
@@ -150,19 +151,22 @@ Output ONLY the specific action command that should be executed next - No preamb
  * Selects the appropriate tool for the current sub-goal
  */
 export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async ({ input }) => {
-  const { subGoal, availableTools, conduitClient, magiName, context: workingMemory, message } = input;
+  const { subGoal, availableTools, conduitClient, magiName, context: workingMemory, message, sender } = input;
   
-  logger.debug(`${magiName} selecting tool for sub-goal: ${subGoal}`);
+  // inject the sender, to make it easier for the magi to populate the communicate tool's parameters correctly.
+  const task = subGoal.startsWith('Respond') ? subGoal.replace('Respond', `Respond to ${sender}`) : subGoal;
+
+  logger.debug(`${magiName} selecting tool for sub-goal: ${task}`);
   
   const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
-  const userPrompt = `Action to Perform:\n${subGoal}\n
-User Message:\n${message}\n${workingMemory.trim() !== message ? `\nInput for Next Action:\n${workingMemory}\n` : ''}
+  const userPrompt = `Action to Perform:\n${task}\n
+Message:\n${message}\n\nMessage Sender:\n${sender}\n${workingMemory.trim() !== message ? `\n\nInput for Tool:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
-Pick the tool that will allow you to '${subGoal}.'
+Pick the tool that will allow you to '${task}.'
 Use the data gathered so far as parameters for the tool.
 Respond ONLY with the complete JSON.
 

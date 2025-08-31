@@ -77,20 +77,20 @@ export interface AgenticResponse {
 
 export const PERSONAS_CONFIG: Record<MagiName, MagiConfig> = {
   [MagiName.Balthazar]: {
-    model: Model.Llama,
+    model: Model.Mistral,
     personalitySource: path.resolve(__dirname, 'personalities', 'Balthazar.md'),
-    strategicPersonaInstructions: ``,
+    strategicPersonaInstructions: `You do not have access to the user's personal data.`,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Who is the CEO of American Express?"
-{"plan": ["Search web for keywords related to American Express CEO", "Extract content from most relevant search result URL", "Respond with the answer"]}
+{"plan": ["Search web for sites related to American Express CEO", "Extract content from most relevant search result URL", "Respond with the answer"]}
 
 EXAMPLE 4:
 message: "What should I make for dinner?"
-{"plan": ["Search web for keywords related to dinner recommendations", "Extract content from most relevant search result URL", "Respond with the answer"]}
+{"plan": ["Search web for sites related to dinner recommendations", "Extract content from most relevant search result URL", "Respond with the answer"]}
 
 EXAMPLE 5:
 message: "What is the weather like this weekend in Menlo Park?"
-{"plan": ["Search web for keywords related to weather forecast in Menlo Park", "Extract content from most relevant search result URL", "Respond with the answer"]}`,
+{"plan": ["Search web for sites related to weather forecast in Menlo Park", "Extract content from most relevant search result URL", "Respond with the answer"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Balthazar`,
     options: { temperature: 0.4 },
   },
@@ -253,7 +253,7 @@ export class Magi2 implements MagiCompatible {
     return output.result ?? 'Task completed successfully.';
   }
 
-  public async contactAsAgent(message: string, sender: MessageParticipant, _prohibitedTools: string[] = []): Promise<string> {
+  public async contactAsAgent(message: string, sender: MessageParticipant): Promise<string> {
     try {
       // Validate initialization completed successfully
       if (!this.personalityPrompt || this.toolsList.length === 0) {
@@ -274,10 +274,11 @@ export class Magi2 implements MagiCompatible {
         const plannerActor = createActor(plannerMachine, {
           input: {
             message,
+            sender: sender.toString(),
             magiName: this.name,
             conduitClient: this.conduit,
             toolUser: this.toolUser,
-            availableTools: this.toolsList.filter(tool => !_prohibitedTools.includes(tool.name)),
+            availableTools: this.toolsList,
             workingMemory: `${relevantLongTermMemory}\n\n${workingMemory}`
           }
         });

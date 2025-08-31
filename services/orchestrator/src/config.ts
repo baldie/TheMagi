@@ -33,7 +33,7 @@ interface ModelsConfigFile {
 
 /** Model constants - dynamically generated from models.json */
 export const Model = {
-  Llama: modelsConfig.models.find(m => m.magi === 'Balthazar')!.name,
+  Mistral: modelsConfig.models.find(m => m.magi === 'Balthazar')!.name,
   Gemma: modelsConfig.models.find(m => m.magi === 'Melchior')!.name,
   Qwen: modelsConfig.models.find(m => m.magi === 'Caspar')!.name,
 } as const;

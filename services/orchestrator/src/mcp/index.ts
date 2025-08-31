@@ -45,7 +45,7 @@ export class MagiTool implements McpToolInfo {
 
   constructor(info: McpToolInfo) {
     this.name = info.name;
-    this.description = info.description;
+    this.description = TOOL_REGISTRY[info.name]?.description || info.description; // Prefer registry description
     this.inputSchema = info.inputSchema;
     this.instructions = info.instructions;
   }
@@ -334,101 +334,121 @@ export class McpClientManager {
    */
   async getMCPToolInfoForMagi(magiName: MagiName): Promise<MagiTool[]> {
     const allTools: MagiTool[] = [];
-    
-    // Find all clients for this Magi
     const serverConfigs = this.getServerConfigs();
     const configs = serverConfigs[magiName] || [];
+    
     if (configs.length === 0) {
       logger.error(`⚠️ No MCP server configs found for ${magiName}, cannot get tools!`);
     }
     
     for (const config of configs) {
-      const serverKey = `${magiName}:${config.name}`;
-      const client = this.clients.get(serverKey);
-      
-      if (!client) {
-        // In test mode, provide smart-home-devices tool for Caspar even if MCP server isn't connected
-        if (testHooks.isEnabled() && config.name === 'home-assistant' && magiName === MagiName.Caspar) {
-          const myTools = getToolAssigmentsForAllMagi()[magiName];
-          if (myTools.includes('smart-home-devices')) {
-            logger.debug(`Test mode: Adding smart-home-devices tool for ${magiName} without MCP connection`);
-            const toolDef = TOOL_REGISTRY['smart-home-devices'];
-            const smartHomeTool = new MagiTool({
-              name: 'smart-home-devices',
-              description: toolDef?.description || 'Query and control smart home devices through Home Assistant',
-              inputSchema: toolDef ? this.createInputSchemaForDefaultTool(toolDef) : undefined,
-            });
-            allTools.push(smartHomeTool);
-          }
-        } else {
-          logger.warn(`No MCP client available for ${magiName}:${config.name}`);
-        }
-        continue;
-      }
-
-      try {
-        const response = await client.listTools();
-        const myTools = getToolAssigmentsForAllMagi()[magiName];
-        
-        // Create mapping from MCP tool names to friendly names
-        const mcpToFriendlyMap: Record<string, string> = {};
-        for (const [friendlyName, mcpName] of Object.entries(MCP_TOOL_MAPPING)) {
-          mcpToFriendlyMap[mcpName] = friendlyName;
-        }
-        // Add direct mappings for tools that don't need name conversion
-        mcpToFriendlyMap['access-data'] = 'access-data';
-        
-        const tools = response.tools
-        .filter((tool: Tool) => {
-          // Special handling for Home Assistant server - all tools map to 'smart-home-devices'
-          if (config.name === 'home-assistant' && myTools.includes('smart-home-devices')) {
-            return true;
-          }
-          
-          // Check if this MCP tool has a friendly name that's assigned to this Magi
-          const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
-          return myTools.includes(friendlyName);
-        })
-        .map((tool: Tool) => {
-          // Special handling for Home Assistant server - all tools become 'smart-home-devices'
-          if (config.name === 'home-assistant') {
-            return new MagiTool({
-              name: 'smart-home-devices',
-              description: 'Query and control smart home devices through Home Assistant',
-              inputSchema: tool.inputSchema,
-            });
-          }
-          
-          // Use the friendly name instead of the MCP name
-          const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
-          return new MagiTool({
-            name: friendlyName,
-            description: tool.description,
-            inputSchema: tool.inputSchema,
-          });
-        });
-        
-        // For Home Assistant, deduplicate tools since they all map to 'smart-home-devices'
-        if (config.name === 'home-assistant' && tools.length > 0) {
-          // Use our defined schema from the tool registry instead of HA's schema
-          const toolDef = TOOL_REGISTRY['smart-home-devices'];
-          const smartHomeTool = new MagiTool({
-            name: 'smart-home-devices',
-            description: toolDef?.description || 'Query and control smart home devices through Home Assistant',
-            inputSchema: toolDef ? this.createInputSchemaForDefaultTool(toolDef) : undefined,
-          });
-          allTools.push(smartHomeTool);
-        } else {
-          allTools.push(...tools);
-        }
-      } catch (error) {
-        logger.error(`Failed to list tools for ${magiName}:${config.name}: ${error}`);
-      }
+      const configTools = await this.getToolsForConfig(magiName, config);
+      allTools.push(...configTools);
     }
     
-    // Add DEFAULT_AGENTIC_TOOL tools that don't require MCP servers
+    const defaultTools = this.getDefaultAgenticTools(magiName);
+    allTools.push(...defaultTools);
+    
+    return allTools;
+  }
+
+  private async getToolsForConfig(magiName: MagiName, config: any): Promise<MagiTool[]> {
+    const serverKey = `${magiName}:${config.name}`;
+    const client = this.clients.get(serverKey);
+    
+    if (!client) {
+      return this.handleMissingClient(magiName, config);
+    }
+
+    try {
+      const response = await client.listTools();
+      return this.processClientTools(magiName, config, response.tools);
+    } catch (error) {
+      logger.error(`Failed to list tools for ${magiName}:${config.name}: ${error}`);
+      return [];
+    }
+  }
+
+  private handleMissingClient(magiName: MagiName, config: any): MagiTool[] {
+    if (testHooks.isEnabled() && config.name === 'home-assistant' && magiName === MagiName.Caspar) {
+      const myTools = getToolAssigmentsForAllMagi()[magiName];
+      if (myTools.includes('smart-home-devices')) {
+        logger.debug(`Test mode: Adding smart-home-devices tool for ${magiName} without MCP connection`);
+        return [this.createSmartHomeTool()];
+      }
+    } else {
+      logger.warn(`No MCP client available for ${magiName}:${config.name}`);
+    }
+    return [];
+  }
+
+  private processClientTools(magiName: MagiName, config: any, tools: Tool[]): MagiTool[] {
     const myTools = getToolAssigmentsForAllMagi()[magiName];
-    const defaultAgenticTools = myTools
+    const mcpToFriendlyMap = this.createMcpToFriendlyMap();
+    
+    const filteredTools = this.filterToolsForMagi(tools, config, myTools, mcpToFriendlyMap);
+    const mappedTools = this.mapToolsToMagiTools(filteredTools, config, mcpToFriendlyMap);
+    
+    return this.handleHomeAssistantDeduplication(config, mappedTools);
+  }
+
+  private createMcpToFriendlyMap(): Record<string, string> {
+    const mcpToFriendlyMap: Record<string, string> = {};
+    for (const [friendlyName, mcpName] of Object.entries(MCP_TOOL_MAPPING)) {
+      mcpToFriendlyMap[mcpName] = friendlyName;
+    }
+    mcpToFriendlyMap['access-data'] = 'access-data';
+    return mcpToFriendlyMap;
+  }
+
+  private filterToolsForMagi(tools: Tool[], config: any, myTools: string[], mcpToFriendlyMap: Record<string, string>): Tool[] {
+    return tools.filter((tool: Tool) => {
+      if (config.name === 'home-assistant' && myTools.includes('smart-home-devices')) {
+        return true;
+      }
+      const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
+      return myTools.includes(friendlyName);
+    });
+  }
+
+  private mapToolsToMagiTools(tools: Tool[], config: any, mcpToFriendlyMap: Record<string, string>): MagiTool[] {
+    return tools.map((tool: Tool) => {
+      if (config.name === 'home-assistant') {
+        return new MagiTool({
+          name: 'smart-home-devices',
+          description: 'Query and control smart home devices through Home Assistant',
+          inputSchema: tool.inputSchema,
+        });
+      }
+      
+      const friendlyName = mcpToFriendlyMap[tool.name] || tool.name;
+      return new MagiTool({
+        name: friendlyName,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+      });
+    });
+  }
+
+  private handleHomeAssistantDeduplication(config: any, tools: MagiTool[]): MagiTool[] {
+    if (config.name === 'home-assistant' && tools.length > 0) {
+      return [this.createSmartHomeTool()];
+    }
+    return tools;
+  }
+
+  private createSmartHomeTool(): MagiTool {
+    const toolDef = TOOL_REGISTRY['smart-home-devices'];
+    return new MagiTool({
+      name: 'smart-home-devices',
+      description: toolDef?.description || 'Query and control smart home devices through Home Assistant',
+      inputSchema: toolDef ? this.createInputSchemaForDefaultTool(toolDef) : undefined,
+    });
+  }
+
+  private getDefaultAgenticTools(magiName: MagiName): MagiTool[] {
+    const myTools = getToolAssigmentsForAllMagi()[magiName];
+    return myTools
       .map(toolName => TOOL_REGISTRY[toolName])
       .filter(toolDef => toolDef?.category === 'default_agentic_tool')
       .map(toolDef => new MagiTool({
@@ -436,10 +456,6 @@ export class McpClientManager {
         description: toolDef.description,
         inputSchema: this.createInputSchemaForDefaultTool(toolDef),
       }));
-    
-    allTools.push(...defaultAgenticTools);
-    
-    return allTools;
   }
 
   /**

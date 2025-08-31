@@ -2,7 +2,7 @@ import { setup, assign, fromPromise } from 'xstate';
 import { logger } from '../logger';
 import type { ConduitClient } from './conduit-client';
 import { agentMachine } from './agent-machine';
-import { MagiName } from '../types/magi-types';
+import type { MagiName } from '../types/magi-types';
 import type { PlannerContext, PlannerEvent } from './types';
 
 // Constants
@@ -18,6 +18,7 @@ import type { MagiTool } from '../mcp';
 
 interface PlannerInput {
   message: string;
+  sender: string;
   magiName: MagiName;
   conduitClient: ConduitClient;
   toolUser: ToolUser;
@@ -31,30 +32,28 @@ interface CreatePlanInput {
   magiName: MagiName;
 }
 
-
 interface FinalizePlanInput {
   strategicPlan: string[];
 }
-
 
 // ============================================================================
 // ASYNC ACTIONS
 // ============================================================================
 
 /**
- * Creates a strategic plan from user message using LLM
+ * Creates a strategic plan from message using LLM
  */
 const createStrategicPlan = fromPromise<string[], CreatePlanInput>(async ({ input }) => {
   const { message, conduitClient, magiName } = input;
   
-  const systemPrompt = `PERSONA\nYour name is ${magiName}. You are a literal and direct task-planning engine. Your purpose is to create a sequence of computational or data-retrieval actions. You do not provide advice, warnings, or conversational filler. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the user's message.`;
+  const systemPrompt = `PERSONA\nYour name is ${magiName}. You are a literal and direct task-planning engine. Your purpose is to create a sequence of computational or data-retrieval actions. You do not provide advice, warnings, or conversational filler. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the sender's message.`;
   
-  const userPrompt = `INSTRUCTIONS:
-1. Create a plan that can be expressed as a sequence of high level goals for how to address the user's message.
-2. If the user's request is simple, a single goal may be sufficient.
+  const prompt = `INSTRUCTIONS:
+1. Create a plan that can be expressed as a sequence of high level goals for how to address the incoming message.
+2. If the request is simple, a single goal may be sufficient.
 3. Each goal should express ONLY ONE action that you can take.
 4. Do not over-complicate things.
-5. A plan can have at most ONE goal that communicates with the user, and it must be the absolute final goal.
+5. A plan can have at most ONE goal that communicates with the message sender, and it must be the absolute final goal.
 
 EXAMPLE 1:
 message: "Tell me a joke"
@@ -68,31 +67,30 @@ ${PERSONAS_CONFIG[magiName].strategicPlanExamples}
 
 EXAMPLE 6:
 message: "Write a short story about a robot who discovers music."
-{"plan": ["Generate a short story with the requested theme", "Review and edit story to make sure it matches user's requirements", "Respond with the story"]}
+{"plan": ["Generate a short story with the requested theme", "Review and edit story to make sure it matches sender's requirements", "Respond with the story"]}
 
 EXAMPLE 7:
 message: "Remind me to take out the trash."
-{"plan": ["Ask user what day and time they would like the reminder"]}
+{"plan": ["Ask sender what day and time they would like the reminder"]}
 
 EXAMPLE 8:
 message: "Help me plan my vacation."
-{"plan": ["Ask user for key vacation parameters like destination ideas, budget, travel dates, and who they are traveling with"]}
+{"plan": ["Ask sender for key vacation parameters like destination ideas, budget, travel dates, and who they are traveling with"]}
 
-USER MESSAGE:\n"${message}"
+MESSAGE:\n"${message}"
 
 YOUR FORMAT:
 {"plan": ["goal1", "goal2", "goal3", ...]}`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
-    const response = await conduitClient.contactForJSON(userPrompt, systemPrompt, model, { temperature: 0.3 });
-    return response.plan ?? [`Address the user's message: ${message}`];
+    const response = await conduitClient.contactForJSON(prompt, systemPrompt, model, { temperature: 0.3 });
+    return response.plan ?? [`Address the sender's message: ${message}`];
   } catch (error) {
     logger.warn(`${magiName} failed to create strategic plan, using fallback:`, error);
-    return [`Address the user's message: ${message}`];
+    return [`Address the sender's message: ${message}`];
   }
 });
-
 
 /**
  * Finalizes the plan without memory concerns
@@ -101,7 +99,6 @@ const finalizePlan = fromPromise<string[], FinalizePlanInput>(async ({ input }) 
   // Plan finalization no longer handles memory - just returns the plan as-is
   return input.strategicPlan;
 });
-
 
 // ============================================================================
 // GUARDS
@@ -114,7 +111,7 @@ const isPlannerContextValid = ({ context }: { context: PlannerContext }): boolea
   const errors: string[] = [];
 
   if (!context.message?.trim()) {
-    errors.push('Missing user message');
+    errors.push('Missing message');
   }
 
   if (!context.magiName) {
@@ -160,11 +157,9 @@ export const shouldTerminateEarly = ({ context }: { context: PlannerContext }): 
   return context.lastExecutedTool !== null && context.lastExecutedTool === 'communicate';
 };
 
-
 // ============================================================================
 // PLANNER MACHINE
 // ============================================================================
-
 export const plannerMachine = setup({
   types: {
     context: {} as PlannerContext,
@@ -181,6 +176,7 @@ export const plannerMachine = setup({
   initial: 'validateContext',
   context: ({ input }) => ({
     message: input.message,
+    sender: input.sender,
     strategicPlan: [],
     currentStepIndex: 0,
     currentGoal: '',
@@ -308,6 +304,7 @@ export const plannerMachine = setup({
           
           return {
             message: context.message,
+            sender: context.sender,
             strategicGoal: context.currentGoal,
             magiName: context.magiName,
             conduitClient: context.conduitClient,
@@ -344,7 +341,6 @@ export const plannerMachine = setup({
       },
     },
     
-
     evaluatingProgress: {
       always: [
         {

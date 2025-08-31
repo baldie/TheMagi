@@ -53,13 +53,16 @@ export class LongTermMemory {
   public async getRelevantContext(currentTopic: string): Promise<string> {
     try {
       const memory = await this.loadMemory();
+      if (memory.facts.length === 0 && memory.preferences.length === 0 && memory.context.length === 0 && memory.outcomes.length === 0) {
+        return ''; // no memory to provide
+      }
       
       const systemPrompt = `PERSONA
-You are an expert memory analyst for ${this.magi.name}. Your task is to extract and return only the most relevant information from the user's long-term memory that pertains to the current topic.`;
+You are ${this.magi.name}. Your task is to extract and return only the most relevant information from the your long-term memory that pertains to the current topic.`;
 
       const summarizeRelevantContextPrompt = `CURRENT TOPIC: "${currentTopic}"
 
-USER'S LONG-TERM MEMORY:
+LONG-TERM MEMORY:
 Facts: ${JSON.stringify(memory.facts)}
 Preferences: ${JSON.stringify(memory.preferences)}  
 Past Outcomes: ${JSON.stringify(memory.outcomes)}

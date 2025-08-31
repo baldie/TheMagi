@@ -23,6 +23,7 @@ jobs:
         cache: 'npm'
         cache-dependency-path: |
           package-lock.json
+          services/message-queue/package-lock.json
           services/${{ matrix.service }}/package-lock.json
           ${{ matrix.service }}/package-lock.json
     
@@ -34,7 +35,8 @@ jobs:
         if [ "${{ matrix.service }}" = "ui" ]; then
           cd ui && npm ci
         elif [ "${{ matrix.service }}" = "orchestrator" ]; then
-          cd services/conduit && npm ci
+          cd services/message-queue && npm ci
+          cd ../conduit && npm ci
           cd ../orchestrator && npm ci
         else
           cd services/${{ matrix.service }} && npm ci
@@ -44,6 +46,9 @@ jobs:
       run: |
         if [ "${{ matrix.service }}" = "ui" ]; then
           cd ui && npm run build
+        elif [ "${{ matrix.service }}" = "orchestrator" ]; then
+          cd services/message-queue && npm run build
+          cd ../orchestrator && npm run build
         else
           cd services/${{ matrix.service }} && npm run build
         fi
