@@ -46,7 +46,7 @@ interface FinalizePlanInput {
 const createStrategicPlan = fromPromise<string[], CreatePlanInput>(async ({ input }) => {
   const { message, conduitClient, magiName } = input;
   
-  const systemPrompt = `PERSONA\nYour name is ${magiName}. You are a literal and direct task-planning engine. Your purpose is to create a sequence of computational or data-retrieval actions. You do not provide advice, warnings, or conversational filler. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions}Consider how you will respond to the sender's message.`;
+  const systemPrompt = `PERSONA:\nYour name is ${magiName}. You are a literal and direct task-planning engine. Your purpose is to create a sequence of computational or data-retrieval actions. You do not provide advice, warnings, or conversational filler. ${PERSONAS_CONFIG[magiName].strategicPersonaInstructions} Consider how you will respond to the sender's message.`;
   
   const prompt = `INSTRUCTIONS:
 1. Create a plan that can be expressed as a sequence of high level goals for how to address the incoming message.

@@ -162,7 +162,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
 
   'smart-home-devices': {
     name: 'smart-home-devices', 
-    description: 'Query and control smart home devices through Home Assistant.',
+    description: 'Provides access smart home devices like the pantry, cameras, climate controls, etc.',
     category: ToolCategory.SMART_HOME,
     defaults: {
       action: 'query'
@@ -171,7 +171,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     parameters: {
       action: {
         type: 'string',
-        description: 'Action to perform on smart home devices',
+        description: 'General actions to perform on smart home devices. Use "control" to send commands to a specific entity.',
         enum: ['query', 'control', 'list_devices', 'get_state'],
         required: true,
         default: 'query'
@@ -184,13 +184,13 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       },
       entity_id: {
         type: 'string',
-        description: 'Specific Home Assistant entity ID (e.g., "zhimi.fan.za5")',
+        description: 'Specific smart home device entity ID (e.g., "zhimi.fan.za5")',
         required: false
       },
       command: {
         type: 'string',
-        description: 'Command to send to the device (e.g., "turn_on", "turn_off", "set_speed")',
-        enum: ['turn_on', 'turn_off', 'toggle', 'set_speed', 'set_brightness'],
+        description: 'Commands to send to a specific device (e.g., "turn_on", "turn_off", "set_speed")',
+        enum: ['turn_on', 'turn_off', 'search', 'toggle', 'set_speed', 'set_brightness'],
         required: false
       },
       attributes: {

@@ -67,7 +67,7 @@ Message: ${memory.message}
 `
     ).join('\n');
 
-    const systemPrompt = `PERSONA\nYou are an expert at analyzing conversational flow. Your task is to identify the precise subject of the speaker's latest message in the context of the preceding discussion.`;
+    const systemPrompt = `PERSONA:\nYou are an expert at analyzing conversational flow. Your task is to identify the precise subject of the speaker's latest message in the context of the preceding discussion.`;
     const topicDetectionPrompt = `${memoryText}
 Speaker: ${speaker}
 Message: ${message}

@@ -86,7 +86,7 @@ export const gatherContext = fromPromise<string, GatherContextInput>(async ({ in
     return message;
   }
   
-  const systemPrompt = `You are a data extraction robot. Your only function is consider the MESSAGE and to extract data from the GIVEN TEXT that is relevant to the NEXT STRATEGIC GOAL. You do not analyze, interpret, or suggest actions.`;
+  const systemPrompt = `PERSONA:\nYou are a data extraction robot. Your only function is consider the MESSAGE and to extract data from the GIVEN TEXT that is relevant to the NEXT STRATEGIC GOAL. You do not analyze, interpret, or suggest actions.`;
   
   const userPrompt = `MESSAGE:\n"${message}"\n
 
@@ -97,9 +97,10 @@ ${completedSubGoals.length > 0 ? `\nCOMPLETED SUB-GOALS:\n${completedSubGoals.jo
 INSTRUCTIONS:
 Provide ALL the available information needed to ${strategicGoal}
 If the next step is to process an item from a list, your response should be to first select the right item from the list.
+From the GIVEN TEXT, extract only the result of the most recent Strategic Goal. Ignore the MESSAGE.
 
 OUTPUT:
-Do not interpret or summarize any of the content. Only respond with the information in complete sentences.`;
+Do not interpret or summarize any of the content. Only respond with the information VERBATIM in complete sentences.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -136,7 +137,8 @@ What should they do to accomplish their Strategic Goal? This could be:
 * Identifying the first sub-step if their Strategic Goal requires breakdown
 * The next logical step if progress has been made but the goal isn't complete
 * Start your output with one of these words: ${COMMON_ACTIONS.join(', ')}
-Output ONLY the specific action command that should be executed next - No preamble and No examples.`;
+* IMPORTANT: Reply in a full sentence
+No preamble and No examples.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -158,7 +160,7 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
 
   logger.debug(`${magiName} selecting tool for sub-goal: ${task}`);
   
-  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Next Action'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
+  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Tool'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
@@ -166,11 +168,10 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
 Message:\n${message}\n\nMessage Sender:\n${sender}\n${workingMemory.trim() !== message ? `\n\nInput for Tool:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
-Pick the tool that will allow you to '${task}.'
-Use the data gathered so far as parameters for the tool.
-Respond ONLY with the complete JSON.
+Pick the single best tool that will allow you to '${task}.'
+Extract the required parameters directly from the 'Input for Tool' text. Do not ask the user for this information if it is present.
 
-Format:
+Respond ONLY with the complete JSON:
 {
   "tool": {
     "name": "tool_name",

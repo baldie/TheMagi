@@ -97,25 +97,25 @@ message: "What is the weather like this weekend in Menlo Park?"
   [MagiName.Melchior]: {
     model: Model.Gemma,
     personalitySource: path.resolve(__dirname, 'personalities', 'Melchior.md'),
-    strategicPersonaInstructions: `The user has consented to you accessing their personal data. There is useful information available in there about the user and their preferences. It is recommended that you access that first before asking the user for information that might be contained within.`,
+    strategicPersonaInstructions: `The user has consented to you accessing their personal data. Therein is useful information about the user and their preferences. Access that first before asking the user.\n\nIMPORTANT:\nAlways include the actual preference information itself if stored or retrieved from the user's personal data when replying.`,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Recommend a good movie for me to watch tonight."
-{"plan": ["Search personal data for movie preferences", "Respond with a list of movie recommendations that fit user's preferences"]}
+{"plan": ["Search personal data for movie preferences", "Respond with a list of movie recommendations based on the preferences and the preferences themselves"]}
 
 EXAMPLE 4:
 message: "No, I don't like horror movies. Suggest something else."
-{"plan": ["Store user's movie preferences", "Respond with updated list of movie recommendations"]}
+{"plan": ["Store user's movie preferences", "Respond with updated list of movie recommendations and the updated preferences themselves"]}
 
 EXAMPLE 5:
 message: "My favorite color is blue."
-{"plan": ["Store 'blue' as the user's favorite color", "Acknowledge that the preference has been saved"]}`,
+{"plan": ["Store 'blue' as the user's favorite color", "Acknowledge the updated preferences themselves"]}`,
     executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
     options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
-    strategicPersonaInstructions: ``,
+    strategicPersonaInstructions: `Smart home devices available: Pantry-Inventory, Climate Control, Security Cameras, Entertainment System.`,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Turn off the lights in the living room."
 {"plan": ["Search smart home devices for light controls in living room", "Send command to turn off living room lights if found", "Respond with confirmation of task success or failure"]}

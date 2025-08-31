@@ -415,7 +415,6 @@ export class ToolUser {
         // Summarize the data we received back in human readable form
         logger.debug(`Raw access-data retrieved: ${toolOutput}`);
         const summarize = `You have just completed the following task:\n${toolOutput}\n\nNow, concisely summarize the action and result(s) in plain language. When referring to ${this.magi.name}, speak in the first person and only provide the summary.`;
-        logger.debug(`Summary prompt:\n${summarize}`);
         processedOutput = await this.magi.contactSimple(summarize);
         break;
       }
