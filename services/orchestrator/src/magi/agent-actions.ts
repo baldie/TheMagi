@@ -158,6 +158,8 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
   // inject the sender, to make it easier for the magi to populate the communicate tool's parameters correctly.
   const task = subGoal.startsWith('Respond') ? subGoal.replace('Respond', `Respond to ${sender}`) : subGoal;
 
+  const selectToolInstructions = PERSONAS_CONFIG[magiName].selectToolInstructions || '';
+
   logger.debug(`${magiName} selecting tool for sub-goal: ${task}`);
   
   const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Tool'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
@@ -169,7 +171,7 @@ Message:\n${message}\n\nMessage Sender:\n${sender}\n${workingMemory.trim() !== m
 Available tools:\n${toolList}\n
 Instructions:
 Pick the single best tool that will allow you to '${task}.'
-Extract the required parameters directly from the 'Input for Tool' text. Do not ask the user for this information if it is present.
+Extract the required parameters directly from the 'Input for Tool' text. Do not ask the user for this information if it is present.${selectToolInstructions}
 
 Respond ONLY with the complete JSON:
 {

@@ -63,7 +63,7 @@ interface MagiConfig {
   personalitySource: string;
   strategicPersonaInstructions: string;
   strategicPlanExamples: string;
-  executeGoalPrompt: string;
+  selectToolInstructions: string;
   options: {
     temperature: number;
   };
@@ -91,7 +91,7 @@ message: "What should I make for dinner?"
 EXAMPLE 5:
 message: "What is the weather like this weekend in Menlo Park?"
 {"plan": ["Search web for sites related to weather forecast in Menlo Park", "Extract content from most relevant search result URL", "Respond with the answer"]}`,
-    executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Balthazar`,
+    selectToolInstructions: ``,
     options: { temperature: 0.4 },
   },
   [MagiName.Melchior]: {
@@ -109,25 +109,25 @@ message: "No, I don't like horror movies. Suggest something else."
 EXAMPLE 5:
 message: "My favorite color is blue."
 {"plan": ["Store 'blue' as the user's favorite color", "Acknowledge the updated preferences themselves"]}`,
-    executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Melchior`,
+    selectToolInstructions: ``,
     options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
     model: Model.Qwen,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
-    strategicPersonaInstructions: `Smart home devices available: Pantry-Inventory, Climate Control, Security Cameras, Entertainment System.`,
+    strategicPersonaInstructions: `Smart home devices available: Pantry-Inventory, Climate Control, Security Cameras, Entertainment System. Include the source of any information you retrieve from smart home devices in your response.`,
     strategicPlanExamples: `EXAMPLE 3:
 message: "Turn off the lights in the living room."
 {"plan": ["Search smart home devices for light controls in living room", "Send command to turn off living room lights if found", "Respond with confirmation of task success or failure"]}
 
 EXAMPLE 4:
 message: "Are my car windows down?"
-{"plan": ["Search smart home devices for webcams", "Check each webcam for images of cars", "If cars found, respond with window status otherwise respond that no cars were found"]}
+{"plan": ["Search smart home devices for security cameras", "Check each security camera for images of cars", "If cars found, respond with window status based on security cam results otherwise respond that no cars were found"]}
 
 EXAMPLE 5:
 message: "Play my favorite playlist"
 {"plan": ["Search smart home devices for smart speakers", "Send command to play favorite songs playlist", "Respond with confirmation that playlist is playing"]}`,
-    executeGoalPrompt: `[PLACEHOLDER] Goal execution prompt for Caspar`,
+    selectToolInstructions: `\n\nIMPORTANT:\nAlways include the source of the "Input for Tool" data in the message if using the communication tool. e.g.: "...based on what is available in the pantry"`,
     options: { temperature: 0.5 },
   },
 };

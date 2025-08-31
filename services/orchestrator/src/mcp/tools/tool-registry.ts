@@ -241,7 +241,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   // Default agentic tools
   'communicate': {
     name: 'communicate',
-    description: 'Allows you to respond to Magi, Caspar, Balthazar, or Melchior. Choose this if you need to respond with anything.',
+    description: 'Allows you to respond to System, Caspar, Balthazar, or Melchior. Choose this if you need to respond with anything.',
     category: ToolCategory.DEFAULT_AGENTIC_TOOL,
     defaults: { recipient: 'User' },
     responseType: 'TextResponse',
