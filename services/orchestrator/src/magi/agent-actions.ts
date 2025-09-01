@@ -125,7 +125,7 @@ export const determineNextTacticalGoal = fromPromise<string, DetermineNextTactic
   const noContextYet = workingMemory === message;
   logger.debug(`${magiName} determining next tactical goal for:\n${strategicGoal}`);
 
-  const systemPrompt = `Your name is ${magiName}. You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content.`;
+  const systemPrompt = `Your name is ${magiName}. You are a pragmatic planning director. You identify the single next actionable step that someone else needs to undertake in order to achieve their strategic goal. You are forbidden from interpreting, analyzing, or adding any strategic value to the content. Be sure to answer in a complete sentence.`;
 
   const userPrompt = `Their Strategic Goal:\n${strategicGoal}\n
 Context:\n${workingMemory.trim()}\n
@@ -137,8 +137,7 @@ What should they do to accomplish their Strategic Goal? This could be:
 * Identifying the first sub-step if their Strategic Goal requires breakdown
 * The next logical step if progress has been made but the goal isn't complete
 * Start your output with one of these words: ${COMMON_ACTIONS.join(', ')}
-* IMPORTANT: Reply in a full sentence
-No preamble and No examples.`;
+* IMPORTANT: Reply in a full sentence without preamble.`;
 
   try {
     const { model } = PERSONAS_CONFIG[magiName];
@@ -162,7 +161,7 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
 
   logger.debug(`${magiName} selecting tool for sub-goal: ${task}`);
   
-  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to perform the 'Action to Perform' and populate its parameters using only the data from the 'Input for Tool'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
+  const systemPrompt = `Persona:\nYour name is ${magiName}. You are a literal tool-use robot. Your only function is to select a tool to ${task} and populate its parameters using only the data from the 'Input for Tool'. You do not analyze, calculate, or modify the input data. Important: If the action starts with "Respond", choose the communication tool.`;
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
@@ -311,8 +310,8 @@ export const processOutput = fromPromise<string, ProcessOutputInput>(async ({ in
     default:
       try {
         // General processing for other tools
-        const defaultSystemPrompt = `You are an output processor. Clean and organize tool output to be clear and actionable.`;
-        const defaultUserPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nProcess this output to be clear, concise, and directly relevant to the sub-goal. Remove unnecessary details but preserve important information as it relates to the sub-goal.`;
+        const defaultSystemPrompt = `You are an output processor. Clean and organize tool output to be clear and relevant.`;
+        const defaultUserPrompt = `Sub-goal:\n${currentSubGoal}\n\nTool Output:\n${toolOutput}\n\nReformat this output into a bulleted list of information only if it is relevant to the Sub-goal. Don't strip out important details like IDs. Do not include any preamble or meta-comments on this task.`;
 
         const { model } = PERSONAS_CONFIG[magiName];
         processedOutput = await conduitClient.contact(defaultUserPrompt, defaultSystemPrompt, model, { temperature: 0.1 });

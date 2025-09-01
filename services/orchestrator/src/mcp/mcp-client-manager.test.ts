@@ -34,9 +34,9 @@ jest.mock('../logger', () => ({
 jest.mock('../config', () => ({
   MAGI_CONDUIT_API_BASE_URL: 'http://localhost:11434',
   Model: {
-    Qwen: 'qwen2.5:7b',
+    Llama: 'llama3.2-vision:11b-instruct-q8_0',
     Gemma: 'gemma2:9b',
-    Llama: 'llama3.2:3b'
+    Mistral: 'mistral:7b-instruct'
   }
 }));
 

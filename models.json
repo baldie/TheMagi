@@ -9,7 +9,7 @@
       "magi": "Melchior"
     },
     {
-      "name": "qwen2.5vl:7b",
+      "name": "llama3.2-vision:11b-instruct-q8_0",
       "magi": "Caspar"
     }
   ],

@@ -113,7 +113,7 @@ message: "My favorite color is blue."
     options: { temperature: 0.6 },
   },
   [MagiName.Caspar]: {
-    model: Model.Qwen,
+    model: Model.Llama,
     personalitySource: path.resolve(__dirname, 'personalities', 'Caspar.md'),
     strategicPersonaInstructions: `Smart home devices available: Pantry-Inventory, Climate Control, Security Cameras, Entertainment System. Include the source of any information you retrieve from smart home devices in your response.`,
     strategicPlanExamples: `EXAMPLE 3:

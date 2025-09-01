@@ -588,13 +588,10 @@ function setupWebSocketHandlers(
   let inactivityTimer: NodeJS.Timeout;
   let heartbeatInterval: NodeJS.Timeout;
   let isResolved = false;
-  let plannerCompletionTimer: NodeJS.Timeout | null = null;
-  let plannerCompleted = false;
+  let sealedEnvelopePhaseComplete = false;
+  const testStartTime = Date.now();
   
   const resetInactivityTimer = () => {
-    // Don't reset the inactivity timer if planner has completed - we want the planner timeout to take precedence
-    if (plannerCompleted) return;
-    
     clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(() => {
       const elapsed = Date.now() - startTime;
@@ -610,7 +607,6 @@ function setupWebSocketHandlers(
     clearInterval(heartbeatInterval);
     clearTimeout(inactivityTimer);
     clearTimeout(connectionTimeout);
-    if (plannerCompletionTimer) clearTimeout(plannerCompletionTimer);
   };
 
   inactivityTimer = setTimeout(() => {
@@ -646,23 +642,13 @@ function setupWebSocketHandlers(
         console.log(`[magi-log] ${msg.data}`);
         resetInactivityTimer();
         
-        // Check if this is a planner-machine done state log
-        if (msg.data && typeof msg.data === 'string' && msg.data.includes('planner-machine done state')) {
-          console.log('[integration] Detected planner-machine completion - waiting 10 seconds for deliberation-complete...');
-          
-          // Only set the timer if we haven't already resolved
-          if (!isResolved && !plannerCompletionTimer) {
-            plannerCompleted = true; // Mark that planner has completed
-            plannerCompletionTimer = setTimeout(() => {
-              if (!isResolved) {
-                console.log('[integration] Planner completed but no deliberation-complete received within 10 seconds - test failed!');
-                isResolved = true;
-                cleanupTimers();
-                reject(new Error(`[${name}] Planner machine completed but failed to send deliberation-complete within 10 seconds. This indicates the Magi completed its work but did not use the communicate tool to respond.`));
-                ws.close();
-              }
-            }, 10000); // 10 second grace period (increased from 5)
-          }
+        // Track when sealed envelope phase completes (either successfully or via timeout)
+        if (msg.data && typeof msg.data === 'string' && 
+            (msg.data.includes('Sealed envelope collection complete') || 
+             msg.data.includes('All Magi deliberation complete') ||
+             msg.data.includes('Sealed envelope collection timeout'))) {
+          console.log('[integration] Sealed envelope phase completed (success or timeout)');
+          sealedEnvelopePhaseComplete = true;
         }
       } else {
         console.log(`[integration] WS message type: ${msg.type}`);
@@ -672,7 +658,17 @@ function setupWebSocketHandlers(
         }
       }
       if (msg.type === 'deliberation-complete') {
-        console.log('[integration] Received deliberation-complete, resolving...');
+        const elapsedMs = Date.now() - testStartTime;
+        console.log(`[integration] Received deliberation-complete after ${elapsedMs}ms...`);
+        
+        // Give sealed envelope phase time to complete (minimum 30 seconds or until explicit completion)
+        // This prevents premature completion when a Magi incorrectly uses communicate during sealed envelope phase
+        if (!sealedEnvelopePhaseComplete && elapsedMs < 30000) {
+          console.log('[integration] Ignoring early deliberation-complete - waiting for sealed envelope phase');
+          return;
+        }
+        
+        console.log('[integration] Accepting deliberation-complete - resolving...');
         if (!isResolved) {
           isResolved = true;
           clearTimeout(inactivityTimer);

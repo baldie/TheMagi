@@ -35,7 +35,7 @@ interface ModelsConfigFile {
 export const Model = {
   Mistral: modelsConfig.models.find(m => m.magi === 'Balthazar')!.name,
   Gemma: modelsConfig.models.find(m => m.magi === 'Melchior')!.name,
-  Qwen: modelsConfig.models.find(m => m.magi === 'Caspar')!.name,
+  Llama: modelsConfig.models.find(m => m.magi === 'Caspar')!.name,
 } as const;
 
 /** Type for model values */

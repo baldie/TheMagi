@@ -202,45 +202,6 @@ export class MessageSubscriptionManager {
     logger.debug('[WebSocket] Removed user subscription');
   }
 
-  /**
-   * Collect responses from all 3 Magi for sealed envelope phase sequentially
-   */
-  async collectSealedEnvelopeResponses(timeoutMs: number = 30000): Promise<{balthazar: string, melchior: string, caspar: string}> {
-    const messageQueue = await initializeMessageQueue();
-    
-    // Helper function to wait for a single response from a specific Magi
-    const waitForResponse = async (expectedSender: MagiName): Promise<string> => {
-      return new Promise<string>((resolve, reject) => {
-        const subscription = messageQueue.subscribe(MessageParticipant.System, async (message) => {
-          if (message.sender === expectedSender) {
-            subscription.unsubscribe();
-            resolve(message.content);
-          }
-        });
-        
-        setTimeout(() => {
-          subscription.unsubscribe();
-          reject(new Error(`Timeout waiting for ${expectedSender} response`));
-        }, timeoutMs);
-      });
-    };
-    
-    // Wait for each Magi's response in order
-    logger.info('Waiting for Balthazar response...');
-    const balthazarResponse = await waitForResponse(MagiName.Balthazar);
-    
-    logger.info('Waiting for Melchior response...');
-    const melchiorResponse = await waitForResponse(MagiName.Melchior);
-    
-    logger.info('Waiting for Caspar response...');
-    const casparResponse = await waitForResponse(MagiName.Caspar);
-    
-    return {
-      balthazar: balthazarResponse,
-      melchior: melchiorResponse,
-      caspar: casparResponse
-    };
-  }
 
   /**
    * Shutdown all subscriptions

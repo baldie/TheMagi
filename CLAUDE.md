@@ -8,7 +8,7 @@ More detail on the project can be found in the [project-context.md](project-cont
 
 The system follows a microservices architecture:
 
-1. **Orchestrator** (`services/orchestrator/`): Main service that coordinates deliberation between three AI personas using different models (Qwen2.5, Gemma, Llama3.2)
+1. **Orchestrator** (`services/orchestrator/`): Main service that coordinates deliberation between three AI personas using different models (Llama, Gemma, Mistral)
 2. **Conduit** (`services/conduit/`): Wrapper service around Ollama API for AI model communication
 3. **UI** (`ui/`): Angular 20 frontend that communicates via WebSocket to the orchestrator and displays status of the system visually to the user
 4. **TTS Service** (`services/tts/`): Python-based text-to-speech service
@@ -25,9 +25,9 @@ The system follows a microservices architecture:
 Communication between participants take place on via a message broker system backed by a vector database
 
 ### Magi Personas
-- **Caspar** (Gemma): primary voice for responses
-- **Melchior** (Qwen2.5): creative/intuitive perspective  
-- **Balthazar** (Llama3.2): logical/analytical perspective
+- **Caspar** (Llama): primary voice for responses
+- **Melchior** (Gemma): creative/intuitive perspective  
+- **Balthazar** (Mistral): logical/analytical perspective
 
 ### Communication Flow
 1. UI sends WebSocket message to Orchestrator (port 8080)

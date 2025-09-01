@@ -24,9 +24,9 @@ A personal, omnipresent Artificial Intelligence system, built to serve a human a
 
 The Magi personas and their associated AI models are configured in [`models.json`](models.json):
 
-* **Caspar** (Primary Voice) - Qwen Vision-Language model for comprehensive responses
+* **Caspar** (Primary Voice) - LLama Vision-Language model for comprehensive responses
 * **Melchior** (Creative/Intuitive) - Gemma model for nuanced understanding  
-* **Balthazar** (Logical/Analytical) - Llama model optimized for analytical reasoning
+* **Balthazar** (Logical/Analytical) - Mistral model optimized for analytical reasoning
 
 *Note: All model assignments and versions are centrally managed in `models.json` - this is the single source of truth for all AI model configurations across the system.*
 

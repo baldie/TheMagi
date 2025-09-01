@@ -1,8 +1,8 @@
 import { allMagi, type Magi2, MagiName } from './magi/magi2';
 import { logger } from './logger';
 import { MessageParticipant } from './types/magi-types';
-import { messageSubscriptionManager } from './magi/message-subscriptions';
 import { initializeMessageQueue, MessageType } from '../../message-queue/src';
+import { SealedEnvelopeCollector } from './magi/sealed-envelope-collector';
 
 /**
  * Retry a function with exponential backoff.
@@ -27,24 +27,24 @@ async function runSealedEnvelopePhase(message: string, _balthazar: any, _melchio
   logger.info('Phase 1: Beginning independent assessment for "sealed envelope".');
   
   const messageQueue = await initializeMessageQueue();
+  const collector = new SealedEnvelopeCollector();
 
-  // Publish the message to each Magi's queue sequentially for easier debugging
-  logger.info('Publishing message to Balthazar for sealed envelope assessment...');
-  await messageQueue.publish(MessageParticipant.System, MagiName.Balthazar, message, MessageType.REQUEST);
-  
-  logger.info('Publishing message to Melchior for sealed envelope assessment...');
-  await messageQueue.publish(MessageParticipant.System, MagiName.Melchior, message, MessageType.REQUEST);
-  
-  logger.info('Publishing message to Caspar for sealed envelope assessment...');
-  await messageQueue.publish(MessageParticipant.System, MagiName.Caspar, message, MessageType.REQUEST);
+  try {
+    // Step 1: Set up collection (subscriptions are created internally)
+    logger.debug('Setting up sealed envelope response collection...');
+    const collectionPromise = collector.collect(messageQueue, 200000);
 
-  // Collect responses from all 3 Magi
-  logger.info('Waiting for responses from all Magi...');
-  const responses = await retry(async () => 
-    messageSubscriptionManager.collectSealedEnvelopeResponses(30000)
-  );
+    // Step 2: Publish messages to all Magi sequentially    
+    await messageQueue.publish(MessageParticipant.System, MagiName.Balthazar, message, MessageType.REQUEST);
+    await messageQueue.publish(MessageParticipant.System, MagiName.Melchior, message, MessageType.REQUEST);  
+    await messageQueue.publish(MessageParticipant.System, MagiName.Caspar, message, MessageType.REQUEST);
 
-  const sealedEnvelope = `
+    // Step 3: Wait for all responses
+    logger.info('Waiting for all Magi to complete their sealed envelope assessments...');
+    const responses = await collectionPromise;
+
+    // Step 4: Format the sealed envelope
+    const sealedEnvelope = `
     
 --------------------------------------------------------------------------
 Balthazar's Independent assessment:
@@ -60,8 +60,16 @@ ${responses.caspar}
 --------------------------------------------------------------------------
 
   `;
-  logger.debug(`A peek into the sealed envelope ✉️:\n ${sealedEnvelope}`);
-  return sealedEnvelope;
+    
+    logger.info('Sealed envelope phase completed successfully');
+    logger.debug(`A peek into the sealed envelope ✉️:\n ${sealedEnvelope}`);
+    return sealedEnvelope;
+    
+  } catch (error) {
+    const status = collector.getStatus();
+    logger.error(`Sealed envelope phase failed: ${error}. Status: collected=[${status.collected.join(', ')}], missing=[${status.missing.join(', ')}]`);
+    throw error;
+  }
 }
 
 async function beginDeliberationsPhase(sealedEnvelope: string, balthazar: any, melchior: any, caspar: any): Promise<string> {
@@ -92,17 +100,13 @@ async function beginDeliberationsPhase(sealedEnvelope: string, balthazar: any, m
       
       const debatePrompt = `${currentMagi.name},
       Review the discussion transcript below.
-      Your task is to persuade the other 2 participants of your position
-      if you believe your argument is stronger, concede if their argument is stronger, or express
-      agreement if you are more or less aligned.
+      Your task is to persuade the other 2 participants of your position if you believe your argument is stronger, concede if their argument is stronger, or express agreement if you are more or less aligned.
 
-      Dsicussion Transcript:
-      --------------------------------
-      ${recentContext}
-      ${roundResponses}
-      --------------------------------
+      Discussion Transcript:
+      ${recentContext.replace(`${currentMagiName}'s`, 'Your')}
+      ${roundResponses.replace(`${currentMagiName}'s`, 'Your')}
 
-      What is your response? Be very concise.
+      What is your response? Be very concise but include your justification.
       `;
       
       const response = await retry(async () => currentMagi.contactWithMemory(MessageParticipant.System, debatePrompt));
@@ -129,9 +133,7 @@ async function beginDeliberationsPhase(sealedEnvelope: string, balthazar: any, m
 
       If there are fundamental disagreements still, respond ONLY with the word "IMPASSE".
       Otherwise, respond with the final, agreed-upon recommendation/answer summarized so that it directly answers the User's Message.
-      It is very important that you concise in your summary.
-      Use as few words as possible to convey the outcome.
-      `;
+      It is very important that you be concise in your summary but include justification.`;
     const consensusResult = await retry(async () => caspar.contactSimple(consensusCheckPrompt, systemPrompt));
 
     if (consensusResult.trim().toUpperCase() !== 'IMPASSE') {

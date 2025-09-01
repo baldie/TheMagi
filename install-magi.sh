@@ -520,7 +520,7 @@ echo "  - Model cleanup complete. Final model list:"
 $OLLAMA_BIN list 2>/dev/null
 
 # Test GPU functionality if models are available
-if echo "$AVAILABLE_MODELS" | grep -q "llama3.2:3b-instruct-q8_0\|qwen2.5vl:7b\|gemma3:4b-it-fp16"; then
+if echo "$AVAILABLE_MODELS" | grep -q "mistral:7b-instruct\|llama3.2-vision:11b-instruct-q8_0\|gemma3:4b-it-fp16"; then
     echo "  - Testing GPU acceleration..."
     
     # Get a quick test to see if GPU is being used

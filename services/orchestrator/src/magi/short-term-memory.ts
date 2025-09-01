@@ -6,6 +6,11 @@ interface MemoryMagiLike {
   contactSimple(message: string, systemPrompt?: string): Promise<string>;
 }
 
+/**
+ * A class to manage short-term memory for a Magi.
+ * It stores recent conversation in memory and can summarize them.
+ * perhaps sometime in the future, it should transfer important memories to long-term storage.
+ */
 export interface Memory {
   speaker: MessageParticipant;
   message: string;
