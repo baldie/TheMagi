@@ -58,13 +58,7 @@ export class ShortTermMemory {
   }
 
   public async determineTopic(speaker: MessageParticipant, message: string): Promise<string | null> {
-    if (this.memories.length === 0) {
-      return null;
-    }
-
-    if (message.trim() === '')
-      return null;
-
+   
     const memoryText = `Conversation History:` +
       this.memories.map((memory) => `
 Speaker: ${memory.speaker}

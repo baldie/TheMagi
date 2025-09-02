@@ -165,8 +165,11 @@ export const selectTool = fromPromise<AgenticTool | null, SelectToolInput>(async
 
   const toolList = availableTools.map(tool => `- ${tool.toString()}`).join('\n\n');
 
-  const userPrompt = `Action to Perform:\n${task}\n
-Message:\n${message}\n\nMessage Sender:\n${sender}\n${workingMemory.trim() !== message ? `\n\nInput for Tool:\n${workingMemory}\n` : ''}
+  const weHaveWorkingMemory = workingMemory.trim() !== message; 
+
+  const userPrompt = `Action to Perform:\n${task}\n;
+
+Message:\n${message}\n\nMessage Sender:\n${sender}\n${weHaveWorkingMemory ? `\n\nInput for Tool:\n${workingMemory}\n` : ''}
 Available tools:\n${toolList}\n
 Instructions:
 Pick the single best tool that will allow you to '${task}.'
