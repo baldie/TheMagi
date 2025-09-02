@@ -212,6 +212,15 @@ export class Magi2 implements MagiCompatible {
       }
     }
     
+    // Store the interaction in long-term memory
+    try {
+      const transcript = `${speaker}: ${message}\nYou: ${response}`;
+      await this.longTermMemory.remember(message, transcript);
+    } catch (longTermMemoryError) {
+      logger.error(`Long-term memory storage failed for ${this.name}:`, longTermMemoryError);
+      // Don't throw - long-term memory failures shouldn't break conversations
+    }
+    
     return response;
   }
 

@@ -86,9 +86,9 @@ Format your response as a concise summary that provides context for the current 
   }
 
   /**
-   * Store memory from a deliberation transcript
+   * Store memory from a chat transcript
    */
-  public async storeMemoryFromDeliberation(message: string, transcript: string): Promise<void> {
+  public async remember(message: string, transcript: string): Promise<void> {
     try {
       const extractionPrompt = this.createMemoryExtractionPrompt(message, transcript);
       const response = await this.magi.contactSimple(extractionPrompt);
@@ -96,10 +96,10 @@ Format your response as a concise summary that provides context for the current 
       
       if (this.hasValidMemoryContent(extractedMemory)) {
         await this.updateMemory(extractedMemory);
-        logger.debug(`Memory updated for ${this.magi.name} from deliberation`);
+        logger.debug(`Memory updated for ${this.magi.name} from chat`);
       }
     } catch (error) {
-      logger.error(`Failed to store memory from deliberation for ${this.magi.name}:`, error);
+      logger.error(`Failed to store memory from chat for ${this.magi.name}:`, error);
     }
   }
 
@@ -175,13 +175,13 @@ Format your response as a concise summary that provides context for the current 
   /**
    * Create memory extraction prompt (private)
    */
-  private createMemoryExtractionPrompt(message: string, deliberationTranscript: string): string {
+  private createMemoryExtractionPrompt(message: string, response: string): string {
     return `Based on this conversation with the user, identify key information that should be remembered for future interactions.
 
 User inquiry: "${message}"
 
 Conversation transcript:
-${deliberationTranscript}
+${response}
 
 Please extract important information and format as JSON with these categories:
 {
