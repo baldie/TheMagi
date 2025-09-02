@@ -27,6 +27,7 @@ function printLogsLocation(): void {
         .sort((a, b) => b.mtime - a.mtime);
       if (logFiles.length > 0) {
         console.log(`[integration] Latest log file: ${path.join(LOGS_DIR, logFiles[0].file)}`);
+        console.log(`Current time: ${new Date().toISOString()}`);
       }
     }
   } catch {
@@ -571,8 +572,33 @@ beforeAll(async () => {
 
 // Intentionally do not shut down services after tests; leave them running
 
-function createInactivityTimeoutError(name: string, elapsed: number, testTimeout: number): Error {
-  return new Error(`[${name}] Test inactivity timeout after ${elapsed}ms (limit: ${testTimeout}ms). No activity from orchestrator.`);
+function createInactivityTimeoutError(name: string, elapsed: number, testTimeout: number, progress: number, lastMilestone: string): Error {
+  return new Error(`[${name}] Test inactivity timeout after ${elapsed}ms (limit: ${testTimeout}ms). Progress: ${progress}% - Last milestone: ${lastMilestone}`);
+}
+
+function detectProgressMilestone(logMessage: string): {progress: number, milestone: string} | null {
+  if (logMessage.includes('MAGI DELIBERATION INITIATED')) {
+    return {progress: 20, milestone: 'Deliberation initiated'};
+  }
+  if (logMessage.includes('Collected sealed envelope response from Balthazar')) {
+    return {progress: 40, milestone: 'Balthazar responded'};
+  }
+  if (logMessage.includes('Collected sealed envelope response from Melchior')) {
+    return {progress: 60, milestone: 'Melchior responded'};
+  }
+  if (logMessage.includes('Collected sealed envelope response from Caspar')) {
+    return {progress: 80, milestone: 'Caspar responded'};
+  }
+  if (logMessage.includes('Round 1 Arguments:')) {
+    return {progress: 90, milestone: 'Round 1 complete'};
+  }
+  if (logMessage.includes('Round 2 Arguments:')) {
+    return {progress: 95, milestone: 'Round 2 complete'};
+  }
+  if (logMessage.includes('Round 3 Arguments:')) {
+    return {progress: 99, milestone: 'Round 3 complete'};
+  }
+  return null;
 }
 
 function setupWebSocketHandlers(
@@ -586,16 +612,26 @@ function setupWebSocketHandlers(
   reject: (reason: Error) => void
 ) {
   let inactivityTimer: NodeJS.Timeout;
-  let heartbeatInterval: NodeJS.Timeout;
+  let progressInterval: NodeJS.Timeout;
   let isResolved = false;
   let sealedEnvelopePhaseComplete = false;
   const testStartTime = Date.now();
+  let currentProgress = 0;
+  let lastMilestone = 'Test started';
   
+  const updateProgress = (progress: number, milestone: string) => {
+    if (progress > currentProgress) {
+      currentProgress = progress;
+      lastMilestone = milestone;
+      resetInactivityTimer();
+    }
+  };
+
   const resetInactivityTimer = () => {
     clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(() => {
       const elapsed = Date.now() - startTime;
-      reject(createInactivityTimeoutError(name, elapsed, testTimeout));
+      reject(createInactivityTimeoutError(name, elapsed, testTimeout, currentProgress, lastMilestone));
     }, testTimeout);
   };
 
@@ -604,14 +640,14 @@ function setupWebSocketHandlers(
   }, 10000);
 
   const cleanupTimers = () => {
-    clearInterval(heartbeatInterval);
+    clearInterval(progressInterval);
     clearTimeout(inactivityTimer);
     clearTimeout(connectionTimeout);
   };
 
   inactivityTimer = setTimeout(() => {
     const elapsed = Date.now() - startTime;
-    reject(createInactivityTimeoutError(name, elapsed, testTimeout));
+    reject(createInactivityTimeoutError(name, elapsed, testTimeout, currentProgress, lastMilestone));
   }, testTimeout);
 
   ws.on('open', () => {
@@ -630,8 +666,9 @@ function setupWebSocketHandlers(
     console.log(`[integration] Sending message: ${JSON.stringify(message)}`);
     ws.send(JSON.stringify(message));
     
-    heartbeatInterval = setInterval(() => {
-      console.log(`[integration] Still waiting for Magi deliberation... (${Math.floor((Date.now() - startTime) / 1000)}s elapsed)`);
+    progressInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      console.log(`[integration] Progress: ${currentProgress}% - ${lastMilestone} (${elapsed}s elapsed)`);
     }, 10000);
   });
 
@@ -640,7 +677,16 @@ function setupWebSocketHandlers(
       const msg = JSON.parse(String(raw));
       if (msg.type === 'log') {
         console.log(`[magi-log] ${msg.data}`);
-        resetInactivityTimer();
+        
+        // Check for progress milestones
+        const milestone = detectProgressMilestone(msg.data);
+        if (milestone) {
+          console.log(`[integration] Progress milestone detected: ${milestone.progress}% - ${milestone.milestone}`);
+          updateProgress(milestone.progress, milestone.milestone);
+        } else {
+          // Reset timer for any log activity
+          resetInactivityTimer();
+        }
         
         // Track when sealed envelope phase completes (either successfully or via timeout)
         if (msg.data && typeof msg.data === 'string' && 
@@ -669,6 +715,7 @@ function setupWebSocketHandlers(
         }
         
         console.log('[integration] Accepting deliberation-complete - resolving...');
+        updateProgress(100, 'Deliberation complete');
         if (!isResolved) {
           isResolved = true;
           clearTimeout(inactivityTimer);

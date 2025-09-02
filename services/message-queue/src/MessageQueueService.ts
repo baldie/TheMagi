@@ -80,7 +80,7 @@ export class MessageQueueService {
   async publish(
     sender: MessageParticipant,
     recipient: MessageParticipant,
-    content: any,
+    content: string,
     type: MessageType,
     options: PublishOptions = {}
   ): Promise<string> {
@@ -96,7 +96,7 @@ export class MessageQueueService {
       id: messageId,
       sender,
       recipient,
-      content: JSON.stringify(content),
+      content: content,
       type,
       timestamp,
       processed: false,

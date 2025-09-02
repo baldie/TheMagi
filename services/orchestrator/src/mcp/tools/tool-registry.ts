@@ -189,7 +189,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       },
       command: {
         type: 'string',
-        description: 'Commands to send to a specific device (e.g., "turn_on", "turn_off", "set_speed")',
+        description: 'Commands to send to a specific device',
         enum: ['turn_on', 'turn_off', 'search', 'toggle', 'set_speed', 'set_brightness'],
         required: false
       },
